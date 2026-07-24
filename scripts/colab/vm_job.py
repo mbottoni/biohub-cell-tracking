@@ -122,6 +122,8 @@ while True:
     files += d.get("files", [])
     pt = d.get("nextPageTokenNullable")
     page += 1
+    if page % 10 == 0:
+        log(f"  listing... page {page}, {len(files)} files")
     if not pt or not d.get("files"):
         break
     time.sleep(1)
@@ -146,9 +148,10 @@ def dl(name):
 
 
 t0 = time.time()
-with ThreadPoolExecutor(max_workers=8) as ex:
+log(f"  downloading {len(want)} files ...")
+with ThreadPoolExecutor(max_workers=16) as ex:
     for i, _ in enumerate(ex.map(dl, want)):
-        if (i + 1) % 500 == 0:
+        if (i + 1) % 100 == 0:  # frequent heartbeat so the CLI output stream never stalls
             log(f"  {i+1}/{len(want)} files  {time.time()-t0:.0f}s")
 log(f"downloaded {len(chosen)} volumes in {time.time()-t0:.0f}s")
 

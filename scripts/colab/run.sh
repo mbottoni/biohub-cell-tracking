@@ -31,8 +31,12 @@ if ! colab sessions >/dev/null 2>&1; then
     exit 1
 fi
 
-echo ">> colab run on $GPU: fold $FOLD, $EPOCHS epochs"
-colab run --gpu "$GPU" "$ROOT/scripts/colab/vm_job.py" \
+# Big timeout: data download + 25 epochs on an A100 is well under 4h, but the CLI's default
+# output timeout is short and a silent phase trips it.
+TIMEOUT="${TIMEOUT:-14400}"
+
+echo ">> colab run on $GPU: fold $FOLD, $EPOCHS epochs (timeout ${TIMEOUT}s)"
+colab run --gpu "$GPU" --timeout "$TIMEOUT" "$ROOT/scripts/colab/vm_job.py" \
     "$KAGGLE_API_TOKEN" --fold "$FOLD" --epochs "$EPOCHS"
 
 echo ">> done — weights on Kaggle: maruanbottoni/biohub-detector-weights"
