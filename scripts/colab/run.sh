@@ -43,8 +43,8 @@ TIMEOUT="${TIMEOUT:-14400}"
 echo ">> provisioning $GPU session ($SESSION)"
 colab new -s "$SESSION" --gpu "$GPU" 2>&1 | tail -1
 
-echo ">> mounting Google Drive (persistent cache lives there)"
-colab drivemount -s "$SESSION" 2>&1 | tail -1
+# Persistence is via the biohub-cache Kaggle dataset (vm_job handles it) — no Drive mount,
+# which needs a broader OAuth scope than the CLI grants.
 
 # vm_job forwards no args via exec, so prepend a tiny env prelude carrying the token + config.
 COMBINED="$(mktemp -t vmjob).py"

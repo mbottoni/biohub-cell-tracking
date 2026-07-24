@@ -106,24 +106,27 @@ import ctrack  # noqa: F401
 
 log("ctrack ready")
 
-# ---- data: a persistent compact cache on Google Drive (~5 GB), built once ----
-# The detector only needs annotated isotropic frames + centres. We cache those to Drive so
-# repeated training rounds skip the 87 GB download entirely. Drive is mounted by the
-# orchestrator (`colab drivemount`) before this runs; fall back to local if it isn't.
+# ---- data: a persistent compact cache stored as a Kaggle dataset (~5 GB), built once ----
+# The detector only needs annotated isotropic frames + centres. We cache those and store the
+# cache as the `biohub-cache` Kaggle dataset, so repeated training rounds download ~5 GB
+# instead of the 87 GB competition zip. (Drive mount needs a broader OAuth scope than the CLI
+# grants, so Kaggle datasets are the reliable persistence layer.)
 from ctrack.data.geff import find_geff_stores
 from ctrack.detect.cache import cached_all_ids, ensure_cache
 
-drive = Path("/content/drive/MyDrive")
-cache_dir = (drive / "biohub_cache") if drive.exists() else (WORK / "biohub_cache")
+CACHE_DS = "maruanbottoni/biohub-cache"
+cache_dir = WORK / "biohub_cache"
 cache_dir.mkdir(parents=True, exist_ok=True)
-log(f"== cache dir: {cache_dir} ==")
 
-all_ids = cached_all_ids(cache_dir)
+# try the prebuilt cache dataset first
+log("== fetching cache dataset (if it exists) ==")
+subprocess.run(["kaggle", "datasets", "download", "-d", CACHE_DS, "-p", str(cache_dir), "--unzip"],
+               env=os.environ)
 n_cached = len(list(cache_dir.glob("*.npz")))
-need_build = all_ids is None or n_cached < min(N_VOLUMES, 199)
+need_build = cached_all_ids(cache_dir) is None or n_cached < min(N_VOLUMES, 199)
 
 if need_build:
-    log(f"== cache incomplete ({n_cached} npz) — downloading zip to build ==")
+    log(f"== cache incomplete ({n_cached} npz) — downloading competition zip to build ==")
     dl_dir = WORK / "dl"
     dl_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
@@ -131,9 +134,8 @@ if need_build:
                       env=os.environ).returncode != 0:
         raise RuntimeError("kaggle competitions download failed")
     zips = list(dl_dir.glob("*.zip"))
-    log(f"downloaded zip in {time.time()-t0:.0f}s")
+    log(f"downloaded zip in {time.time()-t0:.0f}s; extracting train/")
 
-    log("== extracting train/ ==")
     t0 = time.time()
     data_root = WORK / "data"
     with zipfile.ZipFile(zips[0]) as zf:
@@ -150,10 +152,20 @@ if need_build:
     ids = sorted(p.name.replace(".geff", "") for p in find_geff_stores(raw))
     ensure_cache(ids[:N_VOLUMES] if N_VOLUMES < 199 else ids, raw, raw, cache_dir,
                  all_ids=ids, log=log)
-    log(f"cache built: {len(list(cache_dir.glob('*.npz')))} volumes on {cache_dir}")
-    shutil.rmtree(data_root, ignore_errors=True)  # reclaim disk; cache is all we need now
+    log(f"cache built: {len(list(cache_dir.glob('*.npz')))} volumes")
+    shutil.rmtree(data_root, ignore_errors=True)  # reclaim disk
+
+    # publish the cache so future runs skip the 87 GB download
+    log("== uploading cache dataset ==")
+    json.dump({"title": "biohub-cache", "id": CACHE_DS, "licenses": [{"name": "CC0-1.0"}]},
+              open(cache_dir / "dataset-metadata.json", "w"))
+    have = subprocess.run(["kaggle", "datasets", "status", CACHE_DS],
+                          capture_output=True, text=True).returncode == 0
+    cmd = (["kaggle", "datasets", "version", "-p", str(cache_dir), "-m", "cache", "--dir-mode", "zip"]
+           if have else ["kaggle", "datasets", "create", "-p", str(cache_dir), "--dir-mode", "zip"])
+    subprocess.run(cmd, env=os.environ)
 else:
-    log(f"== cache present ({n_cached} npz) — skipping download ==")
+    log(f"== cache present ({n_cached} npz) — skipping competition download ==")
 
 # ---- train (from the cache) ----
 log("== training ==")
