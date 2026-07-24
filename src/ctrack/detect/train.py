@@ -71,7 +71,10 @@ def train_fold(
 
     from ctrack.detect.unet3d import UNet3D, masked_bce_loss
 
-    raw_root, gt_root, out_dir = Path(raw_root), Path(gt_root), Path(out_dir)
+    # raw_root/gt_root are None in cache mode (frames come from cache_dir), so don't Path() them.
+    raw_root = Path(raw_root) if raw_root is not None else None
+    gt_root = Path(gt_root) if gt_root is not None else None
+    out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     device = pick_device()
     is_cuda = device.type == "cuda"
