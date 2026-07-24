@@ -1,0 +1,13 @@
+{
+  "id": "maruanbottoni/biohub-train-detector-fold0",
+  "title": "Biohub train detector fold0",
+  "code_file": "train_detector_gpu.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "competition_sources": ["biohub-cell-tracking-during-development"],
+  "dataset_sources": ["maruanbottoni/ctrack-src"],
+  "kernel_sources": []
+}
