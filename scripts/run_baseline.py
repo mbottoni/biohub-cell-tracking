@@ -45,8 +45,14 @@ from ctrack.link.hungarian import build_graph, close_gaps  # noqa: E402
 from ctrack.submit.format import edge_row, node_row, write  # noqa: E402
 
 
-def track_one(det, max_disp: float, gaps: bool):
+def track_one(det, max_disp: float, gaps: bool, use_ilp: bool = False):
     nodes, edges = build_graph(det, SCALE, max_displacement_um=max_disp)
+    if use_ilp:
+        from ctrack.link.ilp import link_ilp
+
+        edges = link_ilp(nodes, SCALE, max_disp_um=max_disp, topk=3,
+                         appearance_weight=2.0, disappearance_weight=2.0)
+        return nodes, edges
     if gaps:
         nodes, edges = close_gaps(nodes, edges, SCALE, max_total_um=max_disp)
     return nodes, edges
@@ -71,6 +77,7 @@ def main() -> None:
     ap.add_argument("--sweep", type=float, nargs="+", help="try these thresholds and compare")
     ap.add_argument("--max-disp", type=float, default=10.0, help="linking cap, µm")
     ap.add_argument("--no-gaps", action="store_true", help="disable gap closing")
+    ap.add_argument("--ilp", action="store_true", help="use ILP linking instead of Hungarian")
     ap.add_argument("--out", help="write a submission CSV here")
     args = ap.parse_args()
 
@@ -101,7 +108,7 @@ def main() -> None:
         rows, all_nodes = [], []
         for dataset, (path, det0) in base.items():
             det = rethreshold(det0, threshold)
-            nodes, edges = track_one(det, args.max_disp, not args.no_gaps)
+            nodes, edges = track_one(det, args.max_disp, not args.no_gaps, use_ilp=args.ilp)
 
             gt_dir = Path(args.gt_root) if args.gt_root else path.parent
             geff = gt_dir / f"{dataset}.geff"
