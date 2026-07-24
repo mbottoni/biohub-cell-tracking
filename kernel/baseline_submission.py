@@ -181,10 +181,15 @@ def main():
     for d in datasets:
         track_volume(d, rows)
 
+    # Fail loudly rather than write an empty CSV -- an empty submission passes a content
+    # validator but is rejected by the scorer as "incorrect format" (this bit us on v2).
+    assert datasets, "no test datasets found -- check the input mount path"
+    assert rows, "no nodes/edges produced -- pipeline emitted nothing"
+
     df = pd.DataFrame(rows, columns=COLUMNS)
     df["id"] = np.arange(len(df), dtype=np.int64)
     df.to_csv("submission.csv", index=False)
-    print(f"wrote submission.csv: {len(df)} rows")
+    print(f"wrote submission.csv: {len(df)} rows across {len(datasets)} datasets")
 
 
 if __name__ == "__main__":
