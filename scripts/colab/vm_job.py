@@ -117,7 +117,9 @@ pkg_root = WORK / "pkg"
 if pkg_root.exists():
     shutil.rmtree(pkg_root)
 (pkg_root / "ctrack").mkdir(parents=True)
-src = next((p.parent for p in csrc.glob("**/detect/unet3d.py")), csrc)
+# the package root is the dir CONTAINING detect/ (== grandparent of detect/unet3d.py), which
+# holds data/, detect/, eval/, ... — not detect/ itself.
+src = next((p.parents[1] for p in csrc.glob("**/detect/unet3d.py")), csrc)
 for item in src.iterdir():
     dst = pkg_root / "ctrack" / item.name
     (shutil.copytree if item.is_dir() else shutil.copy)(item, dst)
