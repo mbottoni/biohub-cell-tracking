@@ -79,10 +79,41 @@ Read with the `geff` package; manipulate with `tracksdata`. `GeffMetadata.extra`
 `estimated_number_of_nodes`, which the competition metric normalizes against — the annotation
 is **partial**, which is the root cause of the metric exploit described in PLAN.md §2.
 
+## Ground truth, measured across all 199 volumes
+
+`scripts/analyze_gt.py` → `docs/gt_stats.csv`.
+
+| | mean | median | min | max |
+|---|---|---|---|---|
+| Annotated nodes | 670 | — | 52 | 1,950 |
+| Annotated edges | 648 | — | 50 | 1,879 |
+| Tracks | 22 | — | 2 | 79 |
+| Divisions | 0.76 | — | 0 | 5 |
+| Annotation density | **6.1%** | 3.6% | 0.13% | 20.2% |
+| `estimated_number_of_nodes` | 23,744 | 17,909 | 3,783 | 78,644 |
+
+Totals: 133,318 nodes, 128,883 edges, **151 divisions in 87 of 199 volumes (43.7%)**.
+
+### The two embryos are wildly unbalanced
+
+| embryo | volumes | nodes | edges | **share of all edges** | divisions | mean density |
+|---|---|---|---|---|---|---|
+| `6bba` | 128 | 113,121 | 109,057 | **84.6%** | 125 | 8.98% |
+| `44b6` | 71 | 20,197 | 19,826 | 15.4% | 26 | 0.99% |
+
+`6bba` is **9× denser** and carries 85% of all annotated edges. Because the metric
+micro-averages (counts summed, then Jaccard), **the score is effectively the `6bba` score**.
+
+This is a serious problem for leave-one-embryo-out CV: the fold validating on `44b6` measures
+performance on 15% of the signal at a tenth the density, and the fold validating on `6bba`
+trains on a very unrepresentative 71 volumes. Neither fold resembles the real distribution.
+Weight experiments accordingly and do not read the two folds as interchangeable.
+
 ## Open questions
 
-- [ ] How partial is the annotation? (nodes in geff vs `estimated_number_of_nodes`)
-- [ ] Division rate per volume
-- [ ] Do the 199 train crops overlap spatially, or tile the embryo disjointly? Overlap would
-      leak across CV folds and must be handled by grouping.
-- [ ] Cell count per frame and typical inter-frame displacement (sets the linking radius)
+- [ ] Do the 199 train crops overlap spatially? (`scripts/check_crop_overlap.py`) — decides
+      whether within-embryo `kfold` is valid
+- [x] How partial is the annotation? — 6.1% mean, 0.13–20.2% range
+- [x] Division rate — 151 total, 43.7% of volumes have ≥1
+- [x] Inter-frame displacement — median 1.95 µm, p90 3.92 µm, but 80/199 volumes contain a
+      step >10 µm (max 60.8), so the public 10 µm linking cap drops real links
