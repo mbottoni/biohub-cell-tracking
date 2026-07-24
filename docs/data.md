@@ -109,10 +109,18 @@ performance on 15% of the signal at a tenth the density, and the fold validating
 trains on a very unrepresentative 71 volumes. Neither fold resembles the real distribution.
 Weight experiments accordingly and do not read the two folds as interchangeable.
 
+## CV: within-embryo kfold is valid
+
+`scripts/check_crop_overlap.py` over all 199 volumes (2026-07-24): same-embryo first-frame
+correlation (median +0.011, p95 +0.44, max +0.89) is indistinguishable from different-embryo
+(median +0.017, p95 +0.44, max +0.85); no exact duplicates, no pair above 0.9. So same-embryo
+crops are **spatially independent**, and `ctrack.data.splits.kfold` (splitting within embryos)
+does not leak. **We get 5 folds, not just 2.** Still stratify by embryo so each fold sees both
+— and remember the score is `6bba`-dominated (85% of edges), so weight accordingly.
+
 ## Open questions
 
-- [ ] Do the 199 train crops overlap spatially? (`scripts/check_crop_overlap.py`) — decides
-      whether within-embryo `kfold` is valid
+- [x] Do the 199 train crops overlap spatially? — **no**, kfold is valid (above)
 - [x] How partial is the annotation? — 6.1% mean, 0.13–20.2% range
 - [x] Division rate — 151 total, 43.7% of volumes have ≥1
 - [x] Inter-frame displacement — median 1.95 µm, p90 3.92 µm, but 80/199 volumes contain a

@@ -231,16 +231,22 @@ Ranked by expected value. All of these attack the *legitimate* metric.
 - [x] Baseline detect → link → gap-close pipeline (`scripts/run_baseline.py`)
 - [ ] **Download finishes** (87.6 GB → `/Volumes/extSSD/kaggle/biohub/raw`)
 
-Then, in order — these four runs settle everything the plan currently assumes:
+**Phase 0 is essentially done.** All four blocking questions are answered:
 
-- [ ] `scripts/analyze_gt.py` over all 199 volumes → **division rate** (n=1 so far, and it was
-      zero), annotation density spread, and whether any GT edge skips a frame
-- [ ] `scripts/check_crop_overlap.py` → **do same-embryo crops overlap?** Decides whether we
-      get 2 usable CV folds or 5
-- [ ] `scripts/run_baseline.py --sweep` → **does the metric optimum sit below peak recall?**
-      Confirms or refutes the central claim in docs/metric.md empirically
-- [ ] Submit once → **verify our metric matches the real LB.** Until this lands, every local
-      number is provisional
+- [x] `analyze_gt.py` over all 199 → density 6.1% (not 0.2%), 151 divisions in 44% of volumes,
+      every GT edge dt=1, embryos 9× unbalanced. Corrected two wrong claims (docs/data.md).
+- [x] `check_crop_overlap.py` → crops spatially independent → **within-embryo kfold valid, 5
+      folds** (docs/data.md).
+- [x] `run_baseline.py --sweep` → optimum at **max** recall on the blob baseline; node-budget
+      lever is small and only harvestable with a precise detector. Refuted my headline
+      (docs/metric.md).
+- [x] **Metric verified** field-for-field against the reference on real predictions
+      (`verify_metric.py`). One link left: reference ↔ real-LB, which needs one submission.
+
+Remaining before Phase 1:
+
+- [ ] Re-run the sweep across both embryos for a representative baseline number (running)
+- [ ] One baseline submission → confirm reference ↔ real-LB and lock the submission path
 
 ### Phase 1 — Baseline parity (week 2)
 - [ ] UNet3D detection + transformer edges + ILP running in our own repo, ~0.89 clean

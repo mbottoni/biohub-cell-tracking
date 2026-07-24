@@ -4,10 +4,16 @@ Source: `repo/src/biohub_tracking/metrics.py` from the public Kaggle dataset
 `pilkwang/biohub-tracking-support-pack-50ep-v1`, which the top public notebooks use for local
 validation.
 
-> **Caveat, and it matters:** this is a *community reimplementation*, not the official scorer.
-> Top teams calibrate it against the leaderboard so it is probably faithful, but we must verify
-> it ourselves against a real LB score before trusting it for tuning. Until then, treat the
-> structure below as high-confidence and the exact constants as provisional.
+> **Verification status (2026-07-24).** `ctrack.eval.biohub` (my numpy reimplementation) has
+> been checked field-for-field against this reference implementation on real baseline
+> predictions from both embryos — edge TP/FP/FN, division TP/FP/FN, edge Jaccard, adjusted
+> Jaccard, node ratio all match to full float precision (`scripts/verify_metric.py`). So my
+> code faithfully reproduces the reference.
+>
+> One link remains unconfirmed: the reference itself is a *community* reimplementation, not the
+> official Kaggle scorer. Top teams calibrate it to the LB, so it is very likely faithful, but
+> only a submission confirms reference ↔ real-LB. Treat local numbers as trustworthy for
+> *relative* comparison now; hold the absolute-offset question until a submission lands.
 
 ## The formula
 
