@@ -68,10 +68,34 @@ built from:
 - division TP / FP / FN
 - normalized against **`GeffMetadata.extra["estimated_number_of_nodes"]`**
 
-That last term is the whole ballgame — see §2.
+**Decoded** — full analysis in [docs/metric.md](docs/metric.md):
 
-**Open item:** we have not yet read the exact formula. Extracting it from the support pack /
-evaluation page is task #1. Everything below is provisional until we have it.
+```
+total_node_ratio = (N_pred − N_total) / N_total       # N_total = estimated_number_of_nodes
+edge_jaccard     = |matched edges| / (|GT edges| + |valid pred edges| − |matched edges|)
+adj_edge_jaccard = max(0, edge_jaccard · (1 − 0.1 · total_node_ratio))
+score            = adj_edge_jaccard + 0.1 · division_jaccard
+```
+
+Three facts that reshape the whole approach:
+
+1. **Only edges touching annotated cells count.** A predicted edge enters the denominator only
+   if an endpoint matched a GT node that itself has an edge. Edges between two unannotated
+   cells are invisible — neither TP nor FP.
+2. **The GT is 0.2% dense.** `44b6_0113de3b` has **52 annotated nodes, 50 edges, 2 tracks, 0
+   divisions** against `estimated_number_of_nodes = 25,755`. The task is *not* "track all 25k
+   cells" — it is "reproduce the trajectories of a few dozen hand-traced cells per volume, and
+   don't hang spurious edges off those particular nodes."
+3. **The node-count multiplier is unclamped above.** Predicting *fewer* nodes than `N_total`
+   pushes the multiplier over 1 (×1.02 at 0.8·N_total, ×1.05 at 0.5·N_total). Selective
+   high-precision detection is rewarded twice — which almost certainly explains the public
+   `POINT_THRESHOLD = 0.955`, otherwise an absurdly high value for a detection task.
+
+Measured from GT: inter-frame displacement median **2.88 µm**, p90 **4.67 µm**, max **7.81 µm**.
+
+> **Caveat:** this comes from the *community* reimplementation the top notebooks validate
+> against, not the official scorer. Verifying it against a real LB score is Phase 0's exit
+> criterion.
 
 ---
 
