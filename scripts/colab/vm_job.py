@@ -184,9 +184,14 @@ if need_build:
     json.dump({"title": "biohub-cache", "id": CACHE_DS, "licenses": [{"name": "CC0-1.0"}]},
               open(cache_dir / "dataset-metadata.json", "w"))
     have = kaggle(["datasets", "status", CACHE_DS], check=False).returncode == 0
-    kaggle(["datasets", "version", "-p", str(cache_dir), "-m", "cache", "--dir-mode", "zip"]
-           if have else ["datasets", "create", "-p", str(cache_dir), "--dir-mode", "zip"],
-           check=False)
+    # check=True: a silent publish failure previously left an EMPTY (size 0) dataset that later
+    # runs couldn't download. Surface it, but don't abort training (cache is on local disk).
+    try:
+        kaggle(["datasets", "version", "-p", str(cache_dir), "-m", "cache", "--dir-mode", "zip"]
+               if have else ["datasets", "create", "-p", str(cache_dir), "--dir-mode", "zip"])
+        log("cache published OK")
+    except Exception as e:  # noqa: BLE001
+        log("WARNING cache publish failed (training continues):", str(e)[:200])
 else:
     log(f"== cache present ({n_cached} npz) — skipping competition download ==")
 
