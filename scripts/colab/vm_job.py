@@ -152,7 +152,11 @@ if need_build:
     dl_dir = WORK / "dl"
     dl_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
-    kaggle(["competitions", "download", "-c", COMP, "-p", str(dl_dir)])
+    # Stream (don't capture) so the CLI's progress bar is visible in the log; also keeps the
+    # colab-exec output channel active during the ~15 min download.
+    if subprocess.run(["kaggle", "competitions", "download", "-c", COMP, "-p", str(dl_dir)],
+                      env=KAGGLE_ENV).returncode != 0:
+        raise RuntimeError("competition download failed")
     zips = list(dl_dir.glob("*.zip"))
     log(f"downloaded zip in {time.time()-t0:.0f}s; extracting train/")
 
