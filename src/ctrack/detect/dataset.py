@@ -51,6 +51,16 @@ class DetectionFrames(Dataset):
     def __len__(self) -> int:
         return len(self.index)
 
+    def frame_only(self, i: int) -> np.ndarray:
+        """The isotropic frame for item i, without building the (expensive) target/mask.
+
+        Validation only needs the input frame — skip the Gaussian splat + dilation that
+        __getitem__ does for training targets.
+        """
+        ds, t = self.index[i]
+        vol = open_volume(self.raw_root / f"{ds}.zarr")
+        return to_isotropic(vol.normalized_frame(t), self.subsample)
+
     def __getitem__(self, i: int):
         import torch
 

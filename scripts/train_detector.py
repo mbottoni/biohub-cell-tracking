@@ -109,8 +109,9 @@ def main() -> None:
         with torch.no_grad():
             for j in range(len(val)):
                 ds, t = val.index[j]
-                x, _, _ = val[j]
-                hm = torch.sigmoid(model(x[None].to(device)))[0, 0].cpu().numpy()
+                frame = val.frame_only(j)                      # no target/mask build
+                x = torch.from_numpy(np.ascontiguousarray(frame))[None, None].float().to(device)
+                hm = torch.sigmoid(model(x))[0, 0].cpu().numpy()
                 centres_iso = val._centres[(ds, t)] / np.array(ISOTROPIC_SUBSAMPLE)
                 a, b = peak_recall(hm, centres_iso, spacing, args.val_threshold, nms_vox)
                 matched += a
