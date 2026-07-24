@@ -32,12 +32,28 @@ subprocess.run([sys.executable, "-m", "pip", "install", "-q", "zarr"], check=Fal
 
 
 def _add_ctrack_to_path():
-    """Put the ctrack package on sys.path, extracting a ctrack.zip if the dataset wasn't
-    auto-unpacked. The layout depends on how the dataset was built, so handle both."""
+    """Make `import ctrack` work regardless of how the ctrack-src dataset was packed.
+
+    Handles three layouts: a real .../ctrack/__init__.py; a ctrack.zip; and (what Kaggle
+    actually produced) the package *contents* extracted to the dataset root, recognisable by a
+    detect/unet3d.py sibling of __init__.py. In the last case we materialise a proper ctrack/
+    dir under /kaggle/working so the internal `from ctrack...` imports resolve.
+    """
+    import shutil
+    import zipfile
+
     for init in Path("/kaggle/input").glob("**/ctrack/__init__.py"):
         sys.path.insert(0, str(init.parent.parent))
         return
-    import zipfile
+    for marker in Path("/kaggle/input").glob("**/detect/unet3d.py"):
+        pkg_root = marker.parent.parent  # the dir holding __init__.py + detect/ + data/ ...
+        if (pkg_root / "__init__.py").exists():
+            dest = Path("/kaggle/working/_ctrack_pkg")
+            (dest / "ctrack").parent.mkdir(parents=True, exist_ok=True)
+            if not (dest / "ctrack").exists():
+                shutil.copytree(pkg_root, dest / "ctrack")
+            sys.path.insert(0, str(dest))
+            return
     for z in Path("/kaggle/input").glob("**/ctrack.zip"):
         dest = Path("/kaggle/working/_ctrack_src")
         with zipfile.ZipFile(z) as zf:

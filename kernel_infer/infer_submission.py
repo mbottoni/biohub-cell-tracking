@@ -36,10 +36,22 @@ if WHEELS is not None:
 
 
 def _add_ctrack():
+    """See train_detector_gpu.py: handle real ctrack/, ctrack.zip, and (what Kaggle produces)
+    package contents extracted to the dataset root."""
+    import shutil
+    import zipfile
+
     for init in Path("/kaggle/input").glob("**/ctrack/__init__.py"):
         sys.path.insert(0, str(init.parent.parent))
         return
-    import zipfile
+    for marker in Path("/kaggle/input").glob("**/detect/unet3d.py"):
+        pkg_root = marker.parent.parent
+        if (pkg_root / "__init__.py").exists():
+            dest = Path("/kaggle/working/_ctrack_pkg")
+            if not (dest / "ctrack").exists():
+                shutil.copytree(pkg_root, dest / "ctrack")
+            sys.path.insert(0, str(dest))
+            return
     for z in Path("/kaggle/input").glob("**/ctrack.zip"):
         dest = Path("/kaggle/working/_ctrack_src")
         with zipfile.ZipFile(z) as zf:
