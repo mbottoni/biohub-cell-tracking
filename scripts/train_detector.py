@@ -100,7 +100,7 @@ def main() -> None:
             loss = masked_bce_loss(model(x), y, m)
             loss.backward()
             opt.step()
-            tot += float(loss)
+            tot += float(loss.detach())
         train_loss = tot / max(1, len(train_dl))
 
         # validation: peak recall against held-out GT
