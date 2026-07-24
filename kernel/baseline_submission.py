@@ -8,12 +8,37 @@ Mirrors ctrack.{data.volume, detect.blob, link.hungarian, submit.format} in the 
 the kernel needs no extra dataset. Keep the two in sync when the pipeline changes.
 """
 
+import json
+
+import blosc2
 import numpy as np
 import pandas as pd
-import zarr
 from scipy import ndimage
 from scipy.optimize import linear_sum_assignment
 from pathlib import Path
+
+# The Kaggle image has neither zarr nor internet, so read the zarr v3 + blosc2 store by hand
+# (as the public starter notebook does): parse zarr.json for shape/dtype, then decompress each
+# per-timepoint chunk at 0/c/{t}/0/0/0. Mirrors ctrack.data.volume, which uses zarr locally.
+
+
+class RawVolume:
+    def __init__(self, store: Path):
+        self.store = store
+        self.group_meta = json.loads((store / "zarr.json").read_text())
+        arr_meta = json.loads((store / "0" / "zarr.json").read_text())
+        self.shape = tuple(arr_meta["shape"])            # (T, Z, Y, X)
+        self.dtype = np.dtype(arr_meta["data_type"])
+        self.n_t = self.shape[0]
+
+    def frame(self, t: int) -> np.ndarray:
+        chunk = self.store / "0" / "c" / str(t) / "0" / "0" / "0"
+        raw = blosc2.decompress(chunk.read_bytes())
+        return np.frombuffer(raw, dtype=self.dtype).reshape(self.shape[1:])  # (Z, Y, X)
+
+    @property
+    def quantiles(self) -> dict:
+        return self.group_meta.get("attributes", {}).get("image_statistics", {}).get("quantiles", {})
 
 TEST_DIR = Path("/kaggle/input/biohub-cell-tracking-during-development/test")
 SCALE = np.array([1.625, 0.40625, 0.40625])       # (Z, Y, X) µm/voxel
@@ -27,9 +52,9 @@ MAX_DISP_UM = 10.0
 COLUMNS = ["id", "dataset", "row_type", "node_id", "t", "z", "y", "x", "source_id", "target_id"]
 
 
-def normalized_frame(arr4d, t, meta):
-    q = meta.get("attributes", {}).get("image_statistics", {}).get("quantiles", {})
-    frame = np.asarray(arr4d[t]).astype(np.float32)
+def normalized_frame(vol, t):
+    q = vol.quantiles
+    frame = vol.frame(t).astype(np.float32)
     lo = float(q.get("0.01", np.percentile(frame, 1)))
     hi = float(q.get("0.999", np.percentile(frame, 99.9)))
     return np.clip((frame - lo) / max(hi - lo, 1.0), 0.0, 1.0)
@@ -98,18 +123,14 @@ def close_gaps(nodes, edges, scale, cap):
 
 
 def track_volume(dataset, rows):
-    import json
-
-    store = TEST_DIR / f"{dataset}.zarr"
-    meta = json.loads((store / "zarr.json").read_text())
-    arr = zarr.open(str(store), mode="r")["0"]
-    n_t = arr.shape[0]
+    vol = RawVolume(TEST_DIR / f"{dataset}.zarr")
+    n_t = vol.n_t
 
     per_frame_coords, ids_by_frame = {}, {}
     nodes, edges = [], []
     next_id = 1
     for t in range(n_t):
-        iso = normalized_frame(arr, t, meta)[:: SUBSAMPLE[0], :: SUBSAMPLE[1], :: SUBSAMPLE[2]]
+        iso = normalized_frame(vol, t)[:: SUBSAMPLE[0], :: SUBSAMPLE[1], :: SUBSAMPLE[2]]
         coords = detect_frame(iso, ISO_SCALE, THRESHOLD) * np.array(SUBSAMPLE)  # -> full-res voxels
         per_frame_coords[t] = coords
         ids = np.arange(next_id, next_id + len(coords))
