@@ -18,15 +18,31 @@ most of this wrong)
 
 ## 1. Ground truth about the problem (verified, not assumed)
 
-### Data
-- Zarr **v3** stores (`zarr.json`, chunks at `0/c/{t}/0/0/0`), **blosc2**-compressed.
-  One chunk per timepoint. Array shape `(T, Z, Y, X)`, laid out `test/<id>.zarr`.
-- **Voxel size = `[1.625, 0.40625, 0.40625]` µm (Z, Y, X)** → exactly **4× anisotropy in Z**.
-  This is why the community standard is `SUBSAMPLE = [1, 4, 4]`: downsampling Y/X by 4 makes
-  voxels isotropic at 1.625 µm. Do this, don't invent something else.
-- Ground truth ships as **`.geff` graph files** alongside the `.zarr` volumes (GEFF = the
-  Royer-lab graph exchange format; read with the `geff` package, manipulate with `tracksdata`).
-- Total download is **>3.5 GB** (still measuring).
+### Data — full details in [docs/data.md](docs/data.md)
+- **87.6 GB / 24,886 files / 204 stores**: 199 `train/`, 4 `test/`, `sample_submission.csv`.
+  Downloaded to `/Volumes/extSSD/kaggle/biohub/raw` (won't fit on the internal disk).
+- Zarr **v3**, **blosc2**-compressed, one chunk per timepoint (`0/c/{t}/0/0/0`).
+- Every volume is **`(100, 64, 256, 256)` uint16** — 100 frames of a **104 µm cube**. These are
+  small crops, not whole embryos, so local training is entirely feasible.
+- **Voxel size `[1.625, 0.40625, 0.40625]` µm (Z, Y, X)** → exactly **4× anisotropy in Z**.
+  Hence the community's `SUBSAMPLE = [1, 4, 4]`: downsampling Y/X by 4 gives isotropic 1.625 µm.
+- Only **two source embryos** (`6bba`: 128 crops, `44b6`: 71). CV folds must group by embryo.
+- `zarr.json` ships `image_statistics.quantiles` — use them for normalization.
+- Ground truth is **`.geff`** (zarr-backed graph: node ids, `t/z/y/x` props, edge ids), present
+  for `train/` only. Read with `geff`, manipulate with `tracksdata`.
+
+### The visible test set is a development sample, not the scored set
+All 4 test IDs also exist in `train/` — and are **byte-identical** (same `zarr.json` md5, same
+chunk md5, same shape). The train copies carry `.geff` ground truth.
+
+This is normal for a kernels-only competition: `test/` is swapped for hidden data at rerun. It
+can't be the scored set — otherwise everyone would read the train geff and score 1.0, and the
+public LB is ~0.897.
+
+**Use it as a fixture, not a validation set.** We hold exact GT for the four volumes that flow
+through the real submission code path, which makes them ideal for verifying the local metric
+end-to-end (same loader, same inference, same CSV writer, known answer). Model selection must
+use a held-out, embryo-grouped split of the 199 train stores.
 
 ### Submission format — a point graph, *not* segmentation masks
 A single `submission.csv` with columns:
