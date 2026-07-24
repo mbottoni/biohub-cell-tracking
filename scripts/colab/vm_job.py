@@ -15,7 +15,6 @@ uploaded to the `biohub-detector-weights` Kaggle dataset, which the submission k
 
 from __future__ import annotations
 
-import argparse
 import collections
 import json
 import os
@@ -31,14 +30,18 @@ from pathlib import Path
 COMP = "biohub-cell-tracking-during-development"
 WORK = Path("/content") if Path("/content").exists() else Path("/workspace")
 
-_ap = argparse.ArgumentParser()
-_ap.add_argument("token", nargs="?", help="Kaggle KGAT token (or set KAGGLE_API_TOKEN / upload a file)")
-_ap.add_argument("--fold", type=int, default=int(os.environ.get("FOLD", 0)))
-_ap.add_argument("--epochs", type=int, default=int(os.environ.get("EPOCHS", 25)))
-_ap.add_argument("--base", type=int, default=int(os.environ.get("BASE", 32)))
-_ap.add_argument("--batch", type=int, default=int(os.environ.get("BATCH", 8)))
-_ap.add_argument("--n-volumes", type=int, default=int(os.environ.get("N_VOLUMES", 150)))
-ARGS, _ = _ap.parse_known_args()
+# Config comes purely from env (set by the run.sh prelude). We deliberately do NOT use argparse
+# positionals: under `colab exec` the kernel's own sys.argv (the -f connection-file) would be
+# captured as a positional and mistaken for the token.
+class _Cfg:
+    fold = int(os.environ.get("FOLD", 0))
+    epochs = int(os.environ.get("EPOCHS", 25))
+    base = int(os.environ.get("BASE", 32))
+    batch = int(os.environ.get("BATCH", 8))
+    n_volumes = int(os.environ.get("N_VOLUMES", 150))
+
+
+ARGS = _Cfg()
 N_VOLUMES = ARGS.n_volumes
 
 
@@ -47,18 +50,15 @@ def log(*a):
 
 
 def token() -> str:
-    # NOTE: read CTRACK_KAGGLE_TOKEN, not KAGGLE_API_TOKEN — Colab pollutes the latter with the
-    # Jupyter kernel connection JSON, which would end up in the CLI's Authorization header.
-    tok = ARGS.token or os.environ.get("CTRACK_KAGGLE_TOKEN") or os.environ.get("KAGGLE_API_TOKEN")
-    if tok and tok.strip().startswith("{"):  # the polluted kernel-json value, not a real token
-        tok = ARGS.token or os.environ.get("CTRACK_KAGGLE_TOKEN")
+    # CTRACK_KAGGLE_TOKEN only — Colab pollutes KAGGLE_API_TOKEN with the kernel connection JSON.
+    tok = os.environ.get("CTRACK_KAGGLE_TOKEN")
     if not tok:
         for p in ("/root/.kaggle/kaggle_token", str(Path.home() / ".kaggle/kaggle_token")):
             if Path(p).exists():
                 tok = Path(p).read_text().strip()
                 break
     if not tok:
-        raise SystemExit("no Kaggle token (pass as arg or set CTRACK_KAGGLE_TOKEN)")
+        raise SystemExit("no Kaggle token (set CTRACK_KAGGLE_TOKEN)")
     return tok.strip()
 
 
