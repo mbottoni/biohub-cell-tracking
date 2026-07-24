@@ -37,28 +37,37 @@ make data               # download + unzip competition files into data/raw/
 
 ## Layout
 
+The repo separates **the library** (runs anywhere), **where code runs** (local vs cloud), and
+**how we submit** (Kaggle kernels):
+
 ```
-src/ctrack/
+src/ctrack/            THE LIBRARY — importable, single source of truth
+  data/                geff + zarr readers, CV splits
+  detect/              detection: blob baseline, 3D U-Net, targets, cache, train loop
+  link/                hungarian, ILP, learned edge affinities
   eval/biohub.py       the competition metric, reimplemented in numpy
-  data/geff.py         ground-truth graph reader
-  data/volume.py       (T,Z,Y,X) zarr reader, normalization, isotropic resampling
-  data/splits.py       CV folds + golden holdout (see leakage notes in the module)
-  detect/blob.py       classical nucleus detection (baseline)
-  link/hungarian.py    frame-to-frame assignment + gap closing
   submit/format.py     submission schema + directed-forest validator
 
 scripts/
-  fetch_data.sh          full download (87.6 GB)
-  fetch_subset.py        per-dataset download
-  analyze_gt.py          GT characterisation across all volumes
-  check_crop_overlap.py  do same-embryo crops overlap? (decides CV validity)
-  run_baseline.py        detect → link → score / submit, with --sweep
+  local/               RUNS ON THIS MACHINE (Apple MPS / CPU): train, eval, baseline, data prep
+  cloud/               RUNS ON RENTED GPUs (Colab, Vast) — placeholder, empty for now
+
+notebooks/             notebook-based training (interactive Colab)
+kernels/               KAGGLE submission kernels: baseline/, infer/, train/
 
 docs/
-  metric.md      the scoring formula, decoded  ← read this first
-  data.md        verified dataset facts
-  experiments.md experiment log
+  metric.md            the scoring formula, decoded  ← read this first
+  data.md              verified dataset facts
+  detector.md          learned-detector design notes
+  experiments.md       experiment log
 ```
+
+**Where things run:**
+- **Local (`scripts/local/`)** — the default. Detector training on MPS reaches >98% peak recall
+  in ~4 epochs; everything is reliable and directly visible.
+- **Cloud (`scripts/cloud/`)** — deferred. Only worth the setup for a bigger model or many-fold
+  sweeps. The training *logic* stays in `ctrack.detect.train`; cloud scripts are thin drivers.
+- **Kaggle (`kernels/`)** — the submission path (kernels-only competition, no internet).
 
 ## Key facts
 

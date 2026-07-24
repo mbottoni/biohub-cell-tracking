@@ -81,7 +81,7 @@ is **partial**, which is the root cause of the metric exploit described in PLAN.
 
 ## Ground truth, measured across all 199 volumes
 
-`scripts/analyze_gt.py` → `docs/gt_stats.csv`.
+`scripts/local/analyze_gt.py` → `docs/gt_stats.csv`.
 
 | | mean | median | min | max |
 |---|---|---|---|---|
@@ -111,7 +111,7 @@ Weight experiments accordingly and do not read the two folds as interchangeable.
 
 ## CV: within-embryo kfold is valid
 
-`scripts/check_crop_overlap.py` over all 199 volumes (2026-07-24): same-embryo first-frame
+`scripts/local/check_crop_overlap.py` over all 199 volumes (2026-07-24): same-embryo first-frame
 correlation (median +0.011, p95 +0.44, max +0.89) is indistinguishable from different-embryo
 (median +0.017, p95 +0.44, max +0.85); no exact duplicates, no pair above 0.9. So same-embryo
 crops are **spatially independent**, and `ctrack.data.splits.kfold` (splitting within embryos)

@@ -31,7 +31,7 @@ from collections import defaultdict
 from pathlib import Path
 
 COMP = "biohub-cell-tracking-during-development"
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / "data" / "filelist.json"
 
 

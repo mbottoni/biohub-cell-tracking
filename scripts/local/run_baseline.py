@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from ctrack.data.geff import load_geff  # noqa: E402
 from ctrack.data.volume import find_volumes, open_volume  # noqa: E402

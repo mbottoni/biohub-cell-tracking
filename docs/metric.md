@@ -7,7 +7,7 @@ validation.
 > **Verification status (2026-07-24).** `ctrack.eval.biohub` (my numpy reimplementation) has
 > been checked field-for-field against this reference implementation on real baseline
 > predictions from both embryos — edge TP/FP/FN, division TP/FP/FN, edge Jaccard, adjusted
-> Jaccard, node ratio all match to full float precision (`scripts/verify_metric.py`). So my
+> Jaccard, node ratio all match to full float precision (`scripts/local/verify_metric.py`). So my
 > code faithfully reproduces the reference.
 >
 > One link remains unconfirmed: the reference itself is a *community* reimplementation, not the
@@ -50,7 +50,7 @@ the metric — neither TP nor FP.
 > numbers are below. The *structural* conclusions (only annotated-subgraph edges count; the
 > node budget is unclamped above) were unaffected, but the "few dozen cells" framing was wrong.
 
-Across all 199 train volumes (`docs/gt_stats.csv`, via `scripts/analyze_gt.py`):
+Across all 199 train volumes (`docs/gt_stats.csv`, via `scripts/local/analyze_gt.py`):
 
 | | mean | median | min | max |
 |---|---|---|---|---|

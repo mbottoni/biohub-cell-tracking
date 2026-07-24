@@ -228,7 +228,7 @@ Ranked by expected value. All of these attack the *legitimate* metric.
 - [x] GT reader (`ctrack.data.geff`), volume reader (`ctrack.data.volume`)
 - [x] Submission writer + directed-forest validator (`ctrack.submit.format`)
 - [x] CV split + golden holdout (`ctrack.data.splits`), with leakage caveats encoded
-- [x] Baseline detect → link → gap-close pipeline (`scripts/run_baseline.py`)
+- [x] Baseline detect → link → gap-close pipeline (`scripts/local/run_baseline.py`)
 - [ ] **Download finishes** (87.6 GB → `/Volumes/extSSD/kaggle/biohub/raw`)
 
 **Phase 0 is essentially done.** All four blocking questions are answered:

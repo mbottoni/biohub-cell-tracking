@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from ctrack.data.geff import find_geff_stores, load_geff  # noqa: E402
 from ctrack.data.splits import hold_out_golden, kfold  # noqa: E402

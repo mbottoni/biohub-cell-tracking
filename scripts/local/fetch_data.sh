@@ -8,7 +8,7 @@
 set -euo pipefail
 
 COMP="biohub-cell-tracking-during-development"
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEST="$ROOT/data/raw"
 
 # shellcheck disable=SC1091
