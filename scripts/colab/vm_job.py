@@ -83,15 +83,29 @@ import shutil
 import zipfile
 
 # ---- deps + Kaggle CLI (used for both private-dataset and competition downloads) ----
+# Colab ships an old kaggle (1.5.x) that ignores KAGGLE_API_TOKEN bearer auth; force >=2.x.
 log("== installing deps ==")
 os.environ["KAGGLE_API_TOKEN"] = TOK
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "zarr", "scipy", "kaggle"], check=False)
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "zarr", "scipy", "kaggle"],
+               check=False)
+ver = subprocess.run(["kaggle", "--version"], capture_output=True, text=True, env=os.environ)
+log("kaggle CLI:", (ver.stdout or ver.stderr).strip())
+
+
+def kaggle(args, check=True):
+    """Run the kaggle CLI, surfacing stderr on failure (subprocess check=True hides it)."""
+    r = subprocess.run(["kaggle", *args], capture_output=True, text=True, env=os.environ)
+    if r.returncode != 0:
+        log("kaggle stderr:", r.stderr[-500:])
+        if check:
+            raise RuntimeError(f"kaggle {' '.join(args)} failed")
+    return r
+
 
 # ---- ctrack package (via the Kaggle CLI — the raw datasets API 403s on private datasets) ----
 log("== fetching ctrack ==")
 csrc = WORK / "ctrack_src"
-subprocess.run(["kaggle", "datasets", "download", "-d", "maruanbottoni/ctrack-src",
-                "-p", str(csrc), "--unzip"], env=os.environ, check=True)
+kaggle(["datasets", "download", "-d", "maruanbottoni/ctrack-src", "-p", str(csrc), "--unzip"])
 pkg_root = WORK / "pkg"
 if pkg_root.exists():
     shutil.rmtree(pkg_root)
@@ -118,10 +132,9 @@ CACHE_DS = "maruanbottoni/biohub-cache"
 cache_dir = WORK / "biohub_cache"
 cache_dir.mkdir(parents=True, exist_ok=True)
 
-# try the prebuilt cache dataset first
+# try the prebuilt cache dataset first (expected to 404 on the very first run)
 log("== fetching cache dataset (if it exists) ==")
-subprocess.run(["kaggle", "datasets", "download", "-d", CACHE_DS, "-p", str(cache_dir), "--unzip"],
-               env=os.environ)
+kaggle(["datasets", "download", "-d", CACHE_DS, "-p", str(cache_dir), "--unzip"], check=False)
 n_cached = len(list(cache_dir.glob("*.npz")))
 need_build = cached_all_ids(cache_dir) is None or n_cached < min(N_VOLUMES, 199)
 
@@ -130,9 +143,7 @@ if need_build:
     dl_dir = WORK / "dl"
     dl_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
-    if subprocess.run(["kaggle", "competitions", "download", "-c", COMP, "-p", str(dl_dir)],
-                      env=os.environ).returncode != 0:
-        raise RuntimeError("kaggle competitions download failed")
+    kaggle(["competitions", "download", "-c", COMP, "-p", str(dl_dir)])
     zips = list(dl_dir.glob("*.zip"))
     log(f"downloaded zip in {time.time()-t0:.0f}s; extracting train/")
 
@@ -159,11 +170,10 @@ if need_build:
     log("== uploading cache dataset ==")
     json.dump({"title": "biohub-cache", "id": CACHE_DS, "licenses": [{"name": "CC0-1.0"}]},
               open(cache_dir / "dataset-metadata.json", "w"))
-    have = subprocess.run(["kaggle", "datasets", "status", CACHE_DS],
-                          capture_output=True, text=True).returncode == 0
-    cmd = (["kaggle", "datasets", "version", "-p", str(cache_dir), "-m", "cache", "--dir-mode", "zip"]
-           if have else ["kaggle", "datasets", "create", "-p", str(cache_dir), "--dir-mode", "zip"])
-    subprocess.run(cmd, env=os.environ)
+    have = kaggle(["datasets", "status", CACHE_DS], check=False).returncode == 0
+    kaggle(["datasets", "version", "-p", str(cache_dir), "-m", "cache", "--dir-mode", "zip"]
+           if have else ["datasets", "create", "-p", str(cache_dir), "--dir-mode", "zip"],
+           check=False)
 else:
     log(f"== cache present ({n_cached} npz) — skipping competition download ==")
 
@@ -191,12 +201,8 @@ json.dump(
      "licenses": [{"name": "CC0-1.0"}]},
     open(wdir / "dataset-metadata.json", "w"),
 )
-os.environ["KAGGLE_API_TOKEN"] = TOK
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "kaggle"], check=False)
-exists = subprocess.run(["kaggle", "datasets", "status", "maruanbottoni/biohub-detector-weights"],
-                        capture_output=True, text=True).returncode == 0
-cmd = (["kaggle", "datasets", "version", "-p", str(wdir), "-m", "colab weights", "--dir-mode", "zip"]
-       if exists else ["kaggle", "datasets", "create", "-p", str(wdir), "--dir-mode", "zip"])
-r = subprocess.run(cmd, capture_output=True, text=True)
+exists = kaggle(["datasets", "status", "maruanbottoni/biohub-detector-weights"], check=False).returncode == 0
+r = kaggle(["datasets", "version", "-p", str(wdir), "-m", "colab weights", "--dir-mode", "zip"]
+           if exists else ["datasets", "create", "-p", str(wdir), "--dir-mode", "zip"], check=False)
 log(r.stdout or r.stderr)
 log("DONE — weights on Kaggle: maruanbottoni/biohub-detector-weights")
