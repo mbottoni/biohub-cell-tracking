@@ -30,26 +30,38 @@ class DetectionFrames(Dataset):
         subsample: tuple[int, int, int] = ISOTROPIC_SUBSAMPLE,
         sigma_um: float = 2.5,
         augment: bool = False,
+        frame_stride: int = 1,
     ):
         self.raw_root = Path(raw_root)
         self.gt_root = Path(gt_root)
         self.subsample = subsample
         self.sigma_um = sigma_um
         self.augment = augment
+        # Volumes have up to ~100 annotated frames; adjacent frames are near-identical, so a
+        # stride cuts epoch time with little information loss. Keep 1 for validation.
+        self._vol_cache: dict[str, object] = {}
 
-        # index (dataset, t) for every annotated frame, and cache GT centres per (dataset, t)
+        # index (dataset, t) for annotated frames, and cache GT centres per (dataset, t)
         self.index: list[tuple[str, int]] = []
         self._centres: dict[tuple[str, int], np.ndarray] = {}
         for ds in datasets:
             gt = load_geff(self.gt_root / f"{ds}.geff")
             t = gt.graph.t.astype(int)
             zyx = gt.graph.zyx
-            for frame in np.unique(t):
+            frames = np.unique(t)[::frame_stride]
+            for frame in frames:
                 self._centres[(ds, int(frame))] = zyx[t == frame]
                 self.index.append((ds, int(frame)))
 
     def __len__(self) -> int:
         return len(self.index)
+
+    def _volume(self, ds: str):
+        vol = self._vol_cache.get(ds)
+        if vol is None:
+            vol = open_volume(self.raw_root / f"{ds}.zarr")
+            self._vol_cache[ds] = vol
+        return vol
 
     def frame_only(self, i: int) -> np.ndarray:
         """The isotropic frame for item i, without building the (expensive) target/mask.
@@ -58,15 +70,13 @@ class DetectionFrames(Dataset):
         __getitem__ does for training targets.
         """
         ds, t = self.index[i]
-        vol = open_volume(self.raw_root / f"{ds}.zarr")
-        return to_isotropic(vol.normalized_frame(t), self.subsample)
+        return to_isotropic(self._volume(ds).normalized_frame(t), self.subsample)
 
     def __getitem__(self, i: int):
         import torch
 
         ds, t = self.index[i]
-        vol = open_volume(self.raw_root / f"{ds}.zarr")
-        frame_iso = to_isotropic(vol.normalized_frame(t), self.subsample)
+        frame_iso = to_isotropic(self._volume(ds).normalized_frame(t), self.subsample)
         centres = self._centres[(ds, t)]
 
         heatmap, mask = build_frame_target(

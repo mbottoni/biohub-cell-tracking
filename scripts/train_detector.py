@@ -62,6 +62,8 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--base", type=int, default=16)
     ap.add_argument("--val-threshold", type=float, default=0.3)
+    ap.add_argument("--train-stride", type=int, default=3, help="use every Nth annotated frame")
+    ap.add_argument("--val-stride", type=int, default=4, help="validate on every Nth val frame")
     ap.add_argument("--limit", type=int, help="cap datasets per split (fast smoke test)")
     ap.add_argument("--out", default="models/unet.pt")
     args = ap.parse_args()
@@ -79,9 +81,10 @@ def main() -> None:
     print(f"fold {args.fold}: {len(train_ds)} train, {len(val_ds)} val datasets "
           f"(golden {len(golden)} held out)")
 
-    train = DetectionFrames(train_ds, args.raw, args.gt, augment=True)
-    val = DetectionFrames(val_ds, args.raw, args.gt, augment=False)
-    print(f"frames: {len(train)} train, {len(val)} val")
+    train = DetectionFrames(train_ds, args.raw, args.gt, augment=True, frame_stride=args.train_stride)
+    val = DetectionFrames(val_ds, args.raw, args.gt, augment=False, frame_stride=args.val_stride)
+    print(f"frames: {len(train)} train, {len(val)} val "
+          f"(stride {args.train_stride}/{args.val_stride})")
     train_dl = DataLoader(train, batch_size=args.batch, shuffle=True, num_workers=4, drop_last=True)
 
     model = UNet3D(base=args.base).to(device)
