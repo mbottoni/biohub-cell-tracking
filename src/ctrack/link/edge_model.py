@@ -23,7 +23,7 @@ import torch.nn as nn
 
 from ctrack.eval.biohub import SCALE
 
-FEATURE_DIM = 8
+FEATURE_DIM = 7  # Δz, Δy, Δx, distance, src intensity, tgt intensity, |Δintensity|
 
 
 def pair_features(
