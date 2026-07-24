@@ -49,8 +49,10 @@ colab new -s "$SESSION" --gpu "$GPU" 2>&1 | tail -1
 # vm_job forwards no args via exec, so prepend a tiny env prelude carrying the token + config.
 COMBINED="$(mktemp -t vmjob).py"
 {
+  # CTRACK_KAGGLE_TOKEN, not KAGGLE_API_TOKEN — Colab pollutes the latter with kernel-connection
+  # JSON, which would otherwise end up in the CLI's Authorization header.
   printf 'import os\n'
-  printf 'os.environ["KAGGLE_API_TOKEN"]=%s\n' "\"$KAGGLE_API_TOKEN\""
+  printf 'os.environ["CTRACK_KAGGLE_TOKEN"]=%s\n' "\"$KAGGLE_API_TOKEN\""
   printf 'os.environ["FOLD"]=%s\nos.environ["EPOCHS"]=%s\nos.environ["N_VOLUMES"]=%s\n' \
          "\"$FOLD\"" "\"$EPOCHS\"" "\"$N_VOLUMES\""
   cat "$ROOT/scripts/colab/vm_job.py"

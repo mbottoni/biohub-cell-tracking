@@ -47,15 +47,19 @@ def log(*a):
 
 
 def token() -> str:
-    tok = ARGS.token or os.environ.get("KAGGLE_API_TOKEN")
+    # NOTE: read CTRACK_KAGGLE_TOKEN, not KAGGLE_API_TOKEN — Colab pollutes the latter with the
+    # Jupyter kernel connection JSON, which would end up in the CLI's Authorization header.
+    tok = ARGS.token or os.environ.get("CTRACK_KAGGLE_TOKEN") or os.environ.get("KAGGLE_API_TOKEN")
+    if tok and tok.strip().startswith("{"):  # the polluted kernel-json value, not a real token
+        tok = ARGS.token or os.environ.get("CTRACK_KAGGLE_TOKEN")
     if not tok:
         for p in ("/root/.kaggle/kaggle_token", str(Path.home() / ".kaggle/kaggle_token")):
             if Path(p).exists():
                 tok = Path(p).read_text().strip()
                 break
     if not tok:
-        raise SystemExit("no Kaggle token (pass as arg, set KAGGLE_API_TOKEN, or upload a file)")
-    return tok
+        raise SystemExit("no Kaggle token (pass as arg or set CTRACK_KAGGLE_TOKEN)")
+    return tok.strip()
 
 
 TOK = token()
@@ -83,18 +87,21 @@ import shutil
 import zipfile
 
 # ---- deps + Kaggle CLI (used for both private-dataset and competition downloads) ----
-# Colab ships an old kaggle (1.5.x) that ignores KAGGLE_API_TOKEN bearer auth; force >=2.x.
+# Colab ships an old kaggle (1.5.x) that ignores bearer auth; force >=2.x.
 log("== installing deps ==")
-os.environ["KAGGLE_API_TOKEN"] = TOK
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "zarr", "scipy", "kaggle"],
                check=False)
-ver = subprocess.run(["kaggle", "--version"], capture_output=True, text=True, env=os.environ)
+
+# Build the kaggle CLI's env explicitly so our token wins over Colab's polluted
+# KAGGLE_API_TOKEN. Everything else inherits from os.environ.
+KAGGLE_ENV = {**os.environ, "KAGGLE_API_TOKEN": TOK}
+ver = subprocess.run(["kaggle", "--version"], capture_output=True, text=True, env=KAGGLE_ENV)
 log("kaggle CLI:", (ver.stdout or ver.stderr).strip())
 
 
 def kaggle(args, check=True):
-    """Run the kaggle CLI, surfacing stderr on failure (subprocess check=True hides it)."""
-    r = subprocess.run(["kaggle", *args], capture_output=True, text=True, env=os.environ)
+    """Run the kaggle CLI with our token, surfacing stderr on failure."""
+    r = subprocess.run(["kaggle", *args], capture_output=True, text=True, env=KAGGLE_ENV)
     if r.returncode != 0:
         log("kaggle stderr:", r.stderr[-500:])
         if check:
