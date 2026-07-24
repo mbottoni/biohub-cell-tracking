@@ -40,7 +40,30 @@ class RawVolume:
     def quantiles(self) -> dict:
         return self.group_meta.get("attributes", {}).get("image_statistics", {}).get("quantiles", {})
 
-TEST_DIR = Path("/kaggle/input/biohub-cell-tracking-during-development/test")
+def _find_test_dir() -> Path:
+    """Locate the test/ directory. Kaggle mounts competition data under
+    /kaggle/input/competitions/<slug>/ (not the usual /kaggle/input/<slug>/), so search rather
+    than hardcode -- the public starter uses the competitions/ path. CTRACK_TEST_DIR overrides
+    for local testing."""
+    import os
+
+    if os.environ.get("CTRACK_TEST_DIR"):
+        return Path(os.environ["CTRACK_TEST_DIR"])
+    candidates = [
+        Path("/kaggle/input/competitions/biohub-cell-tracking-during-development/test"),
+        Path("/kaggle/input/biohub-cell-tracking-during-development/test"),
+    ]
+    for c in candidates:
+        if c.is_dir() and any(c.glob("*.zarr")):
+            return c
+    # last resort: find any test/ dir with zarr stores anywhere under /kaggle/input
+    for p in Path("/kaggle/input").glob("**/test"):
+        if p.is_dir() and any(p.glob("*.zarr")):
+            return p
+    raise FileNotFoundError("could not locate a test/ dir with .zarr stores under /kaggle/input")
+
+
+TEST_DIR = _find_test_dir()
 SCALE = np.array([1.625, 0.40625, 0.40625])       # (Z, Y, X) µm/voxel
 SUBSAMPLE = (1, 4, 4)                               # -> isotropic 1.625 µm
 ISO_SCALE = SCALE * np.array(SUBSAMPLE)
