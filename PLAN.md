@@ -1,283 +1,250 @@
 # Plan to Win: Biohub — Cell Tracking During Development
 
 **Competition:** https://www.kaggle.com/competitions/biohub-cell-tracking-during-development
-**Written:** 2026-07-23 · **Assumed deadline:** 2026-09-29 (UNVERIFIED — confirm in Phase 0) → ~10 weeks
-**Type:** Research code competition, CC0 data, hosted by Chan Zuckerberg Biohub (Royer Group)
+**Updated:** 2026-07-23 (v2 — rewritten after gaining API access; v1 was written blind and got
+most of this wrong)
 
----
-
-## 0. What we actually know vs. what we're assuming
-
-Be honest about this, because the plan below is only as good as these assumptions and
-several are load-bearing.
-
-**Confirmed (from public sources):**
-- Task: detect and track cells in zebrafish embryos through **3D space + time** (light-sheet
-  microscopy, Zebrahub-derived data). Full lineages including divisions.
-- Data is the largest publicly available cell-tracking dataset by annotation count, CC0.
-- Metrics are from the **Cell Tracking Challenge** family — TRA / DET / SEG, with **CHOTA**
-  also mentioned.
-- The incumbent method is **Ultrack** (Royer group, *Nature Methods* 2025): multi-hypothesis
-  segmentation + integer-linear-programming linking. Open source. This is the bar.
-
-**Unverified — resolve on day 1 (Phase 0):**
-- [ ] Exact scoring metric and its weights (is it plain TRA? a blend? CHOTA?)
-- [ ] Submission format (CTC `res_track.txt` + label TIFFs? a CSV of points? RLE masks?)
-- [ ] Whether detection/segmentation is scored, or only linking given provided detections
-- [ ] Code-competition compute budget (GPU hours, runtime cap, internet off?)
-- [ ] Dataset size on disk and number of held-out sequences
-- [ ] Prize structure and team-merge deadline
-
-> **The strategy below is written to be robust to these unknowns**, but revisit it the moment
-> Phase 0 lands. If, say, detections are *provided* and only linking is scored, Phase 2
-> collapses and everything moves into Phases 3–5.
-
----
-
-## 1. The core insight: where the score actually lives
-
-CTC's TRA is `1 - min(AOGM, AOGM_0) / AOGM_0`, where AOGM is a weighted edit distance between
-the predicted and ground-truth lineage graphs. The standard weights are:
-
-| Error | Weight |
+| | |
 |---|---|
-| **FN vertex** (missed cell) | **10** |
-| NS vertex (two cells merged into one) | 5 |
-| ED (edge deleted) | 1 |
-| EA (edge added) | 1.5 |
-| EC (edge with wrong semantics) | 1 |
-| **FP vertex** (spurious cell) | **1** |
-
-**A missed cell costs 10× a spurious one.** That single asymmetry should drive most of our
-design decisions:
-
-1. **Bias detection hard toward recall.** Sweep the detection threshold against the *real*
-   metric, not against F1. The optimum will sit well below the F1-optimal threshold.
-2. **Never merge two cells into one** — a merge is an NS (5) *and* usually cascades into edge
-   errors. Split-happy is cheaper than merge-happy.
-3. Edge errors are cheap individually but there are ~N of them per cell per frame, so at
-   tens of thousands of cells across hundreds of frames, linking still dominates in absolute
-   terms. Both stages matter; detection just has the sharper gradient.
-
-**Corollary:** we must be able to compute the official metric locally, exactly, before we
-write a single model. That is Phase 0's real deliverable.
+| **Prize** | $60,000 USD |
+| **Deadline** | **2026-09-29** 23:59 UTC (~9.5 weeks left; comp opened 2026-06-29) |
+| **Team merger / new entrant deadline** | **2026-09-22** |
+| **Type** | Research · **kernels-only** (notebook submission) · 5 subs/day · max team 5 |
+| **Metric** | **Custom** ("CZI Biohub Zebrafish 133605") — *not* standard CTC TRA |
+| **Rules accepted** | ✅ (`userHasEntered: true`) |
+| **Public LB state** | top public notebooks at **~0.897**; strong rule-based ~0.857 |
 
 ---
 
-## 2. Architecture we're aiming for
+## 1. Ground truth about the problem (verified, not assumed)
 
-A three-stage pipeline, each stage independently improvable and measurable:
+### Data
+- Zarr **v3** stores (`zarr.json`, chunks at `0/c/{t}/0/0/0`), **blosc2**-compressed.
+  One chunk per timepoint. Array shape `(T, Z, Y, X)`, laid out `test/<id>.zarr`.
+- **Voxel size = `[1.625, 0.40625, 0.40625]` µm (Z, Y, X)** → exactly **4× anisotropy in Z**.
+  This is why the community standard is `SUBSAMPLE = [1, 4, 4]`: downsampling Y/X by 4 makes
+  voxels isotropic at 1.625 µm. Do this, don't invent something else.
+- Ground truth ships as **`.geff` graph files** alongside the `.zarr` volumes (GEFF = the
+  Royer-lab graph exchange format; read with the `geff` package, manipulate with `tracksdata`).
+- Total download is **>3.5 GB** (still measuring).
+
+### Submission format — a point graph, *not* segmentation masks
+A single `submission.csv` with columns:
 
 ```
-  raw 3D+t volumes (zarr)
-        │
-        ▼
-  [A] preprocessing        drift/rigid registration · intensity normalization ·
-                           anisotropy handling · denoising
-        │
-        ▼
-  [B] detection            3D nucleus centers + (optional) instance masks
-                           ensemble → multi-hypothesis candidate set
-        │
-        ▼
-  [C] linking              learned affinities → global optimization (ILP/flow)
-                           → division detection → gap closing → track repair
-        │
-        ▼
-  submission (CTC res_track.txt + labels, or comp-specific format)
+id, dataset, row_type, node_id, t, z, y, x, source_id, target_id
 ```
 
-Deliberately **not** end-to-end. End-to-end trackers are elegant but at this scale the
-debuggability of a staged pipeline is worth more than the joint optimum, and each stage can
-be scored in isolation against the real metric.
+- `row_type == "node"` → a detected cell centroid at `(t, z, y, x)`, identified by `node_id`
+- `row_type == "edge"` → a link, `source_id → target_id` (unused fields are `-1`)
+- The graph must be a **directed forest**: unique `node_id`s, no duplicated `target_id`
+  (each cell has ≤1 parent). Divisions = a node with 2 children.
+
+**Consequence: segmentation is not scored at all.** Everything in v1 about SEG, IoU, StarDist
+masks and CTC TIFF layout is dead. This is **point detection + graph linking**.
+
+### The metric
+Custom. From the reference implementation used by top notebooks
+(`biohub_tracking.metrics`: `evaluate`, `node_recall`, `per_sample_metrics`, `summarise`) it is
+built from:
+- `node_recall(pred_graph, truth_graph)`
+- edge TP / FP / FN
+- division TP / FP / FN
+- normalized against **`GeffMetadata.extra["estimated_number_of_nodes"]`**
+
+That last term is the whole ballgame — see §2.
+
+**Open item:** we have not yet read the exact formula. Extracting it from the support pack /
+evaluation page is task #1. Everything below is provisional until we have it.
 
 ---
 
-## 3. Phased plan
+## 2. The elephant: the metric is exploitable, and the field knows it
 
-### Phase 0 — Recon & measurement harness (Week 1) ⟵ *nothing else starts until this is done*
+Two of the most-upvoted public notebooks are literally titled *"metric hack"*. Here is the
+exploit, reconstructed from `kirneo/metric-hack-last-call-update`:
 
-The single highest-leverage week. Goal: a local scorer we trust and a submission we can make
-end-to-end, however bad the score.
+```python
+MAX_COMPONENTS = 3400
+FORKS = 32
+# add one hub node at t=-1000, (z,y,x) = (-10000,-10000,-10000)
+# add an edge hub -> root, for the root of every connected component
+# then chain 32 fake "fork" nodes, each with 2 children, at t = -999, -997, ...
+```
 
-- [ ] Fix Kaggle API auth (`~/.kaggle/kaggle.json` currently 401s), pull data + rules
-- [ ] Read Overview / Data / Evaluation / Rules tabs in full; fill in the unknowns in §0
-- [ ] Characterize the data: voxel spacing (expect strong z anisotropy), frame count, cell
-      count per frame, intensity drift over time, embryo motion magnitude
-- [ ] **Build `ctrack.eval`: a local CTC/CHOTA scorer** (via `traccuracy`) and verify it
-      reproduces the leaderboard on a known submission
-- [ ] **Design the validation split**: hold out *entire timelapses / embryos*, never random
-      frames. Random frame splits leak catastrophically here — adjacent frames are ~identical.
-      If only one timelapse exists, hold out contiguous *time blocks* plus spatial crops.
-- [ ] **Submit something trivial** (e.g. thresholded blobs + nearest-neighbour linking) to
-      lock in the format and measure CV↔LB correlation early
-- [ ] Log the compute budget; decide local-GPU vs Kaggle-GPU vs cloud
+The injected nodes sit at **negative timepoints and impossible coordinates**, so they can never
+match a ground-truth node. What they do:
+1. **Collapse ~3400 connected components into one**, and
+2. **inject 32 free division events**.
 
-**Exit criterion:** local score on a held-out sequence lands within a known offset of the LB.
+That this *helps* tells you the metric rewards low fragmentation and/or division recall, while
+**barely penalizing false-positive nodes**. And there's a good scientific reason for that: the
+GT is **partially annotated** — hence `estimated_number_of_nodes`. You cannot penalize a
+predicted cell that might be a real, un-annotated one. The exploit weaponizes that leniency.
 
-### Phase 1 — Ultrack baseline (Week 2)
+`MAX_COMPONENTS` and `FORKS` are visibly LB-probed (the code comments track
+`20 → 30 → 40`, `2600 → 3400 → "хочу 3800"`).
 
-- [ ] Run stock Ultrack on the competition data, tuned only lightly
-- [ ] Score it locally; submit it
-- [ ] Profile it: runtime, memory, where its errors are (FN? merges? divisions? gaps?)
+### Position on this — my recommendation
 
-**Why:** it is the published SOTA on exactly this data from exactly this lab. If we can't
-beat it we have no result; if we can, we know precisely which error class we improved. It
-also gives us a strong candidate-generation backend for free.
+**Understand it, reproduce it for calibration, but do not build the solution on it.**
 
-**Exit criterion:** a reproducible Ultrack score + a per-error-class breakdown table.
+- It is public, so it confers **no edge** — everyone at the top has it. It's table stakes for
+  LB position, not a differentiator.
+- It is **fragile**: this is a Research competition whose stated purpose is to establish
+  community benchmarking standards. Hosts patch metrics mid-competition, and Kaggle rules let
+  them address degenerate submissions. A solution whose score depends on the hub trick can
+  evaporate.
+- A **$60k research prize with a required write-up** is decided partly by hosts reading the
+  method. "We added a fake hub node" is not a winning write-up.
 
-### Phase 2 — Detection (Weeks 3–5) — *biggest expected gain*
+So: keep the legitimate pipeline as the product, keep the hack as a **detachable
+post-processing flag** (`--augment-hub`) that we can toggle to measure its LB delta and switch
+off instantly if the metric changes. Track both scores separately, always.
 
-- [ ] Baseline 3D U-Net predicting a **Gaussian center heatmap + boundary/foreground map**;
-      peak-detect with a local-max + NMS in physical (anisotropy-corrected) coordinates
-- [ ] Compare against: **StarDist-3D**, **Cellpose-SAM**, and a center+offset regression head
-      (EmbedTrack-style). Pick on held-out DET, not on loss.
-- [ ] Handle anisotropy explicitly — resample to isotropic physical spacing, or use
-      anisotropic kernels/strides. Do **not** treat z like x/y.
-- [ ] Tile/patch inference with overlap-blending; deduplicate detections at tile seams
-- [ ] **Threshold sweep against the real metric** (recall-biased, per §1)
-- [ ] TTA: flips + 90° rotations in xy, flip in z
-- [ ] Ensemble 2–3 architectures → feed the *union* as candidate hypotheses to Phase 3
-      rather than voting them down to one answer
-
-**Exit criterion:** held-out DET clearly above the Ultrack baseline's detection stage.
-
-### Phase 3 — Linking (Weeks 4–7, overlaps Phase 2)
-
-Escalating ladder — stop when the gain per week flattens:
-
-1. **Nearest neighbour + motion model.** After global drift correction, cell displacement
-   between frames is small; a Kalman/constant-velocity prior gets surprisingly far.
-2. **Global bipartite matching per frame pair** (Hungarian) with a cost combining distance,
-   volume/intensity similarity, and local-neighbourhood consistency.
-3. **ILP / min-cost-flow over a temporal window** (Ultrack's core). Handles appearance,
-   disappearance, division, and merge resolution jointly under global constraints.
-4. **Learned edge affinities.** Replace hand-tuned costs with a model:
-   - **Trackastra** (transformer over detection sets, pretrained on microscopy) — fine-tune it
-   - or a GNN over the candidate graph (Cell-Tracker-GNN style)
-   Feed learned affinities *into* the ILP rather than replacing it — learned scoring +
-   combinatorial feasibility is the combination that wins.
-
-**Exit criterion:** each rung measured against the same held-out set; keep the best.
-
-### Phase 4 — Divisions (Week 7)
-
-Divisions are rare, structurally important, and disproportionately expensive to get wrong
-(a missed division corrupts an entire subtree's lineage).
-
-- [ ] Dedicated division classifier on candidate parent→(child, child) triplets: local 3D+t
-      crop → CNN, plus features (volume drop, roundness spike, intensity change)
-- [ ] Enforce biological constraints in the ILP: ≤2 children, no merges, division cooldown
-- [ ] Report a division-specific precision/recall separate from the aggregate metric
-
-### Phase 5 — Track repair & gap closing (Week 8)
-
-- [ ] Close gaps across ≥1 missed frame (detection FNs are the dominant error — recovering
-      them at the track level is a direct 10-weight win each)
-- [ ] Re-detect at *predicted* locations where a track breaks: run a low-threshold local
-      search where the motion model says a cell should be. Cheap, high yield.
-- [ ] Prune implausibly short orphan tracks — *but* verify against the metric first; given
-      FP costs only 1, pruning is often net-negative.
-
-### Phase 6 — Ensembling & final push (Week 9)
-
-- [ ] Detection ensembles as multi-hypothesis input to the ILP (Ultrack is *designed* for this)
-- [ ] Seed/fold ensembling of the linking model
-- [ ] Final metric-directed hyperparameter sweep on the full pipeline
-- [ ] Blend candidates: keep several full pipelines and pick by held-out score, not by feel
-
-### Phase 7 — Hardening & write-up (Week 10)
-
-- [ ] Runtime: chunked zarr I/O, mixed precision, streaming inference — must fit the budget
-- [ ] Deterministic seeds, pinned deps, clean rerun from scratch
-- [ ] Reproducible submission notebook
-- [ ] Solution write-up (this is a *research* competition — clarity and reproducibility carry
-      weight beyond the raw score)
+> **Decision needed from you:** confirm this framing. If you'd rather optimize LB position
+> at any cost, the plan reorders. I'd argue against it.
 
 ---
 
-## 4. Differentiators — where we expect to actually beat the field
+## 3. What the field has converged on (our starting point, not our destination)
 
-Ranked by expected value:
+From `kirneo/metric-hack-last-call-update` and `yusuketogashi/lb897-baseline`:
 
-1. **Metric-directed thresholding.** Most competitors will tune detection on F1/IoU. The
-   FN:FP = 10:1 asymmetry means the metric-optimal operating point is materially different.
-   Nearly free to exploit; measurable in week 1.
-2. **Global drift correction before linking.** Light-sheet embryo timelapses drift and the
-   embryo itself moves/grows. Rigidly registering consecutive volumes first shrinks the
-   per-cell displacement distribution dramatically, which makes *every* downstream linker
-   better. Easy to skip, big payoff.
-3. **Multi-hypothesis segmentation + ILP** instead of committing to one segmentation. This is
-   Ultrack's key idea and it generalizes: never force an irreversible decision in stage B that
-   stage C has more information to make.
-4. **Learned affinities inside a combinatorial solver**, not instead of it.
-5. **Re-detection at track breaks.** Directly attacks the highest-weight error class using
-   information (motion continuity) that the detector alone doesn't have.
-6. **Rigorous sequence-level validation.** Many teams will leak via random frame splits, then
-   overfit the LB. A trustworthy CV is a compounding advantage over 10 weeks.
+```
+zarr volume (T,Z,Y,X)
+  └─ subsample [1,4,4]  → isotropic 1.625 µm
+      └─ TemporalUNet3D on 64³ patches, TIME_LENGTH=2
+          ├─ head A: point probability   → max-pool NMS peaks, POINT_THRESHOLD ≈ 0.955
+          └─ head B: per-voxel edge features
+              └─ SimpleNodeTransformer over (nodes_t, nodes_t+1) → edge probabilities
+                  └─ candidate edges: strong ≥0.50, top-3 parents ≥0.25,
+                     top-1 child ≥0.18, max displacement 10 µm
+                      └─ ILP (tracksdata): edge -1.0, appear 0.0,
+                         disappear +1.4, division +1.0
+                          └─ post: 1-frame gap closing (≤10 µm, refine to local
+                             intensity centroid), min track length 3,
+                             trajectory smoothing (w=0.15, ≤1.5 µm shift)
+                              └─ [hub + fake forks]
+```
+
+Notable: `POINT_THRESHOLD = 0.955` is *high*, and there is heavy TTA + multi-GPU. Detection is
+tuned tight, then gaps are repaired downstream.
+
+**We should reproduce this to ~0.89 first.** Reproducing the public state of the art is week 1,
+not the goal. Everything after is where the prize is.
+
+---
+
+## 4. Where I think the remaining headroom is
+
+Ranked by expected value. All of these attack the *legitimate* metric.
+
+1. **Reverse-engineer the exact metric and optimize it directly.** The public notebooks tune
+   `POINT_THRESHOLD` and ILP weights by LB probing at 5 subs/day. With the true formula and a
+   trustworthy local harness we can sweep offline over thousands of configs. Given the metric
+   weights recall and divisions asymmetrically, the jointly-optimal operating point is almost
+   certainly not where hand-probing landed.
+2. **Divisions.** The metric scores division TP/FP/FN explicitly, and the hack shows divisions
+   are worth a lot. Everyone currently gets divisions as a *byproduct* of the ILP. A dedicated
+   division classifier on candidate parent→(child,child) triplets — local 3D+t crop CNN plus
+   volume/roundness/intensity features — is an obvious, unexploited lever.
+3. **Longer temporal context.** The public model uses `TIME_LENGTH = 2` — pairwise frames only.
+   A tracker attending over a window of 3–5 frames resolves ambiguities (crossings, near-misses,
+   the frame *after* a division) that no pairwise model can. This is the biggest architectural
+   gap in the public solution.
+4. **Gap closing beyond one frame.** Public post-processing closes exactly 1-frame gaps. Multi-
+   frame gap closing with motion-model re-detection (search for a peak at the *predicted*
+   location with a lowered threshold) directly converts FN nodes into TPs.
+5. **Global drift/rigid registration before linking.** Still unexploited as far as I can see in
+   the public code. Embryos drift and grow; removing bulk motion shrinks the displacement
+   distribution and makes every linker better.
+6. **Ensembling detection heads** and feeding the *union* of candidates into the ILP rather
+   than one thresholded set — the ILP is built to arbitrate among hypotheses.
 
 ---
 
 ## 5. Validation protocol (non-negotiable)
 
-- Split by **whole sequence / embryo**; if impossible, by contiguous time blocks + spatial crops.
-- Score with the **same code path** as the leaderboard metric.
-- Track CV and LB in a single table; investigate any divergence immediately rather than
-  trusting the LB.
-- Keep a fixed "golden" held-out sequence never used for any tuning decision until Week 9.
-- Every experiment gets a row: config hash, CV, LB, runtime, notes. No undocumented runs.
+- **Split by whole dataset/embryo.** Never random frames — adjacent timepoints are ~identical
+  and a frame-level split leaks catastrophically.
+- Score with a **local reimplementation of the official metric**, verified to reproduce a known
+  LB score to within a small constant.
+- Track **two numbers per experiment**: score with the hub augmentation and without. If they
+  ever move in opposite directions, trust the clean one.
+- One **golden holdout** dataset, untouched by any tuning decision until the final two weeks.
+- 5 subs/day is scarce. Spend them on *reducing uncertainty* (probing the metric, confirming
+  CV↔LB offset), not on hill-climbing that could have been done offline.
 
 ---
 
-## 6. Risk register
+## 6. Phases
+
+### Phase 0 — Recon (this week) ← *in progress*
+- [x] Kaggle API access (bearer token; CLI ≥2.x required, 1.5.13 can't do it)
+- [x] Confirm prize / deadline / kernels-only / submission format / voxel geometry
+- [ ] Finish download, unpack, characterize: how many datasets, T per dataset, volume shape,
+      node counts, division rate, annotation density (how partial *is* the GT?)
+- [ ] **Extract the exact metric formula** and build `ctrack.eval` around it
+- [ ] Establish the CV split and the golden holdout
+- [ ] Reproduce the public baseline end-to-end; confirm our local score ≈ its LB
+
+### Phase 1 — Baseline parity (week 2)
+- [ ] UNet3D detection + transformer edges + ILP running in our own repo, ~0.89 clean
+- [ ] Full error decomposition: node FN, node FP, edge FP/FN, division FP/FN, per dataset
+- [ ] This table decides all subsequent priorities. Do not skip it.
+
+### Phase 2 — Metric-directed tuning (weeks 3–4)
+- [ ] Offline sweep of `POINT_THRESHOLD`, edge thresholds, ILP weights against the real metric
+- [ ] Expect the single largest cheap gain here
+
+### Phase 3 — Model improvements (weeks 4–7)
+- [ ] Temporal window > 2 frames (highest-value architectural change)
+- [ ] Dedicated division classifier
+- [ ] Drift/rigid registration preprocessing
+- [ ] Multi-frame gap closing with motion-guided re-detection
+
+### Phase 4 — Ensembling & hardening (weeks 8–9)
+- [ ] Seed/fold ensembles; union-of-candidates into ILP
+- [ ] Notebook must run inside the kernel time/GPU limit — profile from Phase 1, not week 9
+- [ ] Golden holdout check
+
+### Phase 5 — Write-up (week 10)
+- [ ] Research competition: reproducibility and a clear method write-up carry real weight
+
+---
+
+## 7. Risk register
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Data is TB-scale, local disk/GPU insufficient | Blocks everything | Assess in Phase 0; chunked zarr, train on crops, rent GPU if needed |
-| Metric is not what we assume (e.g. CHOTA-weighted) | Mis-optimized pipeline | Phase 0 exit criterion is exact local reproduction |
-| Runtime cap in code competition | Late-stage rework | Profile from Phase 1; keep a fast path always working |
-| Strong z-anisotropy breaks off-the-shelf 3D models | Poor detection | Resample to isotropic physical spacing early |
-| Photobleaching / intensity drift across time | Detector degrades late in sequence | Per-frame percentile normalization; check DET vs. frame index |
-| Overfitting the public LB | Shakeup on private | Sequence-level CV + golden holdout |
-| Ultrack is already near the ceiling | Marginal gains only | Attack its specific failure modes (from Phase 1 profiling), not the average case |
-| Time: 10 weeks, ambitious scope | Incomplete pipeline | Phases are ordered so that stopping after *any* phase still leaves a valid submission |
-
----
-
-## 7. Weekly milestones
-
-| Week | Milestone | Ship |
-|---|---|---|
-| 1 | Data + rules understood, local scorer trusted, CV split fixed | Trivial submission |
-| 2 | Ultrack baseline reproduced and profiled | Baseline submission |
-| 3–4 | 3D detector trained, beats baseline detection | Detector + simple linker |
-| 5 | Detector ensemble + metric-directed thresholds | Improved submission |
-| 6–7 | ILP linking with learned affinities | Major submission |
-| 7 | Division handling | — |
-| 8 | Gap closing + re-detection at breaks | Improved submission |
-| 9 | Ensembling, final sweeps, golden holdout check | Best submission |
-| 10 | Hardening, reproducibility, write-up | Final + solution post |
+| **Host patches the metric** (plausible given public hacks) | Score collapse for hack-dependent solutions | Keep the hack detachable; optimize the clean metric as primary |
+| Hack-based solutions excluded from prizes | Wasted effort if we build on it | Same |
+| Kernel runtime limit | Late rework | Profile from Phase 1; keep a fast path always green |
+| We're 3.5 weeks late to a 13-week comp | Less time than the field | Start from the public baseline, don't rebuild from scratch |
+| Partial GT annotation misleads local CV | Wrong decisions all the way down | Understand `estimated_number_of_nodes` before trusting any local number |
+| 5 subs/day | Slow LB feedback | Offline sweeps against a trusted local metric |
+| Public notebooks leapfrog us | Being 0.89 in week 9 is worthless | Monitor top notebooks weekly; our edge must be in §4, not in reproduction |
 
 ---
 
 ## 8. Immediate next actions
 
-1. Regenerate the Kaggle API token (kaggle.com/settings → API → Create New Token) — the
-   current key 401s and everything is blocked behind it.
-2. `make data` → pull competition files, inspect structure.
-3. Fill in every `[ ]` in §0 from the actual rules pages.
-4. Build and validate `ctrack.eval` against a known submission.
-5. Make the trivial submission. Get on the board.
+1. Finish download; unpack and characterize the data (`notebooks/01_eda.ipynb`)
+2. **Extract the exact metric implementation** — highest priority, everything depends on it
+3. Build `ctrack.eval` against it, verify on the public baseline
+4. Fix the CV split + golden holdout
+5. Reproduce the public pipeline in-repo, get the error decomposition table
 
 ---
 
 ## References
 
-- Ultrack — *Nature Methods* 2025, Royer Group · https://github.com/royerlab/ultrack
+- Ultrack — *Nature Methods* 2025 · https://github.com/royerlab/ultrack
+- `tracksdata` / `geff` — Royer-lab graph tooling (used by the public baselines)
 - Zebrahub — https://zebrahub.org
-- Cell Tracking Challenge metrics — http://celltrackingchallenge.net/evaluation-methodology/
-- `traccuracy` (Python CTC/CHOTA metrics) — https://github.com/live-image-tracking-tools/traccuracy
-- CHOTA metric — https://arxiv.org/abs/2408.11571
-- Trackastra — https://github.com/weigertlab/trackastra
-- StarDist-3D — https://github.com/stardist/stardist
+- Public notebooks worth reading: `inversion/cell-tracking-getting-started-w-nearest-neighbor`
+  (official starter, defines the format), `yusuketogashi/lb897-baseline`,
+  `yusuketogashi/clean-approach-lightweight-local-cv-no-hack` (clean CV setup),
+  `yaroslavkholmirzayev/biohub-cell-tracking-v4-unet-ilp-reproduction`,
+  `kirneo/metric-hack-last-call-update` (the exploit)

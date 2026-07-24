@@ -1,7 +1,13 @@
 """Local CTC / CHOTA metric harness.
 
-Phase 0's key deliverable: score predictions locally with the *same* metric as the
-leaderboard, so every downstream decision is metric-directed rather than proxy-directed.
+!! NOT THE COMPETITION METRIC !!
+Written before we had API access, on the assumption that scoring was standard CTC TRA over
+mask sequences. It is not: the submission is a point graph (see ctrack.submit.format) and the
+metric is custom, built from node recall / edge TP-FP-FN / division TP-FP-FN normalized by an
+*estimated* node count. See PLAN.md sections 1-2.
+
+Kept only as a reference implementation and because the traccuracy wiring may still be useful
+for sanity checks against public CTC datasets. Do not tune against it.
 
 Expects CTC layout:
     <gt_dir>/mask*.tif   + man_track.txt

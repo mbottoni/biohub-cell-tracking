@@ -7,6 +7,12 @@ microscopy, Zebrahub data).
 
 📋 **Strategy lives in [PLAN.md](PLAN.md).** Read it first.
 
+**$60,000 · deadline 2026-09-29 · kernels-only · 5 submissions/day**
+
+Submission is a **point graph** CSV (node centroids + parent→child edges forming a directed
+forest), not segmentation masks. Volumes are zarr v3, `(T, Z, Y, X)`, voxel size
+`[1.625, 0.40625, 0.40625]` µm. Ground truth ships as `.geff` graphs.
+
 ## Setup
 
 ```bash
@@ -14,8 +20,12 @@ uv sync                 # create .venv and install deps
 source .venv/bin/activate
 ```
 
-Kaggle credentials go in `~/.kaggle/kaggle.json` (kaggle.com/settings → API → Create New
-Token), mode `600`.
+Auth uses a **bearer token**, not the legacy `kaggle.json` — and it needs Kaggle CLI **≥2.x**
+(1.5.13 does not support it). Put it in a gitignored `.env` at the repo root:
+
+```bash
+echo 'export KAGGLE_API_TOKEN=KGAT_...' > .env && chmod 600 .env
+```
 
 ## Data
 
@@ -23,7 +33,7 @@ Token), mode `600`.
 make data               # download + unzip competition files into data/raw/
 ```
 
-`data/` is gitignored — nothing from it is ever committed.
+~8 GB+. `data/` and `.env` are gitignored — neither is ever committed.
 
 ## Layout
 
