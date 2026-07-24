@@ -11,9 +11,15 @@ One row per run. If it isn't here, it didn't happen. Config hash comes from the 
 
 | 3 | 07-24 | 3 | blob + **ILP** (dist) vs Hungarian | thr 0.3, cap 12µm | edge_J **0.660** vs 0.633 | — | 4 volumes; ILP wins 3/4, +0.027 aggregate, no learned affinity yet. |
 
-**Reference points:** public LB ~0.897, strong rule-based ~0.857. Blob baseline 0.644 is the
-floor. ILP linking (global, handles divisions/appearance) beats greedy Hungarian and is the
-new default linker — the win grows once learned edge affinities replace distance.
+| 4 | 07-24 | 3 | **UNet detector** + ILP, thr 0.5 | fold 0, base 16 | edge_J 0.521, **adj 0.441** | — | 3 held-out volumes. **98.7% peak recall** but massively over-detects (34k-60k nodes vs ~25k est), so the node-budget multiplier tanks adj below blob. |
+
+**Key finding (exp 4):** the learned detector has excellent recall but over-detects at low
+threshold, and the node-budget multiplier punishes it. This is exactly the metric lever from
+docs/metric.md — a *confident* detector wants a HIGH threshold (unlike blob, which loses real
+cells). Explains the public POINT_THRESHOLD=0.955. Threshold sweep in progress.
+
+**Reference points:** public LB ~0.897, strong rule-based ~0.857. Blob baseline 0.644. Learned
+detector recall is there; the work is converting it to score via threshold + node-count control.
 
 ## CV ↔ LB tracking
 

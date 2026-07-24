@@ -51,6 +51,7 @@ def main() -> None:
     ap.add_argument("--gt", required=True)
     ap.add_argument("--datasets", nargs="+", required=True)
     ap.add_argument("--threshold", type=float, default=0.5)
+    ap.add_argument("--sweep", type=float, nargs="+", help="sweep these thresholds (detect once)")
     ap.add_argument("--ilp", action="store_true", default=True)
     ap.add_argument("--hungarian", action="store_true", help="use Hungarian instead of ILP")
     args = ap.parse_args()
@@ -62,29 +63,37 @@ def main() -> None:
     model.load_state_dict(state["model"])
     print(f"loaded {args.ckpt}: base {state['base']}, train peak-recall {state['recall']:.3f}")
 
-    rows = []
+    from ctrack.detect.blob import rethreshold
+    from ctrack.link.ilp import link_ilp
+
+    thresholds = sorted(args.sweep or [args.threshold])
+    # detect once at the lowest threshold, then re-filter (heatmap peaks are threshold-independent)
+    base = {}
     for ds in args.datasets:
         vol = open_volume(Path(args.raw) / f"{ds}.zarr")
         gt = load_geff(Path(args.gt) / f"{ds}.geff")
-        det = detect_unet(model, vol, device, args.threshold)
-        nodes, h_edges = build_graph(det, SCALE, max_displacement_um=12)
-        if args.hungarian:
-            nodes, edges = close_gaps(nodes, h_edges, SCALE, max_total_um=12)
-        else:
-            from ctrack.link.ilp import link_ilp
-            edges = link_ilp(nodes, SCALE, max_disp_um=12, topk=3,
-                             appearance_weight=2.0, disappearance_weight=2.0)
-        m = per_sample_metrics(evaluate(gt.graph, Graph(nodes=nodes, edges=edges)),
-                               gt.estimated_number_of_nodes)
-        m["dataset"] = ds
-        rows.append(m)
-        print(f"  {ds:16s} nodes={len(nodes):6d} edges={len(edges):5d} "
-              f"edge_J={m['edge_jaccard']:.4f} adj={m['adj_edge_jaccard']:.4f} "
-              f"node_recall={m['node_recall']:.3f}")
+        base[ds] = (gt, detect_unet(model, vol, device, thresholds[0]))
+        print(f"  detected {ds}", file=sys.stderr)
 
-    s = summarise(rows)
-    print(f"\nSUMMARY  edge_J {s['edge_jaccard']:.4f}  adj {s['adj_edge_jaccard']:.4f}  "
-          f"score {s['score']:.4f}")
+    for thr in thresholds:
+        rows = []
+        for ds, (gt, det0) in base.items():
+            det = rethreshold(det0, thr)
+            nodes, h_edges = build_graph(det, SCALE, max_displacement_um=12)
+            if args.hungarian:
+                nodes, edges = close_gaps(nodes, h_edges, SCALE, max_total_um=12)
+            else:
+                edges = link_ilp(nodes, SCALE, max_disp_um=12, topk=3,
+                                 appearance_weight=2.0, disappearance_weight=2.0)
+            m = per_sample_metrics(evaluate(gt.graph, Graph(nodes=nodes, edges=edges)),
+                                   gt.estimated_number_of_nodes)
+            rows.append(m)
+        s = summarise(rows)
+        mean_nodes = np.mean([r["num_pred_nodes"] for r in rows])
+        mean_recall = np.mean([r["node_recall"] for r in rows])
+        print(f"thr {thr:.2f}  score {s['score']:.4f}  edge_J {s['edge_jaccard']:.4f}  "
+              f"adj {s['adj_edge_jaccard']:.4f}  node_recall {mean_recall:.3f}  "
+              f"mean_nodes {mean_nodes:.0f}")
 
 
 if __name__ == "__main__":
