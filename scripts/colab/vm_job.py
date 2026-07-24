@@ -79,28 +79,24 @@ def get_bytes(url, retries=10):
     raise RuntimeError(f"download failed after {retries}: {url} ({last})")
 
 
-# ---- deps ----
-log("== installing deps ==")
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "zarr", "scipy"], check=False)
-
-# ---- ctrack package ----
-log("== fetching ctrack ==")
-ctrack_zip = get_bytes(
-    f"https://www.kaggle.com/api/v1/datasets/download/maruanbottoni/ctrack-src"
-)
-(WORK / "ctrack_src.zip").write_bytes(ctrack_zip)
 import shutil
 import zipfile
 
+# ---- deps + Kaggle CLI (used for both private-dataset and competition downloads) ----
+log("== installing deps ==")
+os.environ["KAGGLE_API_TOKEN"] = TOK
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "zarr", "scipy", "kaggle"], check=False)
+
+# ---- ctrack package (via the Kaggle CLI — the raw datasets API 403s on private datasets) ----
+log("== fetching ctrack ==")
+csrc = WORK / "ctrack_src"
+subprocess.run(["kaggle", "datasets", "download", "-d", "maruanbottoni/ctrack-src",
+                "-p", str(csrc), "--unzip"], env=os.environ, check=True)
 pkg_root = WORK / "pkg"
 if pkg_root.exists():
     shutil.rmtree(pkg_root)
 (pkg_root / "ctrack").mkdir(parents=True)
-with zipfile.ZipFile(WORK / "ctrack_src.zip") as zf:
-    zf.extractall(WORK / "_ctrack_raw")
-# the dataset holds the package contents at the root -> materialise pkg/ctrack/
-raw = WORK / "_ctrack_raw"
-src = next((p.parent for p in raw.glob("**/detect/unet3d.py")), raw)
+src = next((p.parent for p in csrc.glob("**/detect/unet3d.py")), csrc)
 for item in src.iterdir():
     dst = pkg_root / "ctrack" / item.name
     (shutil.copytree if item.is_dir() else shutil.copy)(item, dst)
@@ -110,58 +106,62 @@ import ctrack  # noqa: F401
 
 log("ctrack ready")
 
-# ---- data: one zip via the Kaggle CLI (a single request; per-file fan-out 429s badly) ----
-log("== downloading competition zip ==")
-os.environ["KAGGLE_API_TOKEN"] = TOK
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "kaggle"], check=False)
+# ---- data: a persistent compact cache on Google Drive (~5 GB), built once ----
+# The detector only needs annotated isotropic frames + centres. We cache those to Drive so
+# repeated training rounds skip the 87 GB download entirely. Drive is mounted by the
+# orchestrator (`colab drivemount`) before this runs; fall back to local if it isn't.
+from ctrack.data.geff import find_geff_stores
+from ctrack.detect.cache import cached_all_ids, ensure_cache
 
-data_root = WORK / "data"
-data_root.mkdir(parents=True, exist_ok=True)
-dl_dir = WORK / "dl"
-dl_dir.mkdir(parents=True, exist_ok=True)
+drive = Path("/content/drive/MyDrive")
+cache_dir = (drive / "biohub_cache") if drive.exists() else (WORK / "biohub_cache")
+cache_dir.mkdir(parents=True, exist_ok=True)
+log(f"== cache dir: {cache_dir} ==")
 
-t0 = time.time()
-r = subprocess.run(["kaggle", "competitions", "download", "-c", COMP, "-p", str(dl_dir)],
-                   env=os.environ)
-if r.returncode != 0:
-    raise RuntimeError("kaggle competitions download failed")
-zips = list(dl_dir.glob("*.zip"))
-log(f"downloaded zip in {time.time()-t0:.0f}s: {[z.name for z in zips]}")
+all_ids = cached_all_ids(cache_dir)
+n_cached = len(list(cache_dir.glob("*.npz")))
+need_build = all_ids is None or n_cached < min(N_VOLUMES, 199)
 
-# Extract train/ (zarr + geff). Selective + heartbeated so the CLI output stream never stalls.
-log("== extracting ==")
-t0 = time.time()
-want_stores = None
-if N_VOLUMES and N_VOLUMES < 199:
+if need_build:
+    log(f"== cache incomplete ({n_cached} npz) — downloading zip to build ==")
+    dl_dir = WORK / "dl"
+    dl_dir.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
+    if subprocess.run(["kaggle", "competitions", "download", "-c", COMP, "-p", str(dl_dir)],
+                      env=os.environ).returncode != 0:
+        raise RuntimeError("kaggle competitions download failed")
+    zips = list(dl_dir.glob("*.zip"))
+    log(f"downloaded zip in {time.time()-t0:.0f}s")
+
+    log("== extracting train/ ==")
+    t0 = time.time()
+    data_root = WORK / "data"
     with zipfile.ZipFile(zips[0]) as zf:
-        names = zf.namelist()
-    stores = sorted({m.group(1) for n in names
-                     if (m := re.match(r"train/([^/]+)\.(zarr|geff)/", n))})
-    want_stores = set(stores[:N_VOLUMES])
-    log(f"  keeping {len(want_stores)} of {len(stores)} volumes")
+        members = [n for n in zf.namelist() if n.startswith("train/")]
+        for i, n in enumerate(members):
+            zf.extract(n, data_root)
+            if (i + 1) % 3000 == 0:
+                log(f"  extracted {i+1}/{len(members)}  {time.time()-t0:.0f}s")
+    for z in zips:
+        z.unlink()
+    log(f"extracted in {time.time()-t0:.0f}s; building cache")
 
-with zipfile.ZipFile(zips[0]) as zf:
-    members = [n for n in zf.namelist() if n.startswith("train/")]
-    if want_stores is not None:
-        members = [n for n in members
-                   if (m := re.match(r"train/([^/]+)\.", n)) and m.group(1) in want_stores]
-    for i, n in enumerate(members):
-        zf.extract(n, data_root)
-        if (i + 1) % 2000 == 0:
-            log(f"  extracted {i+1}/{len(members)}  {time.time()-t0:.0f}s")
-log(f"extracted {len(members)} files in {time.time()-t0:.0f}s")
-for z in zips:
-    z.unlink()  # reclaim disk before training
+    raw = data_root / "train"
+    ids = sorted(p.name.replace(".geff", "") for p in find_geff_stores(raw))
+    ensure_cache(ids[:N_VOLUMES] if N_VOLUMES < 199 else ids, raw, raw, cache_dir,
+                 all_ids=ids, log=log)
+    log(f"cache built: {len(list(cache_dir.glob('*.npz')))} volumes on {cache_dir}")
+    shutil.rmtree(data_root, ignore_errors=True)  # reclaim disk; cache is all we need now
+else:
+    log(f"== cache present ({n_cached} npz) — skipping download ==")
 
-# ---- train ----
-# The training loop lives in the ctrack package (downloaded above), so vm_job.py is fully
-# self-contained for `colab exec -f` / `colab run` — no sibling files needed.
+# ---- train (from the cache) ----
 log("== training ==")
 out_dir = WORK / "out"
 from ctrack.detect.train import train_fold
 
 train_fold(
-    data_root / "train", data_root / "train",
+    None, None, cache_dir=cache_dir,
     fold=ARGS.fold, epochs=ARGS.epochs, batch=ARGS.batch, base=ARGS.base,
     train_stride=int(os.environ.get("TRAIN_STRIDE", 2)),
     out_dir=out_dir,

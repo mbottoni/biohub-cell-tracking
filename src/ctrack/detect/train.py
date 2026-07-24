@@ -58,12 +58,17 @@ def train_fold(
     limit: int | None = None,
     only_downloaded: bool = True,
     num_workers: int = 4,
+    cache_dir=None,
 ) -> float:
-    """Train one CV fold. Returns best held-out peak-recall; saves best weights to out_dir."""
+    """Train one CV fold. Returns best held-out peak-recall; saves best weights to out_dir.
+
+    If `cache_dir` is given, frames are read from the compact .npz cache (ctrack.detect.cache)
+    instead of zarr — the persistent-across-runs path. `only_downloaded` then filters to the
+    datasets whose cache exists rather than whose zarr exists.
+    """
     import torch
     from torch.utils.data import DataLoader
 
-    from ctrack.detect.dataset import DetectionFrames
     from ctrack.detect.unet3d import UNet3D, masked_bce_loss
 
     raw_root, gt_root, out_dir = Path(raw_root), Path(gt_root), Path(out_dir)
@@ -73,20 +78,44 @@ def train_fold(
     name = torch.cuda.get_device_name(0) if is_cuda else str(device)
     print(f"device: {device} ({name})", flush=True)
 
-    all_ds = sorted(p.name.replace(".geff", "") for p in find_geff_stores(gt_root))
-    if only_downloaded:
-        have = {p.name.replace(".zarr", "") for p in raw_root.glob("*.zarr")}
-        all_ds = [d for d in all_ds if d in have]
+    # The CV split runs over the full id universe (deterministic), then filters to what's
+    # actually available — so folds are identical whether reading zarr or the cache, and
+    # regardless of which volumes are present this run.
+    if cache_dir is not None:
+        from ctrack.detect.cache import cached_all_ids
+
+        all_ds = cached_all_ids(cache_dir) or sorted(
+            p.name.replace(".npz", "") for p in Path(cache_dir).glob("*.npz"))
+    else:
+        all_ds = sorted(p.name.replace(".geff", "") for p in find_geff_stores(gt_root))
+
+    # Split over the FULL universe (deterministic), THEN filter to available volumes, so the
+    # fold assignment never shifts with what's present this run.
     remaining, golden = hold_out_golden(all_ds, n=8, seed=0)
     split = kfold(remaining, k=k, seed=0)[fold]
-    tr, va = split.train, split.val
+    tr, va = list(split.train), list(split.val)
+    if only_downloaded:
+        if cache_dir is not None:
+            have = {p.name.replace(".npz", "") for p in Path(cache_dir).glob("*.npz")}
+        else:
+            have = {p.name.replace(".zarr", "") for p in raw_root.glob("*.zarr")}
+        tr = [d for d in tr if d in have]
+        va = [d for d in va if d in have]
     if limit:
         tr, va = tr[:limit], va[:limit]
     print(f"fold {fold}: {len(tr)} train, {len(va)} val datasets "
           f"(golden {len(golden)} held out)", flush=True)
 
-    train = DetectionFrames(tr, raw_root, gt_root, augment=True, frame_stride=train_stride)
-    val = DetectionFrames(va, raw_root, gt_root, augment=False, frame_stride=val_stride)
+    if cache_dir is not None:
+        from ctrack.detect.cache import CachedDetectionFrames
+
+        train = CachedDetectionFrames(tr, cache_dir, augment=True, frame_stride=train_stride)
+        val = CachedDetectionFrames(va, cache_dir, augment=False, frame_stride=val_stride)
+    else:
+        from ctrack.detect.dataset import DetectionFrames
+
+        train = DetectionFrames(tr, raw_root, gt_root, augment=True, frame_stride=train_stride)
+        val = DetectionFrames(va, raw_root, gt_root, augment=False, frame_stride=val_stride)
     print(f"frames: {len(train)} train, {len(val)} val", flush=True)
     dl = DataLoader(train, batch_size=batch, shuffle=True, num_workers=num_workers,
                     drop_last=True, pin_memory=is_cuda)
