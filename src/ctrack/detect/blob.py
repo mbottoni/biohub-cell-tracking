@@ -61,6 +61,22 @@ def detect_frame(
     return coords, scores
 
 
+def rethreshold(
+    detections: dict[int, tuple[np.ndarray, np.ndarray]], threshold: float
+) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+    """Filter an existing detection set to a higher threshold.
+
+    NMS peaks are threshold-independent -- raising the threshold only removes peaks, never
+    moves or adds them. So a sweep detects once at the lowest threshold and re-filters, instead
+    of re-reading and re-filtering every frame per threshold. On an N-point sweep that is an
+    N-fold saving, and volume I/O dominates here.
+    """
+    return {
+        t: (coords[scores >= threshold], scores[scores >= threshold])
+        for t, (coords, scores) in detections.items()
+    }
+
+
 def detect_volume(
     volume,
     *,

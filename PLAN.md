@@ -249,7 +249,12 @@ Then, in order — these four runs settle everything the plan currently assumes:
 
 ### Phase 2 — Metric-directed tuning (weeks 3–4)
 - [ ] Offline sweep of `POINT_THRESHOLD`, edge thresholds, ILP weights against the real metric
-- [ ] Expect the single largest cheap gain here
+- [ ] Sweep the **linking cap** — 10 µm drops real edges in ~40% of volumes (docs/data.md)
+
+> **Revised down.** A first sweep (exp #1) showed the node-budget multiplier is a small lever
+> (~±7%), swamped by edge Jaccard. It is only harvestable once detection precision is high, so
+> the sequence is: maximize edge quality first (Phase 3), *then* tune the threshold at the
+> margin. This is no longer the "single largest cheap gain" — that's the learned detector.
 
 ### Phase 3 — Model improvements (weeks 4–7)
 - [ ] Temporal window > 2 frames (highest-value architectural change)

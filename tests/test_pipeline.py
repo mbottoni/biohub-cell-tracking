@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from ctrack.detect.blob import detect_frame
+from ctrack.detect.blob import detect_frame, rethreshold
 from ctrack.link.hungarian import build_graph, close_gaps, link_frames
 
 ISO = np.array([1.625, 1.625, 1.625])
@@ -40,6 +40,20 @@ def test_threshold_controls_the_node_budget() -> None:
     counts = [len(detect_frame(frame, ISO, threshold=th)[0]) for th in (0.1, 0.5, 0.95)]
     assert counts == sorted(counts, reverse=True)
     assert counts[0] > counts[-1]
+
+
+def test_rethreshold_equals_a_fresh_higher_threshold_detection() -> None:
+    """The sweep optimization: re-filtering a low-threshold detection must equal detecting
+    fresh at the higher threshold. NMS peaks are threshold-independent, so this must hold
+    exactly -- if it ever doesn't, the sweep results are invalid."""
+    frame = _blobs((48, 48, 48), [(10, 10, 10), (10, 10, 30), (30, 40, 20)])
+    frame[30, 40, 20] *= 0.5
+
+    low = {0: detect_frame(frame, ISO, threshold=0.1)}
+    refiltered = rethreshold(low, 0.6)[0]
+    fresh = detect_frame(frame, ISO, threshold=0.6)
+
+    np.testing.assert_array_equal(np.sort(refiltered[0], axis=0), np.sort(fresh[0], axis=0))
 
 
 def test_link_frames_respects_displacement_cap() -> None:

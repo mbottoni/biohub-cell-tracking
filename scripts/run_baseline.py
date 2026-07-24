@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from ctrack.data.geff import load_geff  # noqa: E402
 from ctrack.data.volume import find_volumes, open_volume  # noqa: E402
-from ctrack.detect.blob import detect_volume  # noqa: E402
+from ctrack.detect.blob import detect_volume, rethreshold  # noqa: E402
 from ctrack.eval.biohub import (  # noqa: E402
     SCALE,
     Graph,
@@ -45,8 +45,7 @@ from ctrack.link.hungarian import build_graph, close_gaps  # noqa: E402
 from ctrack.submit.format import edge_row, node_row, write  # noqa: E402
 
 
-def track_one(volume, threshold: float, max_disp: float, gaps: bool):
-    det = detect_volume(volume, threshold=threshold)
+def track_one(det, max_disp: float, gaps: bool):
     nodes, edges = build_graph(det, SCALE, max_displacement_um=max_disp)
     if gaps:
         nodes, edges = close_gaps(nodes, edges, SCALE, max_total_um=max_disp)
@@ -64,7 +63,9 @@ def score_one(nodes, edges, geff_path: Path) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", required=True, help="data root containing train/ and test/")
+    ap.add_argument("--gt-root", help="directory of .geff stores, if not alongside the .zarr")
     ap.add_argument("--split", default="train", choices=["train", "test"])
+    ap.add_argument("--datasets", nargs="*", help="explicit dataset ids to use")
     ap.add_argument("--limit", type=int, help="only process the first N volumes")
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--sweep", type=float, nargs="+", help="try these thresholds and compare")
@@ -76,24 +77,38 @@ def main() -> None:
     vols = find_volumes(Path(args.root) / args.split)
     if not vols:
         sys.exit(f"no .zarr stores under {Path(args.root) / args.split}")
+    if args.datasets:
+        wanted = set(args.datasets)
+        vols = [v for v in vols if v.name.replace(".zarr", "") in wanted]
     if args.limit:
         vols = vols[: args.limit]
     print(f"{len(vols)} volumes from {args.split}/\n")
 
-    thresholds = args.sweep or [args.threshold]
+    thresholds = sorted(args.sweep or [args.threshold])
     results = []
+
+    # Detect once at the lowest threshold; higher ones are a cheap re-filter. Volume I/O
+    # dominates, so this turns an N-point sweep into one pass over the data.
+    print(f"detecting at threshold {thresholds[0]:.2f} ...", file=sys.stderr)
+    base: dict[str, tuple] = {}
+    for path in vols:
+        vol = open_volume(path)
+        base[vol.dataset] = (path, detect_volume(vol, threshold=thresholds[0]))
+        print(f"  {vol.dataset}: {sum(len(c) for c, _ in base[vol.dataset][1].values())} peaks",
+              file=sys.stderr)
 
     for threshold in thresholds:
         rows, all_nodes = [], []
-        for path in vols:
-            vol = open_volume(path)
-            nodes, edges = track_one(vol, threshold, args.max_disp, not args.no_gaps)
+        for dataset, (path, det0) in base.items():
+            det = rethreshold(det0, threshold)
+            nodes, edges = track_one(det, args.max_disp, not args.no_gaps)
 
-            geff = path.parent / f"{vol.dataset}.geff"
+            gt_dir = Path(args.gt_root) if args.gt_root else path.parent
+            geff = gt_dir / f"{dataset}.geff"
             if geff.exists():
                 rows.append(score_one(nodes, edges, geff))
-            all_nodes.append((vol.dataset, nodes, edges))
-            print(f"  [{threshold:.2f}] {vol.dataset}: {len(nodes)} nodes, {len(edges)} edges",
+            all_nodes.append((dataset, nodes, edges))
+            print(f"  [{threshold:.2f}] {dataset}: {len(nodes)} nodes, {len(edges)} edges",
                   file=sys.stderr)
 
         if rows:

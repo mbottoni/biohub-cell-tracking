@@ -90,12 +90,31 @@ adj_edge_jaccard = max(0.0, edge_jaccard * (1 - ADJUSTMENT_ALPHA * total_node_ra
 
 There is a genuine optimum here: detect **selectively** — few but high-precision nodes — and
 you get a free multiplier, so long as you still detect the specific cells that happen to be
-annotated. This very likely explains the public `POINT_THRESHOLD = 0.955`, which is startlingly
-high for a detection task and otherwise looks like a mistake.
+annotated.
 
-**This tradeoff curve is directly optimizable offline** and is our Phase 2 priority. It is not
-the published hub hack — it's a separate, quantified lever the field appears to be tuning only
-by blind LB probing at 5 submissions/day.
+> **MEASURED (2026-07-24), and it right-sizes this lever.** A threshold sweep of the classical
+> blob baseline on four `44b6` volumes (`/tmp/sweep.log`, via `run_baseline.py --sweep`) puts
+> the best score at the **lowest** threshold (max detection), falling monotonically as the
+> threshold rises:
+>
+> | threshold | score | edge_J | node_recall | mean_node_ratio |
+> |---|---|---|---|---|
+> | 0.1 | **0.632** | 0.676 | 0.95 | +0.11 |
+> | 0.3 | 0.583 | 0.631 | 0.93 | −0.08 |
+> | 0.5 | 0.537 | 0.395 | 0.74 | −0.40 |
+> | 0.7 | 0.348 | 0.165 | 0.46 | −0.73 |
+>
+> So on this detector the optimum is at peak recall, **not** below it — my earlier headline was
+> wrong. The reason: the multiplier tops out around ×1.07 even at half the nodes (α=0.1), while
+> edge Jaccard collapses 4× as thresholding drops real edges. The node-budget term is an order
+> of magnitude weaker than the edge term.
+>
+> The lever is still real, but **only reachable with a high-precision detector** — one whose
+> confidence ranking removes false positives, not real cells. A brightness-thresholded blob
+> detector sheds dim *real* nuclei too, so it loses edges faster than it gains multiplier. This
+> is almost certainly why the public `POINT_THRESHOLD = 0.955` works for a *learned* detector
+> and max-recall wins for this one. **Order of operations: get edge Jaccard high first, then
+> harvest the small node-budget bonus at the margin.** Not the other way round.
 
 ## The division term is worth 0.1, and it does engage
 
