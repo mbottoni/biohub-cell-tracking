@@ -66,13 +66,17 @@ def api(url):
     return json.loads(urllib.request.urlopen(urllib.request.Request(url, headers=HDR), timeout=120).read())
 
 
-def get_bytes(url, retries=6):
+def get_bytes(url, retries=10):
+    last = None
     for a in range(retries):
         try:
             return urllib.request.urlopen(urllib.request.Request(url, headers=HDR), timeout=300).read()
-        except Exception:
-            time.sleep(5 * (a + 1))
-    raise RuntimeError("download failed: " + url)
+        except Exception as e:  # noqa: BLE001
+            last = e
+            # 429s are common when fanning out thousands of small files -> back off hard
+            code = getattr(e, "code", None)
+            time.sleep(min(60, (10 if code == 429 else 3) * (a + 1)))
+    raise RuntimeError(f"download failed after {retries}: {url} ({last})")
 
 
 # ---- deps ----
@@ -139,20 +143,38 @@ data_root = WORK / "data"
 
 
 def dl(name):
+    """Download one file; return name on failure (so the caller can retry) else None."""
     dest = data_root / name
-    if dest.exists():
-        return
+    if dest.exists() and dest.stat().st_size > 0:
+        return None
     dest.parent.mkdir(parents=True, exist_ok=True)
     url = f"https://www.kaggle.com/api/v1/competitions/data/download/{COMP}/" + urllib.parse.quote(name)
-    dest.write_bytes(get_bytes(url))
+    try:
+        dest.write_bytes(get_bytes(url))
+        return None
+    except Exception:  # noqa: BLE001
+        return name
 
 
 t0 = time.time()
-log(f"  downloading {len(want)} files ...")
-with ThreadPoolExecutor(max_workers=16) as ex:
-    for i, _ in enumerate(ex.map(dl, want)):
-        if (i + 1) % 100 == 0:  # frequent heartbeat so the CLI output stream never stalls
-            log(f"  {i+1}/{len(want)} files  {time.time()-t0:.0f}s")
+log(f"  downloading {len(want)} files (8 workers) ...")
+# Modest concurrency: thousands of tiny geff/chunk files will 429 a heavy fan-out.
+pending = list(want)
+for attempt in range(4):
+    failed = []
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for i, res in enumerate(ex.map(dl, pending)):
+            if res:
+                failed.append(res)
+            if (i + 1) % 200 == 0:
+                log(f"  {i+1}/{len(pending)} files  {time.time()-t0:.0f}s")
+    if not failed:
+        break
+    log(f"  retry pass {attempt+1}: {len(failed)} files failed, backing off")
+    time.sleep(30)
+    pending = failed
+else:
+    raise RuntimeError(f"{len(pending)} files still failing after retries, e.g. {pending[:3]}")
 log(f"downloaded {len(chosen)} volumes in {time.time()-t0:.0f}s")
 
 # ---- train ----

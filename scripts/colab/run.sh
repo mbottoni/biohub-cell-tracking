@@ -19,6 +19,7 @@ set -euo pipefail
 GPU="${1:-A100}"
 FOLD="${2:-0}"
 EPOCHS="${3:-25}"
+N_VOLUMES="${4:-100}"   # of 199; fewer = faster/safer download (each store ~123 tiny files)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # shellcheck disable=SC1091
@@ -35,9 +36,9 @@ fi
 # output timeout is short and a silent phase trips it.
 TIMEOUT="${TIMEOUT:-14400}"
 
-echo ">> colab run on $GPU: fold $FOLD, $EPOCHS epochs (timeout ${TIMEOUT}s)"
+echo ">> colab run on $GPU: fold $FOLD, $EPOCHS epochs, $N_VOLUMES volumes (timeout ${TIMEOUT}s)"
 colab run --gpu "$GPU" --timeout "$TIMEOUT" "$ROOT/scripts/colab/vm_job.py" \
-    "$KAGGLE_API_TOKEN" --fold "$FOLD" --epochs "$EPOCHS"
+    "$KAGGLE_API_TOKEN" --fold "$FOLD" --epochs "$EPOCHS" --n-volumes "$N_VOLUMES"
 
 echo ">> done — weights on Kaggle: maruanbottoni/biohub-detector-weights"
 echo "   attach it to kernel_infer and submit."
