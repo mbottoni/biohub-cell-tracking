@@ -136,9 +136,27 @@ def detect(model, vol, device):
     return out
 
 
+def _safe_device(model):
+    """Prefer CUDA, but Kaggle sometimes assigns a P100 (sm_60) that the image's torch was not
+    built for ('no kernel image available'). Test a tiny forward and fall back to CPU. Inference
+    is only 4 volumes, so CPU is acceptable."""
+    if model is None or not torch.cuda.is_available():
+        return torch.device("cpu")
+    try:
+        m = model.to("cuda")
+        with torch.no_grad():
+            m(torch.zeros(1, 1, 16, 16, 16, device="cuda"))
+        torch.cuda.synchronize()
+        return torch.device("cuda")
+    except Exception as e:  # noqa: BLE001
+        print("CUDA unusable, falling back to CPU:", str(e)[:120])
+        return torch.device("cpu")
+
+
 def main():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = load_detector()
+    device = _safe_device(model)
+    print("device:", device)
     if model is not None:
         model.to(device)
 
