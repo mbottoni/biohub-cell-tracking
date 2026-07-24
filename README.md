@@ -39,17 +39,36 @@ make data               # download + unzip competition files into data/raw/
 
 ```
 src/ctrack/
-  data/       loading, preprocessing, registration, CV splits
-  detect/     3D nucleus detection / segmentation
-  link/       frame-to-frame linking, global optimization, divisions, gap closing
-  eval/       local CTC / CHOTA metric harness  ← build this first
-  submit/     submission writers
-configs/      experiment configs
-scripts/      one-off CLI entry points
-notebooks/    EDA (stripped of outputs before commit)
-docs/         research notes, experiment log
-tests/
+  eval/biohub.py       the competition metric, reimplemented in numpy
+  data/geff.py         ground-truth graph reader
+  data/volume.py       (T,Z,Y,X) zarr reader, normalization, isotropic resampling
+  data/splits.py       CV folds + golden holdout (see leakage notes in the module)
+  detect/blob.py       classical nucleus detection (baseline)
+  link/hungarian.py    frame-to-frame assignment + gap closing
+  submit/format.py     submission schema + directed-forest validator
+
+scripts/
+  fetch_data.sh          full download (87.6 GB)
+  fetch_subset.py        per-dataset download
+  analyze_gt.py          GT characterisation across all volumes
+  check_crop_overlap.py  do same-embryo crops overlap? (decides CV validity)
+  run_baseline.py        detect → link → score / submit, with --sweep
+
+docs/
+  metric.md      the scoring formula, decoded  ← read this first
+  data.md        verified dataset facts
+  experiments.md experiment log
 ```
+
+## Key facts
+
+- Volumes are `(100, 64, 256, 256)` uint16 — 100 frames of a 104 µm cube. Subsampled `[1,4,4]`
+  the whole volume is **64³ isotropic**, so inference is one forward pass per frame, no tiling.
+- Ground truth is **~0.2% dense**: a couple of hand-traced trajectories per volume against
+  ~25k real cells. The metric only sees edges touching annotated cells.
+- `score = max(0, edge_jaccard · (1 − 0.1·(N_pred−N_total)/N_total)) + 0.1 · division_jaccard`,
+  and that multiplier is **unclamped above** — under-detecting inflates the score. See
+  [docs/metric.md](docs/metric.md).
 
 ## Experiment log
 

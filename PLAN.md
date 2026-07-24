@@ -223,11 +223,24 @@ Ranked by expected value. All of these attack the *legitimate* metric.
 ### Phase 0 — Recon (this week) ← *in progress*
 - [x] Kaggle API access (bearer token; CLI ≥2.x required, 1.5.13 can't do it)
 - [x] Confirm prize / deadline / kernels-only / submission format / voxel geometry
-- [ ] Finish download, unpack, characterize: how many datasets, T per dataset, volume shape,
-      node counts, division rate, annotation density (how partial *is* the GT?)
-- [ ] **Extract the exact metric formula** and build `ctrack.eval` around it
-- [ ] Establish the CV split and the golden holdout
-- [ ] Reproduce the public baseline end-to-end; confirm our local score ≈ its LB
+- [x] Volume shape / voxel geometry / store layout (docs/data.md)
+- [x] **Extract the exact metric formula** — `ctrack.eval.biohub`, 9 tests (docs/metric.md)
+- [x] GT reader (`ctrack.data.geff`), volume reader (`ctrack.data.volume`)
+- [x] Submission writer + directed-forest validator (`ctrack.submit.format`)
+- [x] CV split + golden holdout (`ctrack.data.splits`), with leakage caveats encoded
+- [x] Baseline detect → link → gap-close pipeline (`scripts/run_baseline.py`)
+- [ ] **Download finishes** (87.6 GB → `/Volumes/extSSD/kaggle/biohub/raw`)
+
+Then, in order — these four runs settle everything the plan currently assumes:
+
+- [ ] `scripts/analyze_gt.py` over all 199 volumes → **division rate** (n=1 so far, and it was
+      zero), annotation density spread, and whether any GT edge skips a frame
+- [ ] `scripts/check_crop_overlap.py` → **do same-embryo crops overlap?** Decides whether we
+      get 2 usable CV folds or 5
+- [ ] `scripts/run_baseline.py --sweep` → **does the metric optimum sit below peak recall?**
+      Confirms or refutes the central claim in docs/metric.md empirically
+- [ ] Submit once → **verify our metric matches the real LB.** Until this lands, every local
+      number is provisional
 
 ### Phase 1 — Baseline parity (week 2)
 - [ ] UNet3D detection + transformer edges + ILP running in our own repo, ~0.89 clean
