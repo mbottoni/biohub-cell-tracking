@@ -110,72 +110,48 @@ import ctrack  # noqa: F401
 
 log("ctrack ready")
 
-# ---- data ----
-log(f"== downloading {N_VOLUMES} volumes ==")
-files, pt, page = [], None, 0
-while True:
-    u = f"https://www.kaggle.com/api/v1/competitions/data/list/{COMP}?pageSize=200"
-    if pt:
-        u += "&pageToken=" + urllib.parse.quote(pt)
-    for a in range(6):
-        try:
-            d = api(u)
-            break
-        except Exception:
-            time.sleep(5 * (a + 1))
-    files += d.get("files", [])
-    pt = d.get("nextPageTokenNullable")
-    page += 1
-    if page % 10 == 0:
-        log(f"  listing... page {page}, {len(files)} files")
-    if not pt or not d.get("files"):
-        break
-    time.sleep(1)
+# ---- data: one zip via the Kaggle CLI (a single request; per-file fan-out 429s badly) ----
+log("== downloading competition zip ==")
+os.environ["KAGGLE_API_TOKEN"] = TOK
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "kaggle"], check=False)
 
-stores = collections.defaultdict(list)
-for f in files:
-    m = re.match(r"train/([^/]+)\.(zarr|geff)/", f["name"])
-    if m:
-        stores[m.group(1)].append(f["name"])
-chosen = sorted(stores)[:N_VOLUMES]
-want = sorted({n for s in chosen for n in stores[s]})
 data_root = WORK / "data"
-
-
-def dl(name):
-    """Download one file; return name on failure (so the caller can retry) else None."""
-    dest = data_root / name
-    if dest.exists() and dest.stat().st_size > 0:
-        return None
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    url = f"https://www.kaggle.com/api/v1/competitions/data/download/{COMP}/" + urllib.parse.quote(name)
-    try:
-        dest.write_bytes(get_bytes(url))
-        return None
-    except Exception:  # noqa: BLE001
-        return name
-
+data_root.mkdir(parents=True, exist_ok=True)
+dl_dir = WORK / "dl"
+dl_dir.mkdir(parents=True, exist_ok=True)
 
 t0 = time.time()
-log(f"  downloading {len(want)} files (8 workers) ...")
-# Modest concurrency: thousands of tiny geff/chunk files will 429 a heavy fan-out.
-pending = list(want)
-for attempt in range(4):
-    failed = []
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        for i, res in enumerate(ex.map(dl, pending)):
-            if res:
-                failed.append(res)
-            if (i + 1) % 200 == 0:
-                log(f"  {i+1}/{len(pending)} files  {time.time()-t0:.0f}s")
-    if not failed:
-        break
-    log(f"  retry pass {attempt+1}: {len(failed)} files failed, backing off")
-    time.sleep(30)
-    pending = failed
-else:
-    raise RuntimeError(f"{len(pending)} files still failing after retries, e.g. {pending[:3]}")
-log(f"downloaded {len(chosen)} volumes in {time.time()-t0:.0f}s")
+r = subprocess.run(["kaggle", "competitions", "download", "-c", COMP, "-p", str(dl_dir)],
+                   env=os.environ)
+if r.returncode != 0:
+    raise RuntimeError("kaggle competitions download failed")
+zips = list(dl_dir.glob("*.zip"))
+log(f"downloaded zip in {time.time()-t0:.0f}s: {[z.name for z in zips]}")
+
+# Extract train/ (zarr + geff). Selective + heartbeated so the CLI output stream never stalls.
+log("== extracting ==")
+t0 = time.time()
+want_stores = None
+if N_VOLUMES and N_VOLUMES < 199:
+    with zipfile.ZipFile(zips[0]) as zf:
+        names = zf.namelist()
+    stores = sorted({m.group(1) for n in names
+                     if (m := re.match(r"train/([^/]+)\.(zarr|geff)/", n))})
+    want_stores = set(stores[:N_VOLUMES])
+    log(f"  keeping {len(want_stores)} of {len(stores)} volumes")
+
+with zipfile.ZipFile(zips[0]) as zf:
+    members = [n for n in zf.namelist() if n.startswith("train/")]
+    if want_stores is not None:
+        members = [n for n in members
+                   if (m := re.match(r"train/([^/]+)\.", n)) and m.group(1) in want_stores]
+    for i, n in enumerate(members):
+        zf.extract(n, data_root)
+        if (i + 1) % 2000 == 0:
+            log(f"  extracted {i+1}/{len(members)}  {time.time()-t0:.0f}s")
+log(f"extracted {len(members)} files in {time.time()-t0:.0f}s")
+for z in zips:
+    z.unlink()  # reclaim disk before training
 
 # ---- train ----
 # The training loop lives in the ctrack package (downloaded above), so vm_job.py is fully
