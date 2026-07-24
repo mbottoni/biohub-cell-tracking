@@ -41,3 +41,6 @@ venv/
 
 # large cached listing is fine to keep, raw data is not
 !/data/filelist.json
+
+# Kaggle kernel push writes this
+kernel/kernel-metadata.json.bak
