@@ -1,6 +1,7 @@
 # Strategy & Findings — Biohub Cell Tracking (living doc)
 
-**Updated:** 2026-07-25. Supersedes the strategic sections of `PLAN.md` where they conflict.
+**Updated:** 2026-07-25 (v2 — two-seeds scored 0.912; pivot to ensembling). Supersedes the
+strategic sections of `PLAN.md` where they conflict.
 Goal: **surpass public LB 0.932** on the custom tracking metric ($60k, deadline 2026-09-29,
 kernels-only). See also `docs/metric.md`, `docs/data.md`, `docs/detector.md`, `docs/experiments.md`.
 
@@ -10,14 +11,25 @@ kernels-only). See also `docs/metric.md`, `docs/data.md`, `docs/detector.md`, `d
 
 | Submission | LB (public) | Notes |
 |---|---|---|
-| E005 repro (detector+edge+ILP+searched divisions) | **0.888** | our best CONFIRMED LB |
-| two-seeds ensemble + DeepCenter | pending | not yet scored |
+| **two-seeds ensemble + DeepCenter** | **0.912** | **our best CONFIRMED LB** (genuine, not exploit) |
+| unet_transformer repro (sdeogade/pilkwang fork) | pending | expected ~0.94; scoring |
+| E005 repro (detector+edge+ILP+searched divisions) | 0.888 | |
 | Baseline blob + Hungarian | 0.601 | local 0.644 → confirms **~0.04 local>LB offset** |
-| **Owned pipeline (greedy+multi-hyp), golden-8 local** | **0.489** (~0.45 LB proj.) | far below the above |
+| Owned pipeline (greedy+multi-hyp), golden-8 local | 0.489 (~0.45 LB proj.) | our measurement lab, not competitive |
 
-**Reality check:** our from-scratch owned pipeline (~0.45 LB projected) is roughly **half** the
-score of what we've already submitted (E005 0.888) and the 0.932 target. Incremental tuning will
-not close that gap. → **strategy pivot** (§5).
+**Where we stand:** best confirmed **0.912**, target **0.932** — gap **~0.02**, closable with
+genuine improvements. Our from-scratch owned pipeline (~0.45) is not competitive on its own; it is
+the clean **measurement lab** (§3). → **strategy pivot** (§5): build on the strong public pipelines.
+
+### ⚠ Public LB is partly gamed — target the PRIVATE board
+A public solution (xiaoleilian mix-divaug) ships a **division `metric exploit`**: it appends
+fabricated out-of-volume nodes (t=−1000, coords −10000) forming fake division forks to inflate
+`division_jaccard` (claimed +0.08). Its own author excludes it from **final-2** (the private-scored
+submissions that award the prize). Implications:
+- Some public ~0.94 scores are inflated by such exploits → don't treat public numbers as the real bar.
+- **We will NOT use the exploit.** The prize is won on the private board with genuine tracking quality,
+  where our clean golden-8 harness (measuring real quality) is a structural advantage.
+- Final-2 picks are reserved for genuine, durable submissions only.
 
 ## 2. Verified findings
 
@@ -111,12 +123,19 @@ Prioritize by metric leverage: edge_jaccard (linking + detection of annotated ce
 
 - [x] Build owned pipeline (detector+offset head, greedy, multi-hyp, motion affinity, TTA/ensemble).
 - [x] Identify + fetch the two public reference solutions.
-- [ ] **P1** Reproduce `unet_transformer` (~0.94) under our account; submit; confirm LB. *(running)*
-- [ ] **P2** Read `predict_unet_transformer.py` etc.; map plug-in points for our upgrades.
-- [ ] **P3** Verify golden-8 harness == support-pack `metrics.py` (trust local measurements).
-- [ ] **P4** A/B upgrades on golden-8 → port winners → submit past the field.
-- [ ] (finishing) offset-detector training → measure motion linking as a candidate upgrade.
+- [x] **P1** Reproduce `unet_transformer` under our account + submit. *(LB score pending)*
+- [x] **P2** Map plug-in points in `predict_unet_transformer.py` (PredictConfig knobs + `--evaluate` CLI).
+- [x] **P3** Confirm golden-8 harness == support-pack `metrics.py` (measurements trustworthy).
+- [~] **P4** Differentiate — GENUINE, private-durable only:
+    - [~] Inference-knob tuning: golden-8 det-threshold × ILP-weight sweep *(kernel running)*.
+    - [ ] **Ensemble the two strong pipelines** (two-seeds 0.912 + unet_transformer) — highest-EV
+          legitimate move; different architectures → likely complementary → best shot at >0.932.
+    - [ ] Safe-division geometry tuning (real divisions), more seeds/TTA.
+    - [ ] Confirm each candidate on the real LB (5 subs/day); reserve final-2 for durable winners.
+- Offset-detector run retired (recall stuck ~0.45; motion A/B showed no benefit at low recall).
 - Deferred: temporal 2-frame detector input (redundant with offset head).
+
+**Submission budget:** 5/day. As of 2026-07-25: 3 used (E005, two-seeds, unet_transformer repro).
 
 ## 8. Operational notes
 
