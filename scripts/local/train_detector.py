@@ -21,8 +21,8 @@ from ctrack.detect.train import train_fold  # noqa: E402
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--raw", required=True)
-    ap.add_argument("--gt", required=True)
+    ap.add_argument("--raw", help="train/ dir with zarr (not needed with --cache-dir)")
+    ap.add_argument("--gt", help="train/ dir with geff (not needed with --cache-dir)")
     ap.add_argument("--fold", type=int, default=0)
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--epochs", type=int, default=20)
@@ -33,14 +33,28 @@ def main() -> None:
     ap.add_argument("--train-stride", type=int, default=3)
     ap.add_argument("--val-stride", type=int, default=4)
     ap.add_argument("--limit", type=int, help="cap datasets per split (fast smoke test)")
+    ap.add_argument("--cache-dir", help="train from a prebuilt frame cache (fast); see "
+                    "ctrack.detect.cache. When set, --raw/--gt are ignored for frames.")
     ap.add_argument("--out", default="models")
+    ap.add_argument("--log-every", type=int, default=20, help="per-step log interval")
+    ap.add_argument("--max-minutes", type=float, default=55,
+                    help="hard wall-clock budget; stops before exceeding it (default 55 min)")
+    ap.add_argument("--num-workers", type=int, default=4)
+    ap.add_argument("--calibrate", action="store_true",
+                    help="time a few steps, print the per-epoch/total ETA, and exit (no training)")
     args = ap.parse_args()
+    if not args.cache_dir and not (args.raw and args.gt):
+        ap.error("provide --raw and --gt, or --cache-dir")
 
     train_fold(
-        args.raw, args.gt, fold=args.fold, k=args.k, epochs=args.epochs, batch=args.batch,
+        args.raw if not args.cache_dir else None,
+        args.gt if not args.cache_dir else None,
+        cache_dir=args.cache_dir,
+        fold=args.fold, k=args.k, epochs=args.epochs, batch=args.batch,
         lr=args.lr, base=args.base, val_threshold=args.val_threshold,
         train_stride=args.train_stride, val_stride=args.val_stride, limit=args.limit,
-        out_dir=args.out,
+        out_dir=args.out, log_every=args.log_every, max_minutes=args.max_minutes,
+        num_workers=args.num_workers, calibrate_only=args.calibrate,
     )
 
 

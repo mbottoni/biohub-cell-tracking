@@ -59,6 +59,9 @@ def train_fold(
     only_downloaded: bool = True,
     num_workers: int = 4,
     cache_dir=None,
+    log_every: int = 20,
+    max_minutes: float | None = None,
+    calibrate_only: bool = False,
 ) -> float:
     """Train one CV fold. Returns best held-out peak-recall; saves best weights to out_dir.
 
@@ -124,17 +127,70 @@ def train_fold(
                     drop_last=True, pin_memory=is_cuda)
 
     model = UNet3D(base=base).to(device)
+    n_params = sum(p.numel() for p in model.parameters())
     opt = torch.optim.AdamW(model.parameters(), lr=lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, epochs)
     scaler = torch.amp.GradScaler("cuda", enabled=is_cuda)
     spacing = float(isotropic_scale(subsample=ISOTROPIC_SUBSAMPLE)[0])
     nms_vox = max(1, int(round(3.0 / spacing)) | 1)
+    steps_per_epoch = len(dl)
+    print(f"model: UNet3D base={base}  {n_params/1e6:.2f}M params  "
+          f"| batch={batch}  steps/epoch={steps_per_epoch}  val frames={len(val)}", flush=True)
+    if max_minutes:
+        print(f"time budget: {max_minutes:.0f} min (will stop before exceeding it)", flush=True)
 
-    best = -1.0
-    for epoch in range(epochs):
+    def _mem() -> str:
+        if is_cuda:
+            return f"{torch.cuda.memory_allocated()/1e9:.1f}GB"
+        if device.type == "mps":
+            return f"{torch.mps.current_allocated_memory()/1e9:.1f}GB"
+        return "-"
+
+    # ---- calibration: time a few steps, print the ETA, and (optionally) exit ----
+    if calibrate_only:
         model.train()
-        t0, tot = time.time(), 0.0
-        for x, y, m in dl:
+        n_calib = min(12, steps_per_epoch)
+        c0 = time.time()
+        for step, (x, y, m) in enumerate(dl):
+            x, y, m = x.to(device), y.to(device), m.to(device)
+            opt.zero_grad()
+            with torch.amp.autocast("cuda", enabled=is_cuda):
+                loss = masked_bce_loss(model(x), y, m)
+            scaler.scale(loss).backward()
+            scaler.step(opt)
+            scaler.update()
+            if step == 0:  # first step includes lazy init/compile; restart the clock after it
+                c0 = time.time()
+            if step >= n_calib:
+                break
+        per_step = (time.time() - c0) / max(1, n_calib)
+        ep_train_s = per_step * steps_per_epoch
+        # rough val cost: ~one forward per val frame at ~0.4x a train step
+        ep_val_s = len(val) * per_step * 0.4
+        ep_s = ep_train_s + ep_val_s
+        print("\n=== CALIBRATION ===", flush=True)
+        print(f"  {per_step:.2f} s/step  ({batch/per_step:.1f} frames/s)  mem {_mem()}", flush=True)
+        print(f"  ~{ep_s/60:.1f} min/epoch  (train {ep_train_s/60:.1f} + val {ep_val_s/60:.1f})",
+              flush=True)
+        print(f"  fits in 55 min: ~{int(55*60/ep_s)} epochs  |  requested {epochs} "
+              f"= ~{ep_s*epochs/60:.0f} min", flush=True)
+        return float("nan")
+
+    run_t0 = time.time()
+    best, est_epoch_s = -1.0, None
+    for epoch in range(epochs):
+        # ---- budget guard: stop before starting an epoch we can't finish in time ----
+        if max_minutes and est_epoch_s is not None:
+            elapsed_min = (time.time() - run_t0) / 60
+            if elapsed_min + est_epoch_s / 60 > max_minutes:
+                print(f"STOP: {elapsed_min:.1f} min elapsed, next epoch ~{est_epoch_s/60:.1f} min "
+                      f"would exceed the {max_minutes:.0f} min budget. Trained {epoch} epochs.",
+                      flush=True)
+                break
+
+        model.train()
+        ep_t0, tot, seen = time.time(), 0.0, 0
+        for step, (x, y, m) in enumerate(dl):
             x, y, m = x.to(device), y.to(device), m.to(device)
             opt.zero_grad()
             with torch.amp.autocast("cuda", enabled=is_cuda):
@@ -143,8 +199,30 @@ def train_fold(
             scaler.step(opt)
             scaler.update()
             tot += float(loss.detach())
-        sched.step()
+            seen += x.shape[0]
 
+            # ---- per-step heartbeat + ETA (calibrates on the fly) ----
+            if step == 0 or (step + 1) % log_every == 0 or step == steps_per_epoch - 1:
+                el = time.time() - ep_t0
+                sps = (step + 1) / el
+                eta_ep = (steps_per_epoch - step - 1) / max(sps, 1e-9)
+                print(f"  e{epoch:02d} step {step+1:4d}/{steps_per_epoch}  "
+                      f"loss {tot/(step+1):.4f}  {seen/el:.1f} frames/s  {sps:.2f} it/s  "
+                      f"mem {_mem()}  ep-eta {eta_ep:5.0f}s", flush=True)
+                # first full epoch gives the estimate for the budget guard
+                if epoch == 0 and step >= min(9, steps_per_epoch - 1) and est_epoch_s is None:
+                    est_epoch_s = steps_per_epoch / max(sps, 1e-9)
+                    tot_min = est_epoch_s * epochs / 60
+                    print(f"  >>> ETA: ~{est_epoch_s/60:.1f} min/epoch, "
+                          f"~{tot_min:.0f} min for {epochs} epochs "
+                          f"{'(OVER BUDGET — will stop early)' if max_minutes and tot_min > max_minutes else ''}",
+                          flush=True)
+        sched.step()
+        train_s = time.time() - ep_t0
+        est_epoch_s = train_s  # refine estimate each epoch
+
+        # ---- validation: held-out peak recall ----
+        val_t0 = time.time()
         model.eval()
         matched = total = 0
         with torch.no_grad():
@@ -158,13 +236,20 @@ def train_fold(
                 matched += a
                 total += b
         rec = matched / max(1, total)
-        print(f"epoch {epoch:2d} loss {tot/max(1,len(dl)):.4f} val peak-recall {rec:.3f} "
-              f"({matched}/{total}) {time.time()-t0:.0f}s", flush=True)
+        val_s = time.time() - val_t0
+        run_min = (time.time() - run_t0) / 60
+        remaining = epochs - epoch - 1
+        tag = ""
         if rec > best:
             best = rec
             torch.save({"model": model.state_dict(), "base": base, "fold": fold, "recall": rec},
                        out_dir / f"unet_fold{fold}.pt")
-            print(f"  saved unet_fold{fold}.pt (recall {rec:.3f})", flush=True)
+            tag = "  <- saved (best)"
+        print(f"EPOCH {epoch:2d}/{epochs-1}  loss {tot/max(1,steps_per_epoch):.4f}  "
+              f"val-recall {rec:.3f} ({matched}/{total})  lr {sched.get_last_lr()[0]:.2e}  "
+              f"train {train_s:.0f}s val {val_s:.0f}s  total {run_min:.1f}min  "
+              f"~{remaining*(train_s+val_s)/60:.0f}min left{tag}", flush=True)
 
-    print(f"DONE fold {fold} best val peak-recall {best:.3f}", flush=True)
+    print(f"DONE fold {fold} best val peak-recall {best:.3f} in {(time.time()-run_t0)/60:.1f} min",
+          flush=True)
     return best
