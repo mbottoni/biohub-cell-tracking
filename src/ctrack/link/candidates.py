@@ -40,6 +40,33 @@ def build_nodes(
     return nodes, scores
 
 
+def build_nodes_with_offsets(
+    detections: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]],
+    *,
+    start_id: int = 1,
+) -> tuple[np.ndarray, dict[int, float], dict[int, np.ndarray]]:
+    """Like `build_nodes`, but detections are (coords, scores, offsets); also returns
+    {node_id: predicted parent-offset (3,)} for the motion-based linker (ctrack.link.edge_model.
+    motion_affinity). Offsets are in the same (full-res voxel) frame as coords.
+    """
+    rows: list[list[float]] = []
+    scores: dict[int, float] = {}
+    node_off: dict[int, np.ndarray] = {}
+    next_id = start_id
+    for t in sorted(detections):
+        coords, vals, offs = detections[t]
+        if vals is None or len(vals) != len(coords):
+            vals = np.ones(len(coords), dtype=np.float64)
+        for k, ((z, y, x), v) in enumerate(zip(coords, vals)):
+            rows.append([float(next_id), float(t), float(z), float(y), float(x)])
+            scores[next_id] = float(v)
+            if offs is not None and len(offs) == len(coords):
+                node_off[next_id] = np.asarray(offs[k], dtype=np.float64)
+            next_id += 1
+    nodes = np.array(rows, dtype=np.float64) if rows else np.zeros((0, 5))
+    return nodes, scores, node_off
+
+
 def prune_singletons(
     nodes: np.ndarray,
     edges: np.ndarray,

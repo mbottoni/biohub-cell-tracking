@@ -29,21 +29,36 @@ from ctrack.data.volume import ISOTROPIC_SUBSAMPLE, open_volume, to_isotropic  #
 from ctrack.detect.blob import detect_frame, rethreshold  # noqa: E402
 from ctrack.detect.infer import predict_heatmap, predict_heatmap_ensemble  # noqa: E402
 from ctrack.eval.biohub import SCALE, Graph, evaluate, per_sample_metrics, summarise  # noqa: E402
-from ctrack.link.candidates import build_nodes, prune_singletons  # noqa: E402
-from ctrack.link.edge_model import affinity_map, train_edge_model  # noqa: E402
+from ctrack.link.candidates import build_nodes, build_nodes_with_offsets, prune_singletons  # noqa: E402
+from ctrack.link.edge_model import affinity_map, motion_affinity, train_edge_model  # noqa: E402
 from ctrack.link.greedy import link_greedy  # noqa: E402
 from ctrack.link.ilp import link_ilp  # noqa: E402
 
 
-def detect(models, vol, device, thr_low, tta, subsample=ISOTROPIC_SUBSAMPLE):
-    """Detect once at the low threshold; peaks carry intensity so a sweep re-filters."""
+def detect(models, vol, device, thr_low, tta, motion=False, subsample=ISOTROPIC_SUBSAMPLE):
+    """Detect once at the low threshold; peaks carry intensity so a sweep re-filters. When
+    `motion`, also extract the predicted parent-offset at each peak (needs an offset-head model;
+    single-model only) and return (coords, scores, offsets) with offsets in full-res voxels."""
     out = {}
+    off_ok = motion and len(models) == 1 and getattr(models[0], "offset_head", None) is not None
     for t in range(vol.n_frames):
         iso = to_isotropic(vol.normalized_frame(t), subsample)
-        hm = (predict_heatmap_ensemble(models, iso, device, tta=tta) if len(models) > 1
-              else predict_heatmap(models[0], iso, device, tta=tta))
+        if off_ok:
+            hm, off = predict_heatmap(models[0], iso, device, tta=tta, return_offset=True)
+        else:
+            hm = (predict_heatmap_ensemble(models, iso, device, tta=tta) if len(models) > 1
+                  else predict_heatmap(models[0], iso, device, tta=tta))
+            off = None
         coords, scores = detect_frame(hm, np.array([1.625, 1.625, 1.625]), threshold=thr_low)
-        out[t] = (coords * np.array(subsample), scores)
+        if off is not None and len(coords):
+            ci = np.round(coords).astype(int)
+            ci = np.clip(ci, 0, np.array(hm.shape) - 1)
+            peak_off = off[:, ci[:, 0], ci[:, 1], ci[:, 2]].T * np.array(subsample)  # iso->full
+            out[t] = (coords * np.array(subsample), scores, peak_off)
+        elif off_ok:
+            out[t] = (coords * np.array(subsample), scores, np.zeros((len(coords), 3)))
+        else:
+            out[t] = (coords * np.array(subsample), scores)
     return out
 
 
@@ -62,6 +77,8 @@ def main() -> None:
     ap.add_argument("--linker", choices=["greedy", "ilp"], default="greedy")
     ap.add_argument("--multi-hyp", action="store_true")
     ap.add_argument("--edge-model", action="store_true")
+    ap.add_argument("--motion", action="store_true",
+                    help="use the detector's parent-offset head for label-free motion affinity")
     ap.add_argument("--tta", action="store_true")
     ap.add_argument("--max-disp", type=float, default=12.0)
     args = ap.parse_args()
@@ -90,17 +107,34 @@ def main() -> None:
     for ds in args.datasets:
         vol = open_volume(Path(args.raw) / f"{ds}.zarr")
         gt = load_geff(Path(args.gt) / f"{ds}.geff")
-        base[ds] = (gt, detect(models, vol, device, thresholds[0], args.tta))
+        base[ds] = (gt, detect(models, vol, device, thresholds[0], args.tta, motion=args.motion))
         print(f"  detected {ds}", file=sys.stderr)
+
+    def _rethr(det0, thr):
+        """Threshold-filter, preserving the optional offsets channel (3-tuples)."""
+        out = {}
+        for t, tup in det0.items():
+            keep = tup[1] >= thr
+            out[t] = tuple([tup[0][keep], tup[1][keep]] + ([tup[2][keep]] if len(tup) > 2 else []))
+        return out
 
     for thr in thresholds:
         rows = []
         for ds, (gt, det0) in base.items():
-            det = rethreshold(det0, thr)
-            nodes, node_scores = build_nodes(det)
+            det = _rethr(det0, thr)
+            has_off = len(next(iter(det.values()))) > 2 if det else False
+            if has_off:
+                nodes, node_scores, node_off = build_nodes_with_offsets(det)
+            else:
+                nodes, node_scores = build_nodes(det)
+                node_off = {}
             values = node_scores  # detector confidence per node id
-            aff = affinity_map(edge_model, nodes, values, max_disp_um=args.max_disp) \
-                if edge_model is not None else None
+            if args.motion and has_off:
+                aff = motion_affinity(nodes, node_off, max_disp_um=args.max_disp)
+            elif edge_model is not None:
+                aff = affinity_map(edge_model, nodes, values, max_disp_um=args.max_disp)
+            else:
+                aff = None
             if args.linker == "greedy":
                 edges = link_greedy(nodes, SCALE, max_disp_um=args.max_disp,
                                     edge_affinity=aff, allow_division=True)
