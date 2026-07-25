@@ -28,17 +28,23 @@ def pick_device():
 
 
 def peak_recall(pred_hm, gt_iso, spacing, nms_vox, threshold=0.5, radius_um=7.0):
-    """(#GT points matched within radius_um of a predicted peak, #GT points)."""
+    """(#GT points matched within radius_um of a predicted peak, #GT points, #predicted peaks).
+
+    The 3rd return value (peak count) is what lets validation see over-detection: peak-recall
+    alone rewards firing everywhere, but the competition metric penalizes total node count via
+    `total_node_ratio`. See train_fold's node-ratio-aware selection.
+    """
     from scipy import ndimage
 
-    if len(gt_iso) == 0:
-        return 0, 0
     pooled = ndimage.maximum_filter(pred_hm, size=nms_vox, mode="nearest")
     peaks = np.argwhere((pred_hm == pooled) & (pred_hm > threshold)).astype(np.float64)
-    if len(peaks) == 0:
-        return 0, len(gt_iso)
+    n_peaks = len(peaks)
+    if len(gt_iso) == 0:
+        return 0, 0, n_peaks
+    if n_peaks == 0:
+        return 0, len(gt_iso), 0
     d = np.linalg.norm((gt_iso[:, None, :] - peaks[None, :, :]) * spacing, axis=2)
-    return int((d.min(axis=1) <= radius_um).sum()), len(gt_iso)
+    return int((d.min(axis=1) <= radius_um).sum()), len(gt_iso), n_peaks
 
 
 def train_fold(
@@ -53,7 +59,8 @@ def train_fold(
     lr: float = 1e-3,
     train_stride: int = 2,
     val_stride: int = 4,
-    val_threshold: float = 0.3,
+    val_threshold: float = 0.5,
+    pos_weight: float = 4.0,
     out_dir="models",
     limit: int | None = None,
     only_downloaded: bool = True,
@@ -65,7 +72,8 @@ def train_fold(
     early_stop_patience: int | None = None,
     on_best=None,
 ) -> float:
-    """Train one CV fold. Returns best held-out peak-recall; saves best weights to out_dir.
+    """Train one CV fold. Returns best held-out sel-score (recall x node-ratio penalty, the
+    competition-metric-aligned selection); saves best weights to out_dir.
 
     If `cache_dir` is given, frames are read from the compact .npz cache (ctrack.detect.cache)
     instead of zarr — the persistent-across-runs path. `only_downloaded` then filters to the
@@ -160,7 +168,7 @@ def train_fold(
             x, y, m = x.to(device), y.to(device), m.to(device)
             opt.zero_grad()
             with torch.amp.autocast("cuda", enabled=is_cuda):
-                loss = masked_bce_loss(model(x), y, m)
+                loss = masked_bce_loss(model(x), y, m, pos_weight=pos_weight)
             scaler.scale(loss).backward()
             scaler.step(opt)
             scaler.update()
@@ -185,6 +193,27 @@ def train_fold(
               f"~{ep_s/1.5*epochs/60:.0f} min. Rely on --max-minutes to bound it.", flush=True)
         return float("nan")
 
+    # Per-volume estimated TRUE cell count -> lets validation penalize over-detection the way the
+    # competition's total_node_ratio does (predicting ~all cells, not just the sparse annotations).
+    # Unavailable in cache mode (no gt_root); node-ratio selection then falls back to recall only.
+    est_by_ds: dict[str, float] = {}
+    if gt_root is not None:
+        from ctrack.data.geff import load_geff
+
+        for ds in va:
+            try:
+                g = load_geff(gt_root / f"{ds}.geff")
+                e = float(getattr(g, "estimated_number_of_nodes", 0) or 0)
+                if e > 0:
+                    est_by_ds[ds] = e
+            except Exception:  # noqa: BLE001
+                pass
+    T_FRAMES = 100  # every volume is 100 timepoints (dataset spec) -> target cells/frame = est/100
+    node_sel = len(est_by_ds) > 0
+    sel_desc = "recall x node-ratio-penalty" if node_sel else "recall only (no estimated counts)"
+    print(f"selection metric: {sel_desc}  ({len(est_by_ds)}/{len(va)} val vols have est counts)",
+          flush=True)
+
     run_t0 = time.time()
     best, est_epoch_s, since_best = -1.0, None, 0
     for epoch in range(epochs):
@@ -203,7 +232,7 @@ def train_fold(
             x, y, m = x.to(device), y.to(device), m.to(device)
             opt.zero_grad()
             with torch.amp.autocast("cuda", enabled=is_cuda):
-                loss = masked_bce_loss(model(x), y, m)
+                loss = masked_bce_loss(model(x), y, m, pos_weight=pos_weight)
             scaler.scale(loss).backward()
             scaler.step(opt)
             scaler.update()
@@ -230,10 +259,14 @@ def train_fold(
         train_s = time.time() - ep_t0
         est_epoch_s = train_s  # refine estimate each epoch
 
-        # ---- validation: held-out peak recall ----
+        # ---- validation: peak recall AND predicted count vs the estimated true count ----
+        # sel_score mirrors the competition's adj term: recall x (1 - 0.1*|total_node_ratio|).
+        # This stops "best" from selecting the saturated, over-detecting checkpoint that maximises
+        # bare recall by firing everywhere.
         val_t0 = time.time()
         model.eval()
         matched = total = 0
+        sum_pred = sum_target = 0.0
         with torch.no_grad():
             for j in range(len(val)):
                 ds, t = val.index[j]
@@ -241,40 +274,54 @@ def train_fold(
                 xx = torch.from_numpy(np.ascontiguousarray(frame))[None, None].float().to(device)
                 hm = torch.sigmoid(model(xx))[0, 0].cpu().numpy()
                 centres = val._centres[(ds, t)] / np.array(ISOTROPIC_SUBSAMPLE)
-                a, b = peak_recall(hm, centres, spacing, nms_vox, threshold=val_threshold)
+                a, b, n_peaks = peak_recall(hm, centres, spacing, nms_vox, threshold=val_threshold)
                 matched += a
                 total += b
+                if ds in est_by_ds:  # only frames whose volume has an estimated true count
+                    sum_pred += n_peaks
+                    sum_target += est_by_ds[ds] / T_FRAMES
         rec = matched / max(1, total)
+        if node_sel and sum_target > 0:
+            node_ratio = (sum_pred - sum_target) / sum_target
+            # Smooth, always-positive penalty (not the competition's hard max(0, 1-0.1r), which
+            # clamps every over-detecting epoch to 0 and destroys ranking / trips early-stop).
+            # exp keeps sel strictly monotonic in over-detection so selection always has a gradient.
+            pen = float(np.exp(-0.1 * abs(node_ratio)))
+            sel = rec * pen
+        else:
+            node_ratio, sel = float("nan"), rec
         val_s = time.time() - val_t0
         run_min = (time.time() - run_t0) / 60
         remaining = epochs - epoch - 1
         tag = ""
         ckpt_path = out_dir / f"unet_fold{fold}.pt"
-        if rec > best:
-            best = rec
+        if sel > best:
+            best = sel
             since_best = 0
             torch.save({"model": model.state_dict(), "base": base, "fold": fold,
-                        "recall": rec, "epoch": epoch}, ckpt_path)
+                        "recall": rec, "sel_score": sel, "node_ratio": node_ratio,
+                        "epoch": epoch}, ckpt_path)
             tag = "  <- saved (best)"
             if on_best is not None:
                 # hook: e.g. upload the checkpoint so it's accessible mid-run and survives a kill
                 try:
-                    on_best(ckpt_path, epoch, rec)
+                    on_best(ckpt_path, epoch, sel)
                 except Exception as e:  # noqa: BLE001
                     print(f"  on_best hook failed (non-fatal): {str(e)[:120]}", flush=True)
         else:
             since_best += 1
         print(f"EPOCH {epoch:2d}/{epochs-1}  loss {tot/max(1,steps_per_epoch):.4f}  "
-              f"val-recall {rec:.3f} ({matched}/{total})  lr {sched.get_last_lr()[0]:.2e}  "
-              f"train {train_s:.0f}s val {val_s:.0f}s  total {run_min:.1f}min  "
-              f"~{remaining*(train_s+val_s)/60:.0f}min left{tag}", flush=True)
+              f"sel {sel:.3f}  recall {rec:.3f} ({matched}/{total})  "
+              f"node_ratio {node_ratio:+.2f} (pred {sum_pred:.0f}/tgt {sum_target:.0f})  "
+              f"lr {sched.get_last_lr()[0]:.2e}  train {train_s:.0f}s val {val_s:.0f}s  "
+              f"total {run_min:.1f}min  ~{remaining*(train_s+val_s)/60:.0f}min left{tag}", flush=True)
 
         if early_stop_patience and since_best >= early_stop_patience:
-            print(f"EARLY STOP: no val-recall improvement in {early_stop_patience} epochs "
+            print(f"EARLY STOP: no sel-score improvement in {early_stop_patience} epochs "
                   f"(best {best:.3f} @ epoch {epoch - since_best}). Trained {epoch+1} epochs.",
                   flush=True)
             break
 
-    print(f"DONE fold {fold} best val peak-recall {best:.3f} in {(time.time()-run_t0)/60:.1f} min",
+    print(f"DONE fold {fold} best val sel-score {best:.3f} in {(time.time()-run_t0)/60:.1f} min",
           flush=True)
     return best

@@ -23,6 +23,7 @@ BASE = int(os.environ.get("BASE", 32))
 TRAIN_STRIDE = int(os.environ.get("TRAIN_STRIDE", 2))
 VAL_STRIDE = int(os.environ.get("VAL_STRIDE", 8))
 PATIENCE = int(os.environ.get("PATIENCE", 4))
+POS_WEIGHT = float(os.environ.get("POS_WEIGHT", 4.0))  # was 20; lower curbs over-detection
 WEIGHTS_DS = "maruanbottoni/biohub-detector-weights"
 
 # zarr is not in the Kaggle image; training kernels may use the internet.
@@ -78,9 +79,10 @@ print("torch", torch.__version__, "cuda", torch.cuda.is_available(),
 print("train dir:", TRAIN, flush=True)
 
 
-def upload_best(ckpt_path, epoch, rec):
+def upload_best(ckpt_path, epoch, sel):
     """Publish the new best checkpoint to a Kaggle dataset so it's downloadable MID-RUN and
-    survives a kill/timeout (Kaggle only commits kernel output at the very end)."""
+    survives a kill/timeout (Kaggle only commits kernel output at the very end). `sel` is the
+    node-ratio-aware selection score (recall x over-detection penalty), not bare recall."""
     import json
     import shutil
 
@@ -91,18 +93,20 @@ def upload_best(ckpt_path, epoch, rec):
                "licenses": [{"name": "CC0-1.0"}]}, open(wdir / "dataset-metadata.json", "w"))
     exists = subprocess.run(["kaggle", "datasets", "status", WEIGHTS_DS],
                             capture_output=True, text=True).returncode == 0
-    cmd = (["kaggle", "datasets", "version", "-p", str(wdir), "-m", f"epoch {epoch} rec {rec:.3f}",
+    cmd = (["kaggle", "datasets", "version", "-p", str(wdir), "-m", f"epoch {epoch} sel {sel:.3f}",
             "--dir-mode", "zip"] if exists
            else ["kaggle", "datasets", "create", "-p", str(wdir), "--dir-mode", "zip"])
     r = subprocess.run(cmd, capture_output=True, text=True)
-    print(f"  uploaded checkpoint to {WEIGHTS_DS} (epoch {epoch}, rec {rec:.3f}): "
+    print(f"  uploaded checkpoint to {WEIGHTS_DS} (epoch {epoch}, sel {sel:.3f}): "
           f"{'ok' if r.returncode == 0 else r.stderr[-150:]}", flush=True)
 
 
+# pos_weight defaults to 4.0 in train_fold now (was 20 -> curbs over-firing); selection is
+# node-ratio-aware inside train_fold, so "best" is the metric-aligned checkpoint, not max-recall.
 best = train_fold(
     TRAIN, TRAIN, fold=FOLD, k=K, epochs=EPOCHS, batch=BATCH, base=BASE,
-    train_stride=TRAIN_STRIDE, val_stride=VAL_STRIDE,
+    train_stride=TRAIN_STRIDE, val_stride=VAL_STRIDE, pos_weight=POS_WEIGHT,
     out_dir="/kaggle/working", num_workers=2, log_every=50, max_minutes=None,
     early_stop_patience=PATIENCE, on_best=upload_best,
 )
-print(f"FINISHED fold {FOLD} best val peak-recall {best:.4f}", flush=True)
+print(f"FINISHED fold {FOLD} best val sel-score {best:.4f}", flush=True)
