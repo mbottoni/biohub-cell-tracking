@@ -1,0 +1,13 @@
+{
+  "id": "maruanbottoni/biohub-tune-frontier-golden8",
+  "title": "biohub tune frontier golden8",
+  "code_file": "tune.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": false,
+  "machine_shape": "NvidiaTeslaT4",
+  "competition_sources": ["biohub-cell-tracking-during-development"],
+  "dataset_sources": ["pilkwang/biohub-tracking-support-pack-50ep-v1"]
+}
