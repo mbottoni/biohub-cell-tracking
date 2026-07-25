@@ -18,8 +18,14 @@ from pathlib import Path
 GOLDEN = ["44b6_2f31fc2f", "44b6_a2bb48bb", "44b6_c96cfa10", "44b6_eb2880fc",
           "6bba_7b5d3b2c", "6bba_b329af44", "6bba_d82a4fc6", "6bba_debd7bfa"]
 
+import shutil
+
 pred = next(Path("/kaggle/input").glob("**/scripts/predict_unet_transformer.py"))
-REPO = pred.parents[1]                     # .../repo
+SRC_REPO = pred.parents[1]                  # .../repo  (read-only under /kaggle/input)
+# predict writes predictions/ under the repo dir, which is read-only in /kaggle/input -> copy it
+REPO = Path("/kaggle/working/repo")
+if not REPO.exists():
+    shutil.copytree(SRC_REPO, REPO)
 SCRIPTS, SRC = REPO / "scripts", REPO / "src"
 WEIGHTS = next(Path("/kaggle/input").glob("**/unet_transformer/split_0/edge_predictor_best.pth"))
 WHEELS = next(Path("/kaggle/input").glob("**/wheels"), None)
