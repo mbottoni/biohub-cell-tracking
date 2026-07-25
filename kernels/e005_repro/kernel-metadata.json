@@ -1,0 +1,12 @@
+{
+  "id": "maruanbottoni/biohub-e005-repro",
+  "title": "Biohub E005 repro",
+  "code_file": "biohub-e005-validated-searched-divisions.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": false,
+  "competition_sources": ["biohub-cell-tracking-during-development"],
+  "dataset_sources": ["pilkwang/biohub-tracking-support-pack-50ep-v1"]
+}
