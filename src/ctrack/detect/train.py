@@ -149,7 +149,10 @@ def train_fold(
     # ---- calibration: time a few steps, print the ETA, and (optionally) exit ----
     if calibrate_only:
         model.train()
-        n_calib = min(12, steps_per_epoch)
+        # MPS compiles kernels over the first ~20 steps; time only AFTER that warmup, or the
+        # estimate runs ~2x slow. warmup=20, then measure the next `measure` steps.
+        warmup = min(20, max(0, steps_per_epoch - 4))
+        measure = min(12, steps_per_epoch - warmup) or 1
         c0 = time.time()
         for step, (x, y, m) in enumerate(dl):
             x, y, m = x.to(device), y.to(device), m.to(device)
@@ -159,21 +162,25 @@ def train_fold(
             scaler.scale(loss).backward()
             scaler.step(opt)
             scaler.update()
-            if step == 0:  # first step includes lazy init/compile; restart the clock after it
+            if step == warmup - 1:   # start the clock once warm
                 c0 = time.time()
-            if step >= n_calib:
+            if step >= warmup + measure - 1:
                 break
-        per_step = (time.time() - c0) / max(1, n_calib)
+        per_step = (time.time() - c0) / max(1, measure)
         ep_train_s = per_step * steps_per_epoch
-        # rough val cost: ~one forward per val frame at ~0.4x a train step
-        ep_val_s = len(val) * per_step * 0.4
+        # val is one forward per frame (no backward) ≈ 0.7× a per-frame train step (measured)
+        ep_val_s = len(val) * (per_step / max(1, batch)) * 0.7
         ep_s = ep_train_s + ep_val_s
-        print("\n=== CALIBRATION ===", flush=True)
-        print(f"  {per_step:.2f} s/step  ({batch/per_step:.1f} frames/s)  mem {_mem()}", flush=True)
-        print(f"  ~{ep_s/60:.1f} min/epoch  (train {ep_train_s/60:.1f} + val {ep_val_s/60:.1f})",
+        # The measured rate is data-starved (DataLoader prefetch not yet full) and runs ~1.5×
+        # slow vs steady state; treat these as UPPER bounds. The --max-minutes guard, which uses
+        # the real epoch-0 time, is the actual safety.
+        print("\n=== CALIBRATION (upper bound; real ~1.5x faster once the loader warms) ===",
               flush=True)
-        print(f"  fits in 55 min: ~{int(55*60/ep_s)} epochs  |  requested {epochs} "
-              f"= ~{ep_s*epochs/60:.0f} min", flush=True)
+        print(f"  {per_step:.2f} s/step  ({batch/per_step:.1f} frames/s)  mem {_mem()}", flush=True)
+        print(f"  <= {ep_s/60:.1f} min/epoch  (train {ep_train_s/60:.1f} + val {ep_val_s/60:.1f})"
+              f"  -> steady ~{ep_s/60/1.5:.1f} min/epoch", flush=True)
+        print(f"  steady fits in 55 min: ~{int(55*60/(ep_s/1.5))} epochs  |  requested {epochs} "
+              f"~{ep_s/1.5*epochs/60:.0f} min. Rely on --max-minutes to bound it.", flush=True)
         return float("nan")
 
     run_t0 = time.time()
