@@ -1,6 +1,6 @@
 {
-  "id": "maruanbottoni/biohub-infer-unet-ilp",
-  "title": "Biohub infer unet ilp",
+  "id": "maruanbottoni/biohub-infer-owned-pipeline",
+  "title": "Biohub infer owned pipeline",
   "code_file": "infer_submission.py",
   "language": "python",
   "kernel_type": "script",
@@ -8,6 +8,5 @@
   "enable_gpu": true,
   "enable_internet": false,
   "competition_sources": ["biohub-cell-tracking-during-development"],
-  "dataset_sources": ["maruanbottoni/ctrack-src", "maruanbottoni/biohub-offline-wheels"],
-  "kernel_sources": ["maruanbottoni/biohub-train-detector-fold0"]
+  "dataset_sources": ["maruanbottoni/ctrack-src", "maruanbottoni/biohub-detector-weights"]
 }
