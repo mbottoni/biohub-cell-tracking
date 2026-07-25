@@ -22,6 +22,8 @@ cells). Explains the public POINT_THRESHOLD=0.955. Threshold sweep in progress.
 
 | 6 | 07-24 | 3 | UNet base-16, local MPS, **60 vols** | fold 0, stride 4/12, 5 ep | val peak-recall **0.964** | — | 48.8 min, budget-guard stopped before ep 5. 94.1→95.4→95.5→96.4→96.3. More data breaks the 24-vol ceiling. |
 
+| 7 | 07-25 | repro | **E005 public pipeline** (detector+edge+ILP+searched divisions) | thr 0.96875, disap 1.575 | — | **LB 0.888** | Reproduced buaaauto E005 on T4. Jump from 0.601 baseline to the public frontier. |
+
 **Reference points:** public LB ~0.897, strong rule-based ~0.857. Blob baseline 0.644. Learned
 detector recall is there; the work is converting it to score via threshold + node-count control.
 
