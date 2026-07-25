@@ -1,0 +1,9 @@
+- [Large dataset storage](large-dataset-storage.md) — internal disk is tight; stage big Kaggle data on /Volumes/extSSD
+- [Kaggle API auth](kaggle-api-auth.md) — bearer KGAT_ token + CLI ≥2.x; the legacy kaggle.json 401s
+- [Kaggle GPU P100 default](kaggle-gpu-p100-default.md) — GPU kernels default to P100 (sm_60) which torch rejects; set machine_shape=NvidiaTeslaT4
+- [Competition objective](competition-objective.md) — surpass LB 0.932 on Biohub cell-tracking; owned-pipeline strategy
+- [Metric & contamination](metric-and-contamination.md) — scoring formula, visible-test = train contamination, ~0.04 local>LB offset
+- [Detector status](detector-status.md) — over-detection finding + node-ratio-aware fix; current T4 run state
+- [Verify hypotheses](verify-hypotheses.md) — verify against ground truth before acting/claiming; report faithfully
+- [Run hygiene](run-hygiene.md) — estimate time & cap runs ~1h, extremely verbose scripts, commit changes
+- [Pipeline architecture](pipeline-architecture.md) — module map: detector+offset head, greedy/ILP linkers, edge model, eval_full
