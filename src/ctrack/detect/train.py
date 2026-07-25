@@ -61,6 +61,7 @@ def train_fold(
     val_stride: int = 4,
     val_threshold: float = 0.5,
     pos_weight: float = 4.0,
+    offset_weight: float = 0.0,
     out_dir="models",
     limit: int | None = None,
     only_downloaded: bool = True,
@@ -82,7 +83,9 @@ def train_fold(
     import torch
     from torch.utils.data import DataLoader
 
-    from ctrack.detect.unet3d import UNet3D, masked_bce_loss
+    from ctrack.detect.unet3d import UNet3D, masked_bce_loss, masked_offset_loss
+
+    use_offset = offset_weight > 0
 
     # raw_root/gt_root are None in cache mode (frames come from cache_dir), so don't Path() them.
     raw_root = Path(raw_root) if raw_root is not None else None
@@ -123,6 +126,9 @@ def train_fold(
           f"(golden {len(golden)} held out)", flush=True)
 
     if cache_dir is not None:
+        if use_offset:
+            raise ValueError("offset_weight>0 needs the geff (parent links); not supported in "
+                             "cache mode. Train the offset head from zarr/geff, not the cache.")
         from ctrack.detect.cache import CachedDetectionFrames
 
         train = CachedDetectionFrames(tr, cache_dir, augment=True, frame_stride=train_stride)
@@ -130,14 +136,17 @@ def train_fold(
     else:
         from ctrack.detect.dataset import DetectionFrames
 
-        train = DetectionFrames(tr, raw_root, gt_root, augment=True, frame_stride=train_stride)
+        train = DetectionFrames(tr, raw_root, gt_root, augment=True, frame_stride=train_stride,
+                                with_offset=use_offset)
         val = DetectionFrames(va, raw_root, gt_root, augment=False, frame_stride=val_stride)
     print(f"frames: {len(train)} train, {len(val)} val", flush=True)
     dl = DataLoader(train, batch_size=batch, shuffle=True, num_workers=num_workers,
                     drop_last=True, pin_memory=is_cuda)
 
-    model = UNet3D(base=base).to(device)
+    model = UNet3D(base=base, out_offset=use_offset).to(device)
     n_params = sum(p.numel() for p in model.parameters())
+    if use_offset:
+        print(f"offset head ON (offset_weight={offset_weight}) — motion-aware linking", flush=True)
     opt = torch.optim.AdamW(model.parameters(), lr=lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, epochs)
     scaler = torch.amp.GradScaler("cuda", enabled=is_cuda)
@@ -164,8 +173,8 @@ def train_fold(
         warmup = min(20, max(0, steps_per_epoch - 4))
         measure = min(12, steps_per_epoch - warmup) or 1
         c0 = time.time()
-        for step, (x, y, m) in enumerate(dl):
-            x, y, m = x.to(device), y.to(device), m.to(device)
+        for step, batch in enumerate(dl):
+            x, y, m = batch[0].to(device), batch[1].to(device), batch[2].to(device)
             opt.zero_grad()
             with torch.amp.autocast("cuda", enabled=is_cuda):
                 loss = masked_bce_loss(model(x), y, m, pos_weight=pos_weight)
@@ -228,11 +237,17 @@ def train_fold(
 
         model.train()
         ep_t0, tot, seen = time.time(), 0.0, 0
-        for step, (x, y, m) in enumerate(dl):
-            x, y, m = x.to(device), y.to(device), m.to(device)
+        for step, batch in enumerate(dl):
+            x, y, m = batch[0].to(device), batch[1].to(device), batch[2].to(device)
             opt.zero_grad()
             with torch.amp.autocast("cuda", enabled=is_cuda):
-                loss = masked_bce_loss(model(x), y, m, pos_weight=pos_weight)
+                if use_offset:
+                    off, offm = batch[3].to(device), batch[4].to(device)
+                    hm, off_pred = model(x, return_offset=True)
+                    loss = (masked_bce_loss(hm, y, m, pos_weight=pos_weight)
+                            + offset_weight * masked_offset_loss(off_pred, off, offm))
+                else:
+                    loss = masked_bce_loss(model(x), y, m, pos_weight=pos_weight)
             scaler.scale(loss).backward()
             scaler.step(opt)
             scaler.update()
@@ -299,8 +314,8 @@ def train_fold(
             best = sel
             since_best = 0
             torch.save({"model": model.state_dict(), "base": base, "fold": fold,
-                        "recall": rec, "sel_score": sel, "node_ratio": node_ratio,
-                        "epoch": epoch}, ckpt_path)
+                        "out_offset": use_offset, "recall": rec, "sel_score": sel,
+                        "node_ratio": node_ratio, "epoch": epoch}, ckpt_path)
             tag = "  <- saved (best)"
             if on_best is not None:
                 # hook: e.g. upload the checkpoint so it's accessible mid-run and survives a kill

@@ -86,3 +86,44 @@ def build_frame_target(
     # Ambiguous middle (bright, unlabeled) is left unsupervised.
     loss_mask = (pos | confident_bg).astype(np.float32)
     return heatmap, loss_mask
+
+
+def build_offset_target(
+    gt_centres_full_vox: np.ndarray,
+    parent_offsets_full_vox: np.ndarray,
+    shape: tuple[int, int, int],
+    *,
+    pos_radius_um: float = 4.0,
+    subsample: tuple[int, int, int] = ISOTROPIC_SUBSAMPLE,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-voxel offset-to-parent target + validity mask (linajea-style).
+
+    `parent_offsets_full_vox` is (M,3) = parent_centre - cell_centre in full-res voxels for each
+    of the M cells (rows with NaN = no known parent). Over each cell's positive region we paint a
+    constant offset vector (converted to isotropic voxels), and mark the offset mask 1 there.
+
+    Returns (offset_target (3,D,H,W) float32, offset_mask (D,H,W) float32).
+    """
+    sub = np.array(subsample, dtype=np.float64)
+    offset_target = np.zeros((3, *shape), dtype=np.float32)
+    offset_mask = np.zeros(shape, dtype=np.float32)
+    if len(gt_centres_full_vox) == 0:
+        return offset_target, offset_mask
+
+    centres_iso = gt_centres_full_vox / sub
+    offsets_iso = parent_offsets_full_vox / sub          # vector in isotropic voxels
+    rad = max(1, int(round(pos_radius_um / isotropic_scale(subsample=subsample)[0])))
+    shape_arr = np.array(shape)
+    for centre, off in zip(centres_iso, offsets_iso):
+        if not np.all(np.isfinite(off)):
+            continue                                     # no parent -> no offset supervision
+        c = np.round(centre).astype(int)
+        lo = np.maximum(c - rad, 0)
+        hi = np.minimum(c + rad + 1, shape_arr)
+        if np.any(hi <= lo):
+            continue
+        sl = tuple(slice(int(a), int(b)) for a, b in zip(lo, hi))
+        offset_mask[sl] = 1.0
+        for k in range(3):
+            offset_target[k][sl] = off[k]
+    return offset_target, offset_mask

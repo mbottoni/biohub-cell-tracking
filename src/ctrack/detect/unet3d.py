@@ -26,9 +26,15 @@ def _block(cin: int, cout: int) -> nn.Sequential:
 
 
 class UNet3D(nn.Module):
-    """3-level 3D U-Net. Input (B,1,D,H,W), output (B,1,D,H,W) heatmap logits."""
+    """3-level 3D U-Net. Input (B,1,D,H,W), output (B,1,D,H,W) heatmap logits.
 
-    def __init__(self, base: int = 16, in_ch: int = 1):
+    With `out_offset=True` an extra 3-channel head predicts, at each voxel, the offset (in
+    isotropic voxels) to the cell's PARENT in the previous frame (linajea). This gives the linker
+    motion-aware edge costs. `forward(x)` still returns only the heatmap logits (backward
+    compatible); `forward(x, return_offset=True)` returns `(heatmap_logits, offset)`.
+    """
+
+    def __init__(self, base: int = 16, in_ch: int = 1, out_offset: bool = False):
         super().__init__()
         c1, c2, c3, c4 = base, base * 2, base * 4, base * 8
 
@@ -46,8 +52,9 @@ class UNet3D(nn.Module):
         self.dec1 = _block(c2, c1)
 
         self.head = nn.Conv3d(c1, 1, 1)
+        self.offset_head = nn.Conv3d(c1, 3, 1) if out_offset else None
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_offset: bool = False):
         e1 = self.enc1(x)
         e2 = self.enc2(self.pool(e1))
         e3 = self.enc3(self.pool(e2))
@@ -56,7 +63,11 @@ class UNet3D(nn.Module):
         d3 = self.dec3(torch.cat([self.up3(b), e3], dim=1))
         d2 = self.dec2(torch.cat([self.up2(d3), e2], dim=1))
         d1 = self.dec1(torch.cat([self.up1(d2), e1], dim=1))
-        return self.head(d1)  # logits; caller applies sigmoid
+        hm = self.head(d1)  # logits; caller applies sigmoid
+        if return_offset:
+            off = self.offset_head(d1) if self.offset_head is not None else None
+            return hm, off
+        return hm
 
 
 def masked_bce_loss(
@@ -74,3 +85,15 @@ def masked_bce_loss(
     )
     denom = mask.sum().clamp_min(1.0)
     return (per_voxel * mask).sum() / denom
+
+
+def masked_offset_loss(
+    pred_offset: torch.Tensor, target_offset: torch.Tensor, offset_mask: torch.Tensor
+) -> torch.Tensor:
+    """Smooth-L1 on the parent-offset vectors, supervised only where `offset_mask` is 1 (voxels
+    belonging to a cell whose parent is known). `*_offset` are (B,3,D,H,W); mask is (B,1,D,H,W).
+    """
+    per_voxel = nn.functional.smooth_l1_loss(pred_offset, target_offset, reduction="none")
+    per_voxel = per_voxel.sum(dim=1, keepdim=True)          # sum over the 3 vector components
+    denom = offset_mask.sum().clamp_min(1.0)
+    return (per_voxel * offset_mask).sum() / denom

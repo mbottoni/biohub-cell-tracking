@@ -69,6 +69,7 @@ def link_ilp(
     max_disp_um: float = DEFAULT_MAX_DISPLACEMENT_UM,
     topk: int = DEFAULT_TOPK,
     edge_affinity: dict[tuple[int, int], float] | None = None,
+    node_scores: dict[int, float] | None = None,
     node_reward: float = 1.0,
     division_weight: float = 1.0,
     appearance_weight: float = 1.0,
@@ -79,6 +80,10 @@ def link_ilp(
 
     If `edge_affinity` maps (src_id, tgt_id) -> probability in (0,1], edges are weighted by
     −logit(p) so confident links are cheap; otherwise weight = distance.
+
+    If `node_scores` maps node_id -> detector confidence in [0,1], each node's selection reward
+    is scaled by it (multi-hypothesis selection): confident detections are cheap to keep, weak
+    ones must earn their place through good edges or be dropped. Absent -> uniform reward.
     """
     import polars as pl
     import tracksdata as td
@@ -96,9 +101,16 @@ def link_ilp(
     idx_of = {}
     id_of_idx = {}
     for row_i, (nid, t, z, y, x) in enumerate(nodes):
-        # negative node score = reward for selecting this detection
+        # negative node score = reward for selecting this detection. When confidences are given,
+        # scale the reward by (0.1 + 0.9*conf) so weak candidates keep only a small reward and
+        # can be dropped by the appearance/disappearance trade-off (multi-hypothesis selection).
+        if node_scores is not None:
+            conf = float(node_scores.get(int(nid), 1.0))
+            reward = abs(node_reward) * (0.1 + 0.9 * min(max(conf, 0.0), 1.0))
+        else:
+            reward = abs(node_reward)
         gi = g.add_node({K.T: int(t), K.Z: float(z), K.Y: float(y), K.X: float(x),
-                         "score": -abs(node_reward)})
+                         "score": -reward})
         idx_of[row_i] = gi
         id_of_idx[gi] = int(nid)
 
