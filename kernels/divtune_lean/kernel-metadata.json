@@ -1,0 +1,19 @@
+{
+  "id": "maruanbottoni/biohub-divtune-lean-golden8",
+  "title": "biohub divtune lean golden8",
+  "code_file": "divtune_lean.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": false,
+  "machine_shape": "NvidiaTeslaT4",
+  "competition_sources": ["biohub-cell-tracking-during-development"],
+  "dataset_sources": [
+    "pilkwang/biohub-deepcenter-unet3d-center-prior-v1",
+    "yoikoarmor/biohub-last-call-postprocess-v1",
+    "pilkwang/biohub-temporal-unet3d-seed314159-v1",
+    "pilkwang/biohub-tracking-support-pack-50ep-v1",
+    "maruanbottoni/ctrack-src"
+  ]
+}
