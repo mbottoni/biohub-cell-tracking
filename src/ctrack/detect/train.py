@@ -62,6 +62,8 @@ def train_fold(
     log_every: int = 20,
     max_minutes: float | None = None,
     calibrate_only: bool = False,
+    early_stop_patience: int | None = None,
+    on_best=None,
 ) -> float:
     """Train one CV fold. Returns best held-out peak-recall; saves best weights to out_dir.
 
@@ -184,7 +186,7 @@ def train_fold(
         return float("nan")
 
     run_t0 = time.time()
-    best, est_epoch_s = -1.0, None
+    best, est_epoch_s, since_best = -1.0, None, 0
     for epoch in range(epochs):
         # ---- budget guard: stop before starting an epoch we can't finish in time ----
         if max_minutes and est_epoch_s is not None:
@@ -247,15 +249,31 @@ def train_fold(
         run_min = (time.time() - run_t0) / 60
         remaining = epochs - epoch - 1
         tag = ""
+        ckpt_path = out_dir / f"unet_fold{fold}.pt"
         if rec > best:
             best = rec
-            torch.save({"model": model.state_dict(), "base": base, "fold": fold, "recall": rec},
-                       out_dir / f"unet_fold{fold}.pt")
+            since_best = 0
+            torch.save({"model": model.state_dict(), "base": base, "fold": fold,
+                        "recall": rec, "epoch": epoch}, ckpt_path)
             tag = "  <- saved (best)"
+            if on_best is not None:
+                # hook: e.g. upload the checkpoint so it's accessible mid-run and survives a kill
+                try:
+                    on_best(ckpt_path, epoch, rec)
+                except Exception as e:  # noqa: BLE001
+                    print(f"  on_best hook failed (non-fatal): {str(e)[:120]}", flush=True)
+        else:
+            since_best += 1
         print(f"EPOCH {epoch:2d}/{epochs-1}  loss {tot/max(1,steps_per_epoch):.4f}  "
               f"val-recall {rec:.3f} ({matched}/{total})  lr {sched.get_last_lr()[0]:.2e}  "
               f"train {train_s:.0f}s val {val_s:.0f}s  total {run_min:.1f}min  "
               f"~{remaining*(train_s+val_s)/60:.0f}min left{tag}", flush=True)
+
+        if early_stop_patience and since_best >= early_stop_patience:
+            print(f"EARLY STOP: no val-recall improvement in {early_stop_patience} epochs "
+                  f"(best {best:.3f} @ epoch {epoch - since_best}). Trained {epoch+1} epochs.",
+                  flush=True)
+            break
 
     print(f"DONE fold {fold} best val peak-recall {best:.3f} in {(time.time()-run_t0)/60:.1f} min",
           flush=True)

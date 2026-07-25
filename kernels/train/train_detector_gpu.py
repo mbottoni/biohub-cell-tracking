@@ -17,11 +17,13 @@ from pathlib import Path
 # --- config ---
 FOLD = int(os.environ.get("FOLD", 0))
 K = 5
-EPOCHS = int(os.environ.get("EPOCHS", 25))
+EPOCHS = int(os.environ.get("EPOCHS", 15))
 BATCH = int(os.environ.get("BATCH", 8))
 BASE = int(os.environ.get("BASE", 32))
 TRAIN_STRIDE = int(os.environ.get("TRAIN_STRIDE", 2))
-VAL_STRIDE = int(os.environ.get("VAL_STRIDE", 4))
+VAL_STRIDE = int(os.environ.get("VAL_STRIDE", 8))
+PATIENCE = int(os.environ.get("PATIENCE", 4))
+WEIGHTS_DS = "maruanbottoni/biohub-detector-weights"
 
 # zarr is not in the Kaggle image; training kernels may use the internet.
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "zarr", "scipy"], check=False)
@@ -75,9 +77,32 @@ print("torch", torch.__version__, "cuda", torch.cuda.is_available(),
       torch.cuda.get_device_name(0) if torch.cuda.is_available() else "", flush=True)
 print("train dir:", TRAIN, flush=True)
 
+
+def upload_best(ckpt_path, epoch, rec):
+    """Publish the new best checkpoint to a Kaggle dataset so it's downloadable MID-RUN and
+    survives a kill/timeout (Kaggle only commits kernel output at the very end)."""
+    import json
+    import shutil
+
+    wdir = Path("/kaggle/working/_weights_out")
+    wdir.mkdir(exist_ok=True)
+    shutil.copy(ckpt_path, wdir / ckpt_path.name)
+    json.dump({"title": "biohub-detector-weights", "id": WEIGHTS_DS,
+               "licenses": [{"name": "CC0-1.0"}]}, open(wdir / "dataset-metadata.json", "w"))
+    exists = subprocess.run(["kaggle", "datasets", "status", WEIGHTS_DS],
+                            capture_output=True, text=True).returncode == 0
+    cmd = (["kaggle", "datasets", "version", "-p", str(wdir), "-m", f"epoch {epoch} rec {rec:.3f}",
+            "--dir-mode", "zip"] if exists
+           else ["kaggle", "datasets", "create", "-p", str(wdir), "--dir-mode", "zip"])
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    print(f"  uploaded checkpoint to {WEIGHTS_DS} (epoch {epoch}, rec {rec:.3f}): "
+          f"{'ok' if r.returncode == 0 else r.stderr[-150:]}", flush=True)
+
+
 best = train_fold(
     TRAIN, TRAIN, fold=FOLD, k=K, epochs=EPOCHS, batch=BATCH, base=BASE,
     train_stride=TRAIN_STRIDE, val_stride=VAL_STRIDE,
     out_dir="/kaggle/working", num_workers=2, log_every=50, max_minutes=None,
+    early_stop_patience=PATIENCE, on_best=upload_best,
 )
 print(f"FINISHED fold {FOLD} best val peak-recall {best:.4f}", flush=True)
