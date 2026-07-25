@@ -23,20 +23,31 @@ import torch.nn as nn
 
 from ctrack.eval.biohub import SCALE
 
-FEATURE_DIM = 7  # Δz, Δy, Δx, distance, src intensity, tgt intensity, |Δintensity|
+FEATURE_DIM = 7      # Δz, Δy, Δx, distance, src intensity, tgt intensity, |Δintensity|
+FEATURE_DIM_MOTION = 11  # + predicted-offset agreement: residual (3) and its norm (1)
 
 
 def pair_features(
     src_zyx: np.ndarray, tgt_zyx: np.ndarray, src_val: np.ndarray, tgt_val: np.ndarray,
     scale: np.ndarray = SCALE,
+    tgt_offset: np.ndarray | None = None,
 ) -> np.ndarray:
-    """(M, FEATURE_DIM) features for M candidate pairs. Positions in voxels, values in [0,1]."""
+    """(M, FEATURE_DIM[+4]) features for M candidate pairs. Positions in voxels, values in [0,1].
+
+    If `tgt_offset` (M,3, in the SAME voxel frame as positions) is given — the detector's predicted
+    offset-to-parent at the target — we add motion-agreement features: the residual between where
+    the target *thinks* its parent is (tgt_zyx + tgt_offset) and the actual source position, plus
+    its norm. A true parent makes this residual ~0; this is the linajea motion cue the linker lacks.
+    """
     d = (tgt_zyx - src_zyx) * scale
     dist = np.linalg.norm(d, axis=1, keepdims=True)
-    return np.concatenate(
-        [d, dist, src_val[:, None], tgt_val[:, None], np.abs(tgt_val - src_val)[:, None]],
-        axis=1,
-    ).astype(np.float32)
+    feats = [d, dist, src_val[:, None], tgt_val[:, None], np.abs(tgt_val - src_val)[:, None]]
+    if tgt_offset is not None:
+        predicted_parent = tgt_zyx + tgt_offset
+        residual = (predicted_parent - src_zyx) * scale        # ~0 if target's parent is src
+        res_norm = np.linalg.norm(residual, axis=1, keepdims=True)
+        feats += [residual, res_norm]
+    return np.concatenate(feats, axis=1).astype(np.float32)
 
 
 class EdgeMLP(nn.Module):
@@ -61,6 +72,83 @@ class EdgeMLP(nn.Module):
         self.eval()
         x = torch.from_numpy(np.ascontiguousarray(feats)).float()
         return torch.sigmoid(self(x)).cpu().numpy()
+
+
+def build_training_pairs(
+    graph, scale: np.ndarray = SCALE, *, max_disp_um: float = 12.0, topk: int = 5,
+) -> tuple[np.ndarray, np.ndarray]:
+    """From a GT graph, build (features, labels) for the edge model.
+
+    Positive = a true parent->child edge. Negatives = the parent's OTHER in-radius candidates in
+    the next frame (the near-misses the linker must reject). Teaches "which nearby candidate is
+    the real successor" — exactly the ambiguity distance alone can't resolve. Intensities are
+    unknown for GT nodes, so they are set to 1 (geometry-only model; motion features add the rest).
+    """
+    ids = graph.ids.astype(np.int64)
+    t = graph.t.astype(int)
+    zyx = graph.zyx
+    idx_of = {int(i): k for k, i in enumerate(ids)}
+    true_child = {}
+    for s, d in graph.edges.astype(np.int64):
+        true_child.setdefault(int(s), set()).add(int(d))
+
+    feats, labels = [], []
+    for f in np.unique(t):
+        cur = np.flatnonzero(t == f)
+        nxt = np.flatnonzero(t == f + 1)
+        if cur.size == 0 or nxt.size == 0:
+            continue
+        dmat = np.linalg.norm((zyx[cur][:, None, :] - zyx[nxt][None, :, :]) * scale, axis=2)
+        for i, ci in enumerate(cur):
+            order = [j for j in np.argsort(dmat[i])[:topk] if dmat[i, j] <= max_disp_um]
+            if not order:
+                continue
+            children = true_child.get(int(ids[ci]), set())
+            for j in order:
+                lbl = 1.0 if int(ids[nxt[j]]) in children else 0.0
+                feats.append(pair_features(zyx[ci][None], zyx[nxt[j]][None],
+                                           np.array([1.0]), np.array([1.0]), scale)[0])
+                labels.append(lbl)
+    if not feats:
+        return np.zeros((0, FEATURE_DIM), np.float32), np.zeros((0,), np.float32)
+    return np.stack(feats), np.array(labels, np.float32)
+
+
+def train_edge_model(
+    graphs: list, scale: np.ndarray = SCALE, *, epochs: int = 200, lr: float = 1e-3,
+    hidden: int = 64, max_disp_um: float = 12.0, topk: int = 5, verbose: bool = True,
+) -> "EdgeMLP":
+    """Fit an EdgeMLP on GT graphs (trains in seconds). Returns the model with normalization set."""
+    X, y = [], []
+    for g in graphs:
+        fx, fy = build_training_pairs(g, scale, max_disp_um=max_disp_um, topk=topk)
+        if len(fx):
+            X.append(fx)
+            y.append(fy)
+    X = np.concatenate(X) if X else np.zeros((0, FEATURE_DIM), np.float32)
+    y = np.concatenate(y) if y else np.zeros((0,), np.float32)
+    if len(X) == 0:
+        raise ValueError("no training pairs — check GT graphs have edges")
+
+    model = EdgeMLP(in_dim=X.shape[1], hidden=hidden)
+    model.mean.copy_(torch.from_numpy(X.mean(0)))
+    model.std.copy_(torch.from_numpy(X.std(0) + 1e-6))
+    Xt = torch.from_numpy(X).float()
+    yt = torch.from_numpy(y).float()
+    pos_frac = float(y.mean()) or 0.5
+    pw = torch.tensor((1 - pos_frac) / max(pos_frac, 1e-3))  # balance rare positives
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    for e in range(epochs):
+        opt.zero_grad()
+        loss = torch.nn.functional.binary_cross_entropy_with_logits(model(Xt), yt, pos_weight=pw)
+        loss.backward()
+        opt.step()
+        if verbose and (e == 0 or (e + 1) % 50 == 0):
+            with torch.no_grad():
+                acc = ((torch.sigmoid(model(Xt)) > 0.5).float() == yt).float().mean().item()
+            print(f"  edge-model epoch {e+1}/{epochs} loss {loss.item():.4f} acc {acc:.3f} "
+                  f"(n={len(X)}, pos={pos_frac:.3f})", flush=True)
+    return model
 
 
 def affinity_map(
