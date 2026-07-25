@@ -7,7 +7,12 @@
   "is_private": true,
   "enable_gpu": true,
   "enable_internet": true,
-  "competition_sources": ["biohub-cell-tracking-during-development"],
-  "dataset_sources": ["maruanbottoni/ctrack-src"],
-  "kernel_sources": []
+  "competition_sources": [
+    "biohub-cell-tracking-during-development"
+  ],
+  "dataset_sources": [
+    "maruanbottoni/ctrack-src"
+  ],
+  "kernel_sources": [],
+  "machine_shape": "NvidiaTeslaT4"
 }
