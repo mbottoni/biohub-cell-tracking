@@ -24,6 +24,7 @@ TRAIN_STRIDE = int(os.environ.get("TRAIN_STRIDE", 2))
 VAL_STRIDE = int(os.environ.get("VAL_STRIDE", 8))
 PATIENCE = int(os.environ.get("PATIENCE", 4))
 POS_WEIGHT = float(os.environ.get("POS_WEIGHT", 4.0))  # was 20; lower curbs over-detection
+OFFSET_WEIGHT = float(os.environ.get("OFFSET_WEIGHT", 1.0))  # >0 trains the movement-vector head
 WEIGHTS_DS = "maruanbottoni/biohub-detector-weights"
 
 # zarr is not in the Kaggle image; training kernels may use the internet.
@@ -106,6 +107,7 @@ def upload_best(ckpt_path, epoch, sel):
 best = train_fold(
     TRAIN, TRAIN, fold=FOLD, k=K, epochs=EPOCHS, batch=BATCH, base=BASE,
     train_stride=TRAIN_STRIDE, val_stride=VAL_STRIDE, pos_weight=POS_WEIGHT,
+    offset_weight=OFFSET_WEIGHT,  # linajea movement-vector head -> motion-aware linking
     out_dir="/kaggle/working", num_workers=2, log_every=50, max_minutes=None,
     early_stop_patience=PATIENCE, on_best=upload_best,
 )

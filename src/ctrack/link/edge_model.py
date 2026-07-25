@@ -151,6 +151,50 @@ def train_edge_model(
     return model
 
 
+def motion_affinity(
+    nodes: np.ndarray,
+    offsets: dict[int, np.ndarray],
+    *,
+    max_disp_um: float = 12.0,
+    topk: int = 5,
+    sigma_um: float = 3.0,
+    scale: np.ndarray = SCALE,
+) -> dict[tuple[int, int], float]:
+    """Label-free edge affinity from the detector's predicted parent-offset (linajea edge cost).
+
+    `offsets` maps node_id -> the detector's predicted offset-to-parent at that node (same voxel
+    frame as node positions). For a candidate pair (src@t, tgt@t+1), the target's predicted parent
+    position is tgt + offset[tgt]; if that lands on src, the edge is strongly favoured. Affinity =
+    exp(-(residual_um/sigma_um)^2), so it needs no training — the motion signal comes straight from
+    the movement-vector head. Falls back to a distance prior for nodes without a predicted offset.
+    """
+    ids = nodes[:, 0].astype(int)
+    t = nodes[:, 1].astype(int)
+    zyx = nodes[:, 2:5]
+    id_to_row = {int(i): k for k, i in enumerate(ids)}
+    out: dict[tuple[int, int], float] = {}
+    for f in np.unique(t):
+        cur = np.flatnonzero(t == f)
+        nxt = np.flatnonzero(t == f + 1)
+        if cur.size == 0 or nxt.size == 0:
+            continue
+        d = np.linalg.norm((zyx[cur][:, None, :] - zyx[nxt][None, :, :]) * scale, axis=2)
+        for i, ci in enumerate(cur):
+            for j in np.argsort(d[i])[:topk]:
+                if d[i, j] > max_disp_um:
+                    continue
+                s_id, tg_id = int(ids[ci]), int(ids[nxt[j]])
+                off = offsets.get(tg_id)
+                if off is not None:
+                    predicted_parent = zyx[nxt[j]] + off
+                    residual = float(np.linalg.norm((predicted_parent - zyx[ci]) * scale))
+                    aff = float(np.exp(-((residual / sigma_um) ** 2)))
+                else:
+                    aff = float(np.exp(-((d[i, j] / max_disp_um) ** 2)))  # distance prior
+                out[(s_id, tg_id)] = aff
+    return out
+
+
 def affinity_map(
     model: EdgeMLP,
     nodes: np.ndarray,

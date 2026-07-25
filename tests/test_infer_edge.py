@@ -50,3 +50,19 @@ def test_motion_feature_dim():
     f = pair_features(np.array([[10.0, 10, 10]]), np.array([[10.0, 10, 12]]),
                       np.array([1.0]), np.array([1.0]), tgt_offset=np.array([[0.0, 0, -2]]))
     assert f.shape[1] == FEATURE_DIM_MOTION
+
+
+def test_motion_affinity_high_when_offset_points_to_parent():
+    import numpy as np
+    from ctrack.link.edge_model import motion_affinity
+    nodes = np.array([[1, 0, 10, 10, 10], [2, 1, 10, 10, 12]], dtype=float)
+    aff = motion_affinity(nodes, {2: np.array([0.0, 0, -2])}, max_disp_um=12)  # points back to 1
+    assert aff[(1, 2)] > 0.99
+
+
+def test_motion_affinity_low_when_offset_wrong():
+    import numpy as np
+    from ctrack.link.edge_model import motion_affinity
+    nodes = np.array([[1, 0, 10, 10, 10], [2, 1, 10, 10, 12]], dtype=float)
+    aff = motion_affinity(nodes, {2: np.array([0.0, 0, 20])}, max_disp_um=40)  # points away
+    assert aff[(1, 2)] < 0.5
