@@ -18,8 +18,14 @@ threshold, and the node-budget multiplier punishes it. This is exactly the metri
 docs/metric.md — a *confident* detector wants a HIGH threshold (unlike blob, which loses real
 cells). Explains the public POINT_THRESHOLD=0.955. Threshold sweep in progress.
 
+| 5 | 07-24 | 3 | UNet base-16, **local MPS**, 24 vols | fold 0, stride 4/10, 5 ep | val peak-recall **0.920** | — | 23 min, budget-capped. Curve 82.8→91.1→91.1→92.0→91.7. Subset ceiling ~92% (vs 98.7% on full data). |
+
 **Reference points:** public LB ~0.897, strong rule-based ~0.857. Blob baseline 0.644. Learned
 detector recall is there; the work is converting it to score via threshold + node-count control.
+
+**Local MPS timing:** ~1.6 s/step warm (base-16, 64³), ~3.5 min/epoch on 24 vols. `--calibrate`
+over-estimates ~2× (measures cold steps before MPS kernel warmup) — trust the first real
+`>>> ETA` line, not the calibration, for the true rate.
 
 ## CV ↔ LB tracking
 
