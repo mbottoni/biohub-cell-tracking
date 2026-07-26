@@ -1,7 +1,60 @@
-# Session log — 2026-07-25
+# Session log
 
-Recap of the work, decisions, and results from this session. Live strategy: `docs/STRATEGY.md`.
+Recap of the work, decisions, and results per session. Live strategy: `docs/STRATEGY.md`.
 Memories: `.claude/memory/`.
+
+---
+
+# 2026-07-26 — the CV inverted on the real LB; pivot to LB-driven search
+
+## Headline: §9's central finding is FALSIFIED
+
+Both pending submissions scored:
+
+| config | golden-8 | LB |
+|---|---|---|
+| FULL `selected_94` (`54983506`) | 0.862 | **0.911** (author claims ~0.94 → **0.03 repro gap**) |
+| LEAN, additive post-proc off (`54985941`) | 0.882 | **0.890** |
+| Δ (LEAN − FULL) | **+0.020** | **−0.021** |
+
+The rank **inverted**. §9.1 predicted LEAN would win on unseen data; it lost by 0.021.
+
+**Root cause — we had the contamination backwards.** We believed "LB test is contaminated, golden-8
+is clean." The opposite is true: `test/` is a dev sample that Kaggle swaps for real hidden data at
+rerun (kernels-only — `docs/data.md` says this explicitly), so the LB was always scored on clean
+hidden crops. Meanwhile the pilkwang weights trained on all 199 train volumes including golden-8, so
+**golden-8 is the leaky instrument** — and we used it to overrule the clean one.
+
+Consequences: the LB is our best tuning signal for this pipeline; §9.2's "dead levers" were all
+killed on the discredited harness and must be **re-opened**; §9.6's "generalization discipline is our
+edge" no longer follows.
+
+## New thesis: the headroom is in the node-ratio multiplier (STRATEGY §10.5)
+
+`score = edge_J·(1 − 0.1·ratio) + 0.1·div_J`. The field optimizes `edge_J` (~0.89, near ceiling) and
+ignores the multiplier (~1.03 today, max ~1.10). Two verified facts make it a free lunch:
+- only edges touching **annotated** GT nodes are scored — edges between unannotated cells are invisible;
+- annotation is **3.6% of the node budget** (median `nodes/est_n_nodes` over 199 vols; 659 vs 17,909).
+
+⇒ pruning predictions from ~75% → ~10% of the budget is **+6% relative ≈ +0.055** at no `edge_J`
+cost, *if* we drop only never-scored nodes. Reduces to: **predict which cells the annotators traced**
+— a supervised problem with 199 labelled volumes. First experiment is free (no GPU, no submission):
+measure AUC of P(annotated) from track features on train GT.
+
+## Submission budget is the unspent resource
+Deadline 2026-09-29, 5/day → **~300+ remaining, 6 used.** We were rationing submissions to protect a
+CV that doesn't predict the target. Compute is the real limit (~6h/run, 2 GPU slots → 2–4/day).
+Noise floor ~0.001 (two 99.4%-identical pipelines scored 0.911 vs 0.912) ⇒ effects ≥0.005 readable.
+
+## Next steps
+1. Free experiment: is annotation predictable from track features? (§10.5 gate)
+2. Close the 0.03 repro gap — diff our kernel vs the published `unet_transformer` notebook (no compute).
+3. LB coordinate descent from the 0.912 config: `DET_THRESHOLD` → ILP weights → dual-seed → secondary edge.
+4. Re-probe the "dead" levers on the LB, one submission each (divisions first).
+
+---
+
+# 2026-07-25
 
 ## Where we ended (state at close)
 

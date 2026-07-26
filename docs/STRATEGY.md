@@ -1,7 +1,8 @@
 # Strategy & Findings — Biohub Cell Tracking (living doc)
 
-**Updated:** 2026-07-25 (v2 — two-seeds scored 0.912; pivot to ensembling). Supersedes the
-strategic sections of `PLAN.md` where they conflict.
+**Updated:** 2026-07-26 (v3 — LEAN scored 0.890 on the real LB, **falsifying** the §9 overfit
+thesis; see **§10**, which supersedes §9 wherever they conflict). Supersedes the strategic
+sections of `PLAN.md` where they conflict.
 Goal: **surpass public LB 0.932** on the custom tracking metric ($60k, deadline 2026-09-29,
 kernels-only). See also `docs/metric.md`, `docs/data.md`, `docs/detector.md`, `docs/experiments.md`.
 
@@ -9,27 +10,33 @@ kernels-only). See also `docs/metric.md`, `docs/data.md`, `docs/detector.md`, `d
 
 ## 1. Current standing (verified)
 
-| Submission | LB (public) | Notes |
-|---|---|---|
-| **two-seeds ensemble + DeepCenter** | **0.912** | **our best CONFIRMED LB** (genuine, not exploit) |
-| unet_transformer repro (sdeogade/pilkwang fork) | pending | expected ~0.94; scoring |
-| E005 repro (detector+edge+ILP+searched divisions) | 0.888 | |
-| Baseline blob + Hungarian | 0.601 | local 0.644 → confirms **~0.04 local>LB offset** |
-| Owned pipeline (greedy+multi-hyp), golden-8 local | 0.489 (~0.45 LB proj.) | our measurement lab, not competitive |
+| Submission | LB (public) | golden-8 | Notes |
+|---|---|---|---|
+| **two-seeds ensemble + DeepCenter** (`54976907`) | **0.912** | — | **our best CONFIRMED LB** (genuine, not exploit) |
+| unet_transformer repro / FULL (`54983506`) | 0.911 | 0.862 | expected ~0.94 from the author — **0.03 repro gap, unexplained** |
+| LEAN (additive post-proc OFF) (`54985941`) | 0.890 | 0.882 | **CV said LEAN>FULL by +0.020; LB says −0.021 → rank inverted (§10)** |
+| E005 repro (detector+edge+ILP+searched divisions) | 0.888 | — | |
+| Baseline blob + Hungarian | 0.601 | 0.644 | early "~0.04 local>LB offset" reading |
+| Owned pipeline (greedy+multi-hyp), golden-8 local | — | 0.489 | our measurement lab, not competitive |
 
 **Where we stand:** best confirmed **0.912**, target **0.932** — gap **~0.02**, closable with
 genuine improvements. Our from-scratch owned pipeline (~0.45) is not competitive on its own; it is
 the clean **measurement lab** (§3). → **strategy pivot** (§5): build on the strong public pipelines.
 
-### ⚠ Public LB is partly gamed — target the PRIVATE board
+### ⚠ Public LB is partly gamed — but it is NOT contaminated (corrected 2026-07-26)
 A public solution (xiaoleilian mix-divaug) ships a **division `metric exploit`**: it appends
 fabricated out-of-volume nodes (t=−1000, coords −10000) forming fake division forks to inflate
 `division_jaccard` (claimed +0.08). Its own author excludes it from **final-2** (the private-scored
 submissions that award the prize). Implications:
-- Some public ~0.94 scores are inflated by such exploits → don't treat public numbers as the real bar.
-- **We will NOT use the exploit.** The prize is won on the private board with genuine tracking quality,
-  where our clean golden-8 harness (measuring real quality) is a structural advantage.
+- Some public ~0.94 scores are inflated by such exploits → don't treat public *rankings* as the real bar.
+- **We will NOT use the exploit** unless explicitly decided otherwise. Note it is a *metric* exploit,
+  not a public-only trick — it would inflate the private board too.
 - Final-2 picks are reserved for genuine, durable submissions only.
+
+**What this does NOT mean (we had this backwards until 2026-07-26):** exploit-inflation is a
+*ranking* problem, not a *signal* problem. Our own LB score is measured on real hidden data —
+kernels-only, `test/` is swapped at rerun (`docs/data.md`). The contaminated measurement is the
+LOCAL one. See §10.1.
 
 ## 2. Verified findings
 
@@ -40,11 +47,15 @@ submissions that award the prize). Implications:
   (~20–30k/vol, NOT the sparse annotated count). Only edges touching ANNOTATED GT nodes count;
   node match ≤7µm (anisotropy-scaled). ⇒ ~90% of score is edge_jaccard on annotated cells;
   over-detection is taxed via the node-ratio multiplier.
-- **Contamination:** the 4 visible test volumes are byte-identical to 4 train volumes. Pretrained
-  pipelines read inflated LOCALLY (E005 0.969 local vs 0.888 LB). ⇒ trust only a proper held-out
-  split. We use `hold_out_golden(n=8, seed=0)` — the **golden-8** harness. **This is our edge:**
-  forkers of public notebooks cannot honestly measure whether a change helps; we can.
-- **Local→LB offset ≈ 0.04** (local higher). Budget for it before submitting.
+- **Contamination — direction corrected (2026-07-26):** the 4 visible test volumes are byte-identical
+  to 4 train volumes, but that dir is a *dev sample*; Kaggle swaps it for real hidden data at rerun
+  (kernels-only, `docs/data.md`). **The LB is clean; our LOCAL harness is the contaminated one** —
+  the pilkwang weights were trained on all 199 train volumes, golden-8 included, so golden-8 scores
+  of the pretrained pipeline are inflated *and* mis-rank configs (§10.1). golden-8 remains valid for
+  models WE train with it held out; it is not a trustworthy instrument for tuning pretrained-pipeline
+  knobs.
+- **Local→LB offset ≈ 0.04** (local higher) — a rough level offset only. It says nothing about
+  ranking, and §10.1 shows the ranking can invert.
 - **Detector over-detection (fixed):** selecting checkpoints by val peak-recall made the detector
   over-detect WORSE as it trained (golden-8 score 0.40→0.26, nodes 42k→93k). Fix (committed):
   select/early-stop on `sel = recall·exp(−0.1·|node_ratio|)` anchored to `est_nodes/100`, and
@@ -127,7 +138,8 @@ Prioritize by metric leverage: edge_jaccard (linking + detection of annotated ce
 - [x] **P2** Map plug-in points in `predict_unet_transformer.py` (PredictConfig knobs + `--evaluate` CLI).
 - [x] **P3** Confirm golden-8 harness == support-pack `metrics.py` (measurements trustworthy).
 - [~] **P4** Differentiate — GENUINE, private-durable only:
-    - [~] Inference-knob tuning: golden-8 det-threshold × ILP-weight sweep *(kernel running)*.
+    - [~] Inference-knob tuning: **moved to the LB** as the measuring instrument (§10.2); the
+          golden-8 sweep is no longer trusted for pretrained-pipeline knobs.
     - [ ] **Ensemble the two strong pipelines** (two-seeds 0.912 + unet_transformer) — highest-EV
           legitimate move; different architectures → likely complementary → best shot at >0.932.
     - [ ] Safe-division geometry tuning (real divisions), more seeds/TTA.
@@ -135,11 +147,17 @@ Prioritize by metric leverage: edge_jaccard (linking + detection of annotated ce
 - Offset-detector run retired (recall stuck ~0.45; motion A/B showed no benefit at low recall).
 - Deferred: temporal 2-frame detector input (redundant with offset head).
 
-**Submission budget:** 5/day. As of 2026-07-25: 3 used (E005, two-seeds, unet_transformer repro).
+**Submission budget:** 5/day, deadline 2026-09-29 → **~300+ remaining, 6 used.** Not the scarce
+resource; compute is (~6h/run, 2 GPU slots → ~2–4 configs/day). See §10.2.
 
 ---
 
 ## 9. Update (2026-07-25 late) — overfit finding, dead levers, CV skew, the winning playbook
+
+> ⚠ **SUPERSEDED IN PART by §10 (2026-07-26).** Everything in §9 was measured on golden-8, which
+> we now know mis-ranks configs for the pretrained pipeline: its headline call (LEAN > FULL) was
+> **inverted on the real LB**. Treat §9.1 as falsified and §9.2's "dead levers" as *unverified*
+> (killed by the same instrument), not settled. The §9.3 skew analysis and §9.4 playbook still hold.
 
 ### 9.1 The post-processing is overfit → LEAN generalizes better (the money-board edge)
 Ran the FULL pipeline vs a LEAN variant (additive post-proc OFF: gap-close, gap2, motion-relink,
@@ -204,6 +222,102 @@ pruning are all dead. Our genuine edge is **generalization discipline** (a verif
 config that wins held-out where the field overfits the contaminated LB). Bigger absolute gains need
 **diverse edge-ensembling (#2)** or **retraining+pseudo-labeling (#3)**. #1 is not guaranteed, but the
 strategy targets the private board that pays, which most of the field is not optimizing for.
+
+## 10. Update (2026-07-26) — the CV inverted on the real LB; pivot to LB-driven search
+
+Goal restated by the user: **optimize the actual test-set score.** This section is the operative plan.
+
+### 10.1 The falsification (the important one)
+Both pending submissions landed:
+
+| config | golden-8 | LB | |
+|---|---|---|---|
+| FULL (`selected_94`, `54983506`) | 0.862 | **0.911** | |
+| LEAN (additive post-proc off, `54985941`) | 0.882 | **0.890** | |
+| Δ (LEAN − FULL) | **+0.020** | **−0.021** | **rank inverted** |
+
+§9.1 predicted LEAN would win on unseen data. It lost by 0.021. Not compression — inversion.
+
+**Root cause: we had the contamination backwards.** The premise was "the LB test is contaminated,
+golden-8 is clean." The opposite is true. `test/` is a dev sample swapped at rerun (`docs/data.md`),
+so the LB has always been scored on real hidden crops. Meanwhile the pilkwang weights saw all 199
+train volumes — golden-8 included — so golden-8 is the leaky measurement. We were using the
+inflated instrument to overrule the clean one.
+
+**Consequences:**
+- The **LB is our best available signal** for tuning this pipeline. Local golden-8/REP-VAL numbers
+  are for models we train ourselves with the split honestly held out.
+- §9.2's dead levers (division specialist, detection-ensembling-to-add, node pruning) were all
+  killed on golden-8 → **re-open them**, each with one LB probe. STRATEGY itself already warned the
+  local division metric is an approximation not to be tuned against.
+- §9.6's "our edge is generalization discipline" no longer follows from the evidence.
+
+### 10.2 The unspent resource: submissions
+Deadline **2026-09-29**, 5 subs/day → **~300+ submissions remaining**; we have used 6. We were
+rationing submissions to protect a CV that does not predict the target. Real throughput limit is
+compute (~6h/run, 2 concurrent GPU sessions) → **~2–4 configs/day**, still ~150+ measurements.
+
+Noise floor: two 99.4%-identical pipelines scored 0.911 vs 0.912 ⇒ effects **≥0.005 are readable**.
+
+Overfitting-to-public risk is real but low: public and private are both hidden crops from the same
+two embryos, so public is a fair proxy. Mitigation = keep final-2 hedged, don't just submit the two
+best public scores.
+
+### 10.3 Plan, ordered by EV
+1. **Close the repro gap (no compute, no submissions).** Author reports ~0.94 for
+   `unet_transformer`; our repro got **0.911**. That 0.03 dwarfs any knob. Diff our kernel against
+   the published notebook line-by-line: config preset, checkpoints, TTA, attached datasets, and
+   whether their 0.94 includes division metric-augmentation.
+2. **LB coordinate descent from the 0.912 config.** One knob at a time, ordered by metric leverage:
+   `DET_THRESHOLD` (trades edge_J against the negative-node-ratio bonus) → `ILP_APPEARANCE/
+   DISAPPEARANCE_WEIGHT` → `DUAL_SEED_EDGE_THRESHOLD` → `SECONDARY_EDGE_WEIGHT` → safe-division
+   geometry. Record every (config → LB) pair in `docs/experiments.md`.
+3. **Re-probe the "dead" levers on the LB**, one submission each — divisions first
+   (`0.1·division_jaccard` is up to 0.1 of the score and has never been measured on real test data).
+4. **Then** diverse edge-ensembling (playbook #2). Deprioritize retrain+pseudo-label (#3): highest
+   ceiling but multi-day GPU steered by the instrument we just caught mis-ranking.
+
+### 10.5 Where the remaining headroom actually is — the node-ratio multiplier (thesis)
+Decompose the field's ~0.93: `edge_J ≈ 0.89` × `multiplier ≈ 1.03` + a small division term. Everyone
+is optimizing `edge_J`, which is near its ceiling. **The multiplier is the untouched term.**
+
+Two facts, both verified in-repo, combine into a big free lunch:
+- **Only edges touching ANNOTATED GT nodes are scored** (`docs/metric.md`). A predicted edge between
+  two unannotated cells is neither TP nor FP — **invisible to `edge_J`**.
+- **Annotation is ~3.6% of the node budget.** Over 199 train volumes (`docs/gt_stats.csv`):
+  median `nodes/est_n_nodes` = **0.0356** (mean 0.061, p90 0.151); median est 17,909 vs 659 annotated.
+
+So ~95% of what we predict can only ever affect the score through `1 − 0.1·ratio`, where
+`ratio = (N_pred − N_total)/N_total` and **negative ratio is a bonus**:
+
+| N_pred as % of `est_n_nodes` | ratio | multiplier |
+|---|---|---|
+| 75% (≈ where the pipeline sits today) | −0.25 | 1.025 |
+| 50% | −0.50 | 1.050 |
+| 30% | −0.70 | 1.070 |
+| 10% | −0.90 | **1.090** |
+
+Pruning from ~75% → ~10% of the budget is **+6% relative ≈ +0.055 absolute** — the whole 0.912→0.932
+gap and more — *at zero `edge_J` cost, provided the pruned nodes are ones that were never scored.*
+Selective pruning may even *raise* `edge_J` by removing FP edges near annotated cells.
+
+**The problem this reduces to: predict which cells the annotators traced.** That is a supervised
+problem with 199 labelled volumes — model the *annotation process*, not the biology. Rank predicted
+tracks by P(annotated) from features (track length, lifespan, t-start, intensity, local density,
+position), keep the top-K, tune K on the LB. Needs high recall on annotated cells; precision is free.
+
+Note §9.2 called node pruning "tapped out" — that was *unselective* pruning (min-track-length) scored
+on the leaky harness. A learned annotation-likelihood ranker is a different lever.
+
+**First experiment is free** (no GPU, no submission): on train GT, check whether annotated cells are
+predictable from track features. If AUC is high, this is the winning move.
+
+### 10.4 Honest bottom line (replaces §9.6)
+We spent a session building measurement infrastructure around a leaky harness and drew a confident,
+wrong conclusion from it. The correction is cheap and the position is fine: best is 0.912, target
+0.932, and we have ~300 unspent measurements on the only instrument that is actually clean. The work
+now is disciplined LB search, explaining the 0.03 repro gap, and testing the §10.5 node-ratio thesis
+— which, if it holds, is worth more than every knob in §10.3 combined.
 
 ## 8. Operational notes
 
