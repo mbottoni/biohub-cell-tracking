@@ -1,0 +1,11 @@
+{
+  "id": "maruanbottoni/biohub-ctrack-test",
+  "title": "biohub ctrack test",
+  "code_file": "ctrack_test.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": ["maruanbottoni/ctrack-src"]
+}
