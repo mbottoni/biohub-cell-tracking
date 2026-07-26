@@ -29,6 +29,19 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# --------------------------------------------------------------------------- deps
+# The plain CPU image has no zarr (the GPU pipeline image gets it via the support pack), and
+# load_geff needs it to read the GT stores. Needs enable_internet in kernel-metadata.json.
+try:
+    import zarr  # noqa: F401
+except ModuleNotFoundError:
+    import subprocess
+
+    print("zarr missing -- installing", flush=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "zarr"], check=True)
+    import zarr  # noqa: F401
+print("zarr", zarr.__version__, flush=True)
+
 # --------------------------------------------------------------------------- ctrack import
 # The ctrack-src dataset ships the package CONTENTS at the root (no ctrack/ folder), so the
 # path has to be discovered and, if needed, re-rooted under a real `ctrack` package dir.
