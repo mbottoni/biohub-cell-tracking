@@ -312,6 +312,38 @@ on the leaky harness. A learned annotation-likelihood ranker is a different leve
 **First experiment is free** (no GPU, no submission): on train GT, check whether annotated cells are
 predictable from track features. If AUC is high, this is the winning move.
 
+### 10.6 The public "metric hack" decoded — and it contradicts our division metric
+Pulled the three top public notebooks (2026-07-26). Two are literally titled *metric hack*.
+
+`kirneo/metric-hack-last-call-update` (101 votes) post-processes a clean submission with
+`augment_dataset()`:
+- one **hub node** at `t=−1000, (z,y,x)=(−10000,−10000,−10000)`, with an edge to the **root of each
+  of the top `MAX_COMPONENTS=3400` connected components** — collapsing the predicted forest into a
+  single tree;
+- a chain of **`FORKS=32` fabricated 2-child divisions** hanging off that hub, also out-of-volume.
+
+The author's own comments show LB hillclimbing on both knobs (`20→30→40` forks;
+`2600→3400→3800` components, "Хочу 3800" = *I want 3800*). **So on the real scorer, this pays.**
+
+**But our metric implementation says it should be a no-op.** `src/ctrack/eval/biohub.py:170` states
+outright that unmatched predicted divisions are excluded, "which is exactly why the public fake
+forks augmentation is a free no-op here" — and the hub edges should if anything *hurt* `edge_J` as
+FPs on matched roots. Our docstring already flagged the gap: we implement the simple out-degree
+form, while the reference `score_divisions` "verifies daughter-lineage coverage via grandchildren
+and a bipartite matching."
+
+⇒ **Our division metric does not match the official one**, and the field has empirically found the
+difference. This independently undermines §9.2's "division specialist is DEAD" — that verdict was
+produced by the approximate division term *and* the leaky harness. Divisions are worth up to 0.1 of
+the score and remain unmeasured by us on real test data.
+
+Position unchanged: we do not ship the exploit. But we should stop treating our local division
+number as evidence of anything.
+
+Also noted: `outwrest/metric-hack-minimal-baseline-tta-2gpu` (79 votes) is a **bare** pipeline —
+UNet + transformer edge + ILP + TTA, *zero* post-processing, straight to CSV. That a stripped
+baseline is competitive is weak evidence that the elaborate post-proc stack is worth little.
+
 ### 10.4 Honest bottom line (replaces §9.6)
 We spent a session building measurement infrastructure around a leaky harness and drew a confident,
 wrong conclusion from it. The correction is cheap and the position is fine: best is 0.912, target

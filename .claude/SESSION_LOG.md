@@ -46,11 +46,39 @@ Deadline 2026-09-29, 5/day → **~300+ remaining, 6 used.** We were rationing su
 CV that doesn't predict the target. Compute is the real limit (~6h/run, 2 GPU slots → 2–4/day).
 Noise floor ~0.001 (two 99.4%-identical pipelines scored 0.911 vs 0.912) ⇒ effects ≥0.005 readable.
 
+## Launched: two node-ratio probes (both RUNNING, ~6h)
+
+Generated mechanically from the 0.912 two-seeds notebook by `scripts/local/make_probe_kernels.py`,
+so the only difference from our best submission is the thing being measured:
+- `maruanbottoni/biohub-probe-pad-node-ratio-diagnostic` — appends `0.5 × N_pred` edgeless nodes far
+  outside the volume. They cannot match GT (7µm radius) and create no edges, so they move **N_pred
+  and nothing else**. Predicted: **−0.033** if the multiplier is live and unclamped, **−0.011** if
+  negative ratio is clamped at 0. Diagnostic only.
+- `maruanbottoni/biohub-probe-min-track-len-20` — `OUTPUT_MIN_TRACK_LEN` 6 → 20, config-only. The
+  real lever: GT tracks are ~37 nodes, so short components are mostly unannotated.
+
+⚠ Kaggle creates kernels under the **title**-derived slug, not the `id` we send — ids in
+`kernel-metadata.json` were repointed at the created slugs (and pinned in the generator).
+
+## The public "metric hack" decoded (STRATEGY §10.6)
+
+`kirneo/metric-hack-last-call-update`: a hub node at t=−1000/(−10000,−10000,−10000) wired to the
+roots of the top 3400 connected components, plus 32 fabricated out-of-volume divisions. The author's
+comments show LB hillclimbing on both knobs — **so it pays on the real scorer**. But
+`src/ctrack/eval/biohub.py:170` says it should be a **no-op** under our metric. ⇒ **our division
+term ≠ the official one** (we implement the out-degree form; the reference does daughter-lineage
+coverage via grandchildren + bipartite matching). Another reason §9.2's "divisions are dead" is not
+evidence. We still don't ship the exploit.
+
+Also: `outwrest/metric-hack-minimal-baseline-tta-2gpu` is a bare UNet+transformer+ILP+TTA pipeline
+with **zero** post-processing and is competitive — weak evidence the post-proc stack is worth little.
+
 ## Next steps
-1. Free experiment: is annotation predictable from track features? (§10.5 gate)
-2. Close the 0.03 repro gap — diff our kernel vs the published `unet_transformer` notebook (no compute).
-3. LB coordinate descent from the 0.912 config: `DET_THRESHOLD` → ILP weights → dual-seed → secondary edge.
-4. Re-probe the "dead" levers on the LB, one submission each (divisions first).
+1. Read the two probe results (~6h) → is the multiplier live? does len-20 gain?
+2. Free experiment: is annotation predictable from track features? (§10.5 gate)
+3. Close the 0.03 repro gap — diff our kernel vs the published `unet_transformer` notebook (no compute).
+4. LB coordinate descent from the 0.912 config: `DET_THRESHOLD` → ILP weights → dual-seed → secondary edge.
+5. Re-probe the "dead" levers on the LB, one submission each (divisions first).
 
 ---
 
