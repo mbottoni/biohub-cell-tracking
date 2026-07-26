@@ -58,6 +58,22 @@ Memories: `.claude/memory/`.
 3. Keep only LB-confirmed winners; reserve **final-2** private picks for durable submissions.
 4. (Optional) Full-notebook golden-8 harness to tune the safe-division/post-proc env vars.
 
+## Update (2026-07-25 late) — overfit, dead levers, CV skew, playbook
+
+- **LEAN > FULL on golden-8** (0.882 vs 0.862): the `selected_94` additive post-proc (gap-close,
+  gap2, motion-relink, safe-divisions, linefit) is OVERFIT to the contaminated LB test and hurts
+  held-out edge_J. LEAN submitted (`54985941`). This is the generalization/money-board edge.
+- **Dead levers (verified locally):** (a) division specialist — precision hopeless (0–3 TP for
+  23–119 FP), every config worse; (b) detector-ensembling-to-ADD — metric rewards under-detection
+  (ratio ≈ −0.3 is a BONUS), so adding cells lowers score; (c) node pruning — tapped out.
+- **Adversarial validation: golden-8 is SKEWED** — 2× denser (est 37k vs 17.6k) + embryo-balanced
+  (50/50 vs train 35/65). CV not representative → built REP-VAL (12 vols, matched density/embryo);
+  re-running LEAN vs FULL there (`rep_full`, `rep_lean`) to confirm the generalization finding.
+- **Kaggle playbook status:** #1 CV (have, fixing skew), #4 adversarial-val (done), #5/#6 mostly
+  done in-pipeline. UNTAPPED: **#2 diverse edge-ensembling** (local-association-ranker + DeepCenter/
+  Spotiflow, blend edge probs) and **#3 retrain+pseudo-label** (hold out REP-VAL, densify sparse GT).
+- **Next:** REP-VAL result → lock LEAN → #2 ensembling → #3 retrain. See docs/STRATEGY.md §9.
+
 ## Assets / IDs
 
 - GitHub: https://github.com/mbottoni/biohub-cell-tracking

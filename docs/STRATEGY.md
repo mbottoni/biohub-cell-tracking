@@ -137,6 +137,74 @@ Prioritize by metric leverage: edge_jaccard (linking + detection of annotated ce
 
 **Submission budget:** 5/day. As of 2026-07-25: 3 used (E005, two-seeds, unet_transformer repro).
 
+---
+
+## 9. Update (2026-07-25 late) — overfit finding, dead levers, CV skew, the winning playbook
+
+### 9.1 The post-processing is overfit → LEAN generalizes better (the money-board edge)
+Ran the FULL pipeline vs a LEAN variant (additive post-proc OFF: gap-close, gap2, motion-relink,
+safe-divisions, linefit) on the golden-8 harness:
+- **FULL selected_94: 0.862** golden-8 vs **0.912 LB**  (~0.05 gap)
+- **LEAN: 0.882** golden-8 (edge_J 0.870→0.893) — the additive post-proc *hurts* held-out edge_J.
+- Monotonic: less post-proc → better generalization. The `selected_94` post-proc is tuned to the
+  contaminated LB test and costs ~0.02–0.04 on unseen data. **On the private board, overfit configs
+  drop and LEAN rises.** LEAN submitted (`54985941`). This is our strongest genuine play.
+- MINIMAL (all post-proc off incl. subtractive) ERRORED — some cleanup steps are structurally
+  required; LEAN is the best *working* lean config.
+
+### 9.2 Dead levers (verified locally, so we don't waste submissions)
+- **Division specialist — DEAD.** Metric TP needs a predicted division at a matched GT-division
+  parent; precision is hopeless (geometry gates give 0–3 TP for 23–119 FP), and the wrong 2nd-child
+  edges also drop edge_J. Every div-adding config scored WORSE. Ceiling of ~4 TP (6 GT divs, only 4
+  have 2 detected children) is unreachable without flooding FP. This is why the field uses the fake-
+  division exploit — real divisions are unwinnable. (Our local div metric is also an approximation;
+  do not tune against it.)
+- **Detector-ensembling-to-ADD — DEAD.** Metric is `adj = edge_J·(1 − 0.1·ratio)`, ratio =
+  (N_pred−N_total)/N_total. The pipeline UNDER-detects (ratio ≈ −0.2 to −0.3) and **negative ratio is
+  a BONUS**. Adding detections shrinks the bonus → lowers score. (Also why LEAN>FULL: fewer added nodes.)
+- **Node pruning — tapped out.** LEAN already at the node-count optimum; pruning harder loses
+  annotated cells and edge_J collapses.
+
+### 9.3 Adversarial validation — our CV is SKEWED (important)
+golden-8 (seed 0) is NOT representative of train:
+
+| | golden-8 | rest-of-train |
+|---|---|---|
+| est. total cells/vol | 36,976 | 17,637 |
+| annotation density | 0.017 | 0.039 |
+| embryo mix | 50/50 | 35/65 (6bba-heavy) |
+
+golden-8 is ~2× denser (harder) and embryo-balanced. So part of the FULL 0.862-vs-LB-0.912 gap is
+*difficulty*, not only overfit (the LEAN>FULL comparison is same-volume so still valid, but absolute
+numbers/node-count tuning may not transfer). **Fix:** REP-VAL — a representative 12-vol holdout
+(8 6bba/4 44b6, density ≈ train median). Re-running LEAN vs FULL on REP-VAL to confirm the
+generalization finding before trusting it further. Kernels: `rep_full`, `rep_lean`.
+
+### 9.4 The Kaggle-winning playbook, ordered, with our status
+1. **Trust CV over LB** — have it; #4 showed it's skewed → fixing with REP-VAL. Our #1 asset given contamination.
+2. **Diverse ensembling** — UNTAPPED, highest-EV remaining absolute lever. Blend the
+   `local-association-ranker` (diverse edge model) + DeepCenter/Spotiflow at the EDGE-probability level
+   (not detection-union, which hurts via the node bonus). Targets the dominant edge_jaccard term.
+3. **Retrain + pseudo-labeling** — UNTAPPED, highest ceiling, multi-day GPU. Hold out REP-VAL for clean
+   CV; pseudo-label to densify the ~0.4–10% sparse GT.
+4. **Adversarial validation** — DONE (found the skew).
+5. **Metric-aware (legit)** — mostly done (under-detection bonus, avoid overfit post-proc).
+6. **Seed/fold avg + TTA** — mostly done in-pipeline (dual-seed + D4 TTA).
+7. **Final-2 selection** — {LEAN → private bet, selected_94 → LB hedge}, near the 2026-09-29 deadline.
+
+### 9.5 Next steps
+1. **REP-VAL LEAN-vs-FULL** (running) — gate: does LEAN win on a representative holdout? If yes, lock LEAN.
+2. **#2 diverse edge-ensembling** — blend the local-association-ranker; measure on REP-VAL.
+3. **#3 retrain holding out REP-VAL + pseudo-label** — the real absolute-score investment.
+4. Watch pending LB scores (LEAN `54985941`, repro `54983506`) to cross-check overfit story on the real test.
+
+### 9.6 Honest bottom line
+The fast/local absolute-score levers are exhausted — divisions, detection-ensembling-to-add, and
+pruning are all dead. Our genuine edge is **generalization discipline** (a verified CV + the lean
+config that wins held-out where the field overfits the contaminated LB). Bigger absolute gains need
+**diverse edge-ensembling (#2)** or **retraining+pseudo-labeling (#3)**. #1 is not guaranteed, but the
+strategy targets the private board that pays, which most of the field is not optimizing for.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
