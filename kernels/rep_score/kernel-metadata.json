@@ -1,0 +1,17 @@
+{
+  "id": "maruanbottoni/biohub-rep-score",
+  "title": "biohub rep score",
+  "code_file": "rep_score.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "competition_sources": [
+    "biohub-cell-tracking-during-development"
+  ],
+  "dataset_sources": [
+    "maruanbottoni/ctrack-src",
+    "maruanbottoni/biohub-repval-submissions"
+  ]
+}
