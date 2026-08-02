@@ -490,10 +490,15 @@ edge, which is a plain FP against `edge_J` — the term holding ~99% of the scor
 "every div-adding config scored WORSE" without needing the leaky harness to explain it: we were
 adding ~90 divisions per volume where ~1 exists.
 
-⇒ Priority: (1) **`divoff`** — divisions as a *removal* lever; (2) even-weight ensembling of the two
-400ep seeds (`secw`, `swapw`); (3) architectural / different-family diversity — but note the
-`cellmot-baseline-artifacts` dataset is *attached but never referenced* in both notebooks that ship
-it, so that lead is unverified; (4) stop spending submissions on post-processing knobs.
+⇒ Priority **(SUPERSEDED by §13 — see below)**: (1) `divoff`; (2) even-weight seed ensembling
+(`secw`, `swapw`); (3) cross-family diversity — unverified, since `cellmot-baseline-artifacts` is
+*attached but never referenced* in both notebooks that ship it; (4) no more post-processing knobs.
+
+**§13 replaces the ordering above.** The EDA shows `edge_J ≈ recall²`, so **detection recall is the
+lever** and the association head is the smaller term. Current priority:
+1. **Lower `DET_THRESHOLD`** (0.96, then 0.95) — quantified break-even, one submission each (§13.4).
+2. `divoff`, `swapw` — already built, cheap confirmations.
+3. `edgeft` — still worth submitting as a blendable diverse member, but it targets the smaller term.
 
 **Method note:** the `Artifact name:` line was in our logs from the first run. A diagnostic that
 greps for the wrong filename is worse than none — it produced a confident answer from an absent
