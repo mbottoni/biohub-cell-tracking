@@ -26,8 +26,20 @@ cells). Explains the public POINT_THRESHOLD=0.955. Threshold sweep in progress.
 
 | 8 | 07-25 | 3 | **owned pipeline**: base-16 detector + distance-ILP | 5 held-out val, thr sweep | edge_J **0.546** (best @0.95) | — | Monotonic 0.95:0.546→0.99:0.096. Detector over-detects (29k nodes) & isn't confidence-calibrated; distance linking hangs edge FPs. Far below 0.888 frontier -- detector needs GPU-scale training (base-32 TemporalUNet). |
 
+| 9 | 08-01 | LB | **probe: MIN_TRACK_LEN 6→20** (node-ratio multiplier, §10.5) | probe_len20 | — | _pending_ | Nodes 122.8k→96.1k (−22%), very uneven: 44b6_0b24845f −57%, 44b6_0113de3b −13%. Kernel had run 07-26 but was never submitted. |
+| 10 | 08-01 | LB | **probe: pad +0.5·N_pred isolated far-field nodes** | probe_pad | — | _pending_ | Isolates the multiplier term: added nodes carry no edges, so only `1−0.1·ratio` moves. |
+| 11 | 08-01 | LB | **IDEA 1: D4 shared-point edge TTA** (pilkwang 0.916 line) | d4edge | — | _pending_ | 8 inverse-aligned encoder views → transformer per view → association logits averaged before sigmoid→ILP. `edge=d4, w_identity=0.125`. Nodes 119.0k→120.3k (+1.0%, unexplained — expected 0). Predict 11.05 min vs 9.23 base. |
+| 12 | 08-01 | LB | **IDEA 2: harmonic detection fusion** (yusuketogashi 0.915 line) | harmonic | — | _pending_ | `1/((1−w)/p₁ + w/p₂)` replaces the arithmetic two-seed blend. Nodes 119.0k→115.6k (−2.9%) as designed. Single-lever verified: only replacement [1] of 6 differs from the 0.912 base. |
+
 **Reference points:** public LB ~0.897, strong rule-based ~0.857. Blob baseline 0.644. Learned
 detector recall is there; the work is converting it to score via threshold + node-count control.
+
+## Runtime (measured 08-01, supersedes the "~6h/run" figure in STRATEGY §10.2)
+
+A full inference kernel is **~21 min end-to-end**, not ~6h: setup 4.5 min, prediction 9.2 min
+(2 GPU shards over the 4 dev-sample volumes), post-proc + nbconvert 7.5 min. Compute is therefore
+*not* the throughput limit — the **5 submissions/day** is. Note each submission triggers a full
+notebook rerun on hidden test, and batched submissions appear to serialize in the queue.
 
 **Local MPS timing:** ~1.6 s/step warm (base-16, 64³), ~3.5 min/epoch on 24 vols. `--calibrate`
 over-estimates ~2× (measures cold steps before MPS kernel warmup) — trust the first real
