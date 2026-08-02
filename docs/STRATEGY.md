@@ -1,8 +1,10 @@
 # Strategy & Findings — Biohub Cell Tracking (living doc)
 
-**Updated:** 2026-07-26 (v3 — LEAN scored 0.890 on the real LB, **falsifying** the §9 overfit
-thesis; see **§10**, which supersedes §9 wherever they conflict). Supersedes the strategic
-sections of `PLAN.md` where they conflict.
+**Updated:** 2026-08-02 (v4 — six LB measurements landed. The public "metric hack" is a **net
+negative** on the real board, and the §10.5 node-ratio thesis is **dead**: we sit at ~97% of the
+node budget, not 75%, and annotated cells are not identifiable from track structure. See **§11**,
+which supersedes §10.5/§10.6 wherever they conflict.) Supersedes the strategic sections of
+`PLAN.md` where they conflict.
 Goal: **surpass public LB 0.932** on the custom tracking metric ($60k, deadline 2026-09-29,
 kernels-only). See also `docs/metric.md`, `docs/data.md`, `docs/detector.md`, `docs/experiments.md`.
 
@@ -278,6 +280,12 @@ best public scores.
    ceiling but multi-day GPU steered by the instrument we just caught mis-ranking.
 
 ### 10.5 Where the remaining headroom actually is — the node-ratio multiplier (thesis)
+
+> ☠ **DEAD — falsified 2026-08-02 by direct LB measurement. See §11.2.** The premise below (that we
+> sit at ~75% of the node budget with a 1.025 multiplier) is wrong: the `probe_pad` diagnostic pins
+> us at **~97%**, multiplier **~1.003**. And the closing proposal — rank tracks by P(annotated) —
+> is not buildable from the features named: annotated cells are structurally indistinguishable from
+> unannotated ones (§11.3). Kept for the metric algebra, which is still correct.
 Decompose the field's ~0.93: `edge_J ≈ 0.89` × `multiplier ≈ 1.03` + a small division term. Everyone
 is optimizing `edge_J`, which is near its ceiling. **The multiplier is the untouched term.**
 
@@ -313,6 +321,13 @@ on the leaky harness. A learned annotation-likelihood ranker is a different leve
 predictable from track features. If AUC is high, this is the winning move.
 
 ### 10.6 The public "metric hack" decoded — and it contradicts our division metric
+
+> ⚠ **The central inference below is WRONG (corrected 2026-08-02, §11.1).** This section read
+> kirneo's LB hillclimbing comments as proof that "on the real scorer, this pays." Matching every
+> hack-publishing author to their leaderboard row shows the opposite: they all sit *below* the clean
+> line (kirneo 0.908, xiaoleilian 0.889, outwrest 0.881). `src/ctrack/eval/biohub.py:170` was right
+> — the fake forks are a no-op and the hub edges cost `edge_J`. What survives: the observation that
+> our division metric differs from the official one, and that divisions remain unmeasured by us.
 Pulled the three top public notebooks (2026-07-26). Two are literally titled *metric hack*.
 
 `kirneo/metric-hack-last-call-update` (101 votes) post-processes a clean submission with
@@ -350,6 +365,91 @@ wrong conclusion from it. The correction is cheap and the position is fine: best
 0.932, and we have ~300 unspent measurements on the only instrument that is actually clean. The work
 now is disciplined LB search, explaining the 0.03 repro gap, and testing the §10.5 node-ratio thesis
 — which, if it holds, is worth more than every knob in §10.3 combined.
+
+## 11. Update (2026-08-02) — six LB reads: the hack is negative, the multiplier is tapped
+
+Best is now **0.913** (`kernels/d4edge`), rank **137 / 1881** (was 267/1858). Supersedes §10.5/§10.6.
+
+### 11.1 The public Code section is misleading — the metric hack LOSES points
+Matching every notebook author to their leaderboard row (the leaderboard CSV carries usernames):
+
+| author | notebook | rank | LB |
+|---|---|---|---|
+| xiaoleilian | mix-divaug, claimed +0.08 | 888 | 0.889 |
+| outwrest | metric-hack-minimal | 1021 | 0.881 |
+| kirneo | metric-hack-last-call (108 votes) | 417 | **0.908** |
+| kaiwalyaatulraut | biohub-cell-tracking-solution | 599 | 0.901 |
+| boristown | V5–V9 ladder, 113 subs | 349 | 0.911 |
+
+Every hack publisher is *below* the clean line. Sorting the Code section by score ranks the hack
+notebooks top because that sort is not the leaderboard. **Do not ship the exploit** — not for
+ethics here, but because it costs points, exactly as `src/ctrack/eval/biohub.py:170` predicted.
+
+### 11.2 There is a hard wall at 0.913, and the node budget is nearly full
+~10 teams forking the clean `selected_101` notebook all land on **0.913** regardless of effort
+(prvsiyan 4 subs, nikitagajbhiye30 13, saitejabandaruin 16, indarkarhana 53, amanatar 69). Only
+two public authors clear it: **pilkwang 0.916** (D4 edge TTA) and **yusuketogashi 0.915**
+(harmonic fusion + bidirectional edges).
+
+`probe_pad` (append 0.5·N_pred edgeless far-field nodes; only the multiplier can move) gives two
+equations that solve the decomposition. With `D = 0.1·division_jaccard`:
+
+    base − pad = edge_J · 0.05k = 0.044   →   edge_J · k = 0.88
+    base = edge_J(1.1 − 0.1k) + D         →   1.1·edge_J + D = 1.00
+
+| if D = | edge_J | k = N_pred/est_n_nodes | multiplier |
+|---|---|---|---|
+| 0.00 | 0.909 | 0.968 | 1.003 |
+| 0.02 | 0.891 | 0.988 | 1.001 |
+| 0.05 | 0.864 | 1.019 | 0.998 |
+
+**Under every assumption we sit at ~97–102% of the node budget with a multiplier of ~1.00** — not
+the 75% / 1.025 of §10.5. §9.2's "the pipeline UNDER-detects (ratio ≈ −0.2 to −0.3) and negative
+ratio is a BONUS" is therefore also wrong; the ratio is ≈ −0.03. (Note the *marginal* trade is
+unchanged — the multiplier is linear in k — so this does not by itself re-open threshold tuning.)
+
+### 11.3 Selective pruning is not buildable — annotated cells are not marked
+§10.5's proposal was to rank tracks by P(annotated) and keep the top-K. Measured on all 199 train
+GEFF graphs (`scripts/local/annotation_structure.py`, 4,435 annotated tracks / 133,318 nodes):
+
+- **Length does not separate.** Annotated components are *short*: median 21 nodes, p25 = 12.
+  A `min_len=20` rule keeps only **54.7%** of annotated tracks and **82.8%** of annotated nodes —
+  i.e. it discards 17% of the scored material, which is why `probe_len20` lost 4.8% of `edge_J`.
+- **Span does not separate.** Median annotated component spans **22%** of the movie, p25 = 13%.
+- **Position does not separate.** The annotated bounding box covers a median **71%** of the volume;
+  centroids sit at (0.49, 0.49, 0.51) with sd ≈ 0.08 — dead centre by symmetry, i.e. scattered.
+
+Annotation behaves like a **random ~3.6% sample** (median `nodes/est_n_nodes` = 0.0356), which is
+what an unbiased evaluation set should look like. So there is no cheap feature to rank on, and
+every prune we ran lost more `edge_J` than it gained:
+
+| | nodes | multiplier gain | edge_J cost | net LB |
+|---|---|---|---|---|
+| harmonic fusion | −2.9% | +0.3% | −2.8% | 0.889 (−0.023) |
+| min_track_len 20 | −21.7% | +2.1% | −4.8% | 0.886 (−0.026) |
+
+Break-even needs the `edge_J` loss under `0.0966·p`. **Treat the multiplier as tapped out.**
+
+### 11.4 What the six reads say about the remaining levers
+
+| lever | LB | verdict |
+|---|---|---|
+| D4 edge TTA (idea 1) | 0.913 (+0.001) | within noise (≥0.005 readable); our best config, not proven better |
+| harmonic fusion (idea 2) | 0.889 (−0.023) | dead |
+| node pruning (idea 3) | 0.886 / 0.868 | dead as a lever, invaluable as calibration |
+| bidirectional edges (idea 4) | built, unsubmitted | likely subsumed by 8-view edge TTA |
+| **divisions** | probe running | **the only untested term worth up to 0.1** |
+| **retraining** | not started | **highest ceiling** — see below |
+
+`edge_J ≈ 0.909` is where the entire public field is frozen, and everyone shares the same
+**50-epoch** weights. Longer-trained variants demonstrably exist (pilkwang references `300ep`, and
+a `400ep` TTA comment appears in the support pack). Rank 8 scored **0.930 on a single submission** —
+someone who arrived with a model rather than hill-climbing into one. The leaders' +0.03 over the
+wall is most plausibly **in the weights, not the post-processing**, which is consistent with the
+0.913 cluster having spent hundreds of submissions on post-processing without breaking through.
+
+⇒ Priority: (1) finish the division measurement, (2) retrain on all 199 volumes for many more
+epochs, (3) stop spending submissions on post-processing knobs.
 
 ## 8. Operational notes
 

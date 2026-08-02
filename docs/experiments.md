@@ -26,10 +26,19 @@ cells). Explains the public POINT_THRESHOLD=0.955. Threshold sweep in progress.
 
 | 8 | 07-25 | 3 | **owned pipeline**: base-16 detector + distance-ILP | 5 held-out val, thr sweep | edge_J **0.546** (best @0.95) | — | Monotonic 0.95:0.546→0.99:0.096. Detector over-detects (29k nodes) & isn't confidence-calibrated; distance linking hangs edge FPs. Far below 0.888 frontier -- detector needs GPU-scale training (base-32 TemporalUNet). |
 
-| 9 | 08-01 | LB | **probe: MIN_TRACK_LEN 6→20** (node-ratio multiplier, §10.5) | probe_len20 | — | _pending_ | Nodes 122.8k→96.1k (−22%), very uneven: 44b6_0b24845f −57%, 44b6_0113de3b −13%. Kernel had run 07-26 but was never submitted. |
-| 10 | 08-01 | LB | **probe: pad +0.5·N_pred isolated far-field nodes** | probe_pad | — | _pending_ | Isolates the multiplier term: added nodes carry no edges, so only `1−0.1·ratio` moves. |
-| 11 | 08-01 | LB | **IDEA 1: D4 shared-point edge TTA** (pilkwang 0.916 line) | d4edge | — | _pending_ | 8 inverse-aligned encoder views → transformer per view → association logits averaged before sigmoid→ILP. `edge=d4, w_identity=0.125`. Nodes 119.0k→120.3k (+1.0%, unexplained — expected 0). Predict 11.05 min vs 9.23 base. |
-| 12 | 08-01 | LB | **IDEA 2: harmonic detection fusion** (yusuketogashi 0.915 line) | harmonic | — | _pending_ | `1/((1−w)/p₁ + w/p₂)` replaces the arithmetic two-seed blend. Nodes 119.0k→115.6k (−2.9%) as designed. Single-lever verified: only replacement [1] of 6 differs from the 0.912 base. |
+| 9 | 08-01 | LB | **probe: MIN_TRACK_LEN 6→20** (node-ratio multiplier, §10.5) | probe_len20 | — | **0.886** | Nodes 122.8k→96.1k (−22%), very uneven: 44b6_0b24845f −57%, 44b6_0113de3b −13%. Kernel had run 07-26 but was never submitted. |
+| 10 | 08-01 | LB | **probe: pad +0.5·N_pred isolated far-field nodes** | probe_pad | — | **0.868** | Isolates the multiplier term: added nodes carry no edges, so only `1−0.1·ratio` moves. |
+| 11 | 08-01 | LB | **IDEA 1: D4 shared-point edge TTA** (pilkwang 0.916 line) | d4edge | — | **0.913** | +0.001 vs base = **within noise** (≥0.005 readable). Our best config but not proven better. 8 inverse-aligned encoder views → transformer per view → logits averaged before sigmoid→ILP. Nodes 119.0k→120.3k (+1.0%, unexplained — expected 0). Predict 11.05 min vs 9.23 base. |
+| 12 | 08-01 | LB | **IDEA 2: harmonic detection fusion** (yusuketogashi 0.915 line) | harmonic | — | **0.889** | **−0.023, dead.** Nodes −2.9% bought +0.3% multiplier and cost 2.8% edge_J. Single-lever verified. |
+| 13 | 08-02 | local | **Annotation structure over 199 GT graphs** | `scripts/local/annotation_structure.py` | — | n/a | Kills §10.5's ranker. Annotated components: median **21 nodes**, span **22%** of movie, bounding box **71%** of volume, centroid (0.49,0.49,0.51)±0.08. `min_len=20` keeps only 54.7% of annotated tracks / 82.8% of annotated nodes → explains exp 9's edge_J loss. Annotation ≈ random 3.6% sample. |
+| 14 | 08-02 | LB | **Division probe: SAFE_DIV rate caps ×5** (geometry fixed) | divprobe | — | _running_ | Off the 0.913 d4edge best. Measures the only term worth up to 0.1 that has never been read on real test. |
+
+### Decomposition of our 0.913 (from exp 10, the pad probe)
+
+`probe_pad` adds edgeless far-field nodes, so only the multiplier can move. Two scores ⇒ two
+equations: `edge_J·k = 0.88` and `1.1·edge_J + 0.1·div_J = 1.00`. Under every assumption about the
+unknown division term, **k = N_pred/est_n_nodes ≈ 0.97–1.02 and the multiplier ≈ 1.00** — the node
+budget is full, not 75% full as §10.5 assumed. `edge_J ≈ 0.909` carries ~99% of the score.
 
 **Reference points:** public LB ~0.897, strong rule-based ~0.857. Blob baseline 0.644. Learned
 detector recall is there; the work is converting it to score via threshold + node-count control.
