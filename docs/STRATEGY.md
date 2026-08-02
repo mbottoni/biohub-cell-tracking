@@ -741,6 +741,47 @@ our 0.96875.
 ⇒ Next experiment: **lower `DET_THRESHOLD`** (0.96875 -> 0.96 and 0.95), one submission each.
 Read `nodes` from run_stats to get `dk` and back out the realised recall gain.
 
+### 13.5 The node budget is wildly uneven ACROSS volumes — and the multiplier is per-volume
+
+`src/ctrack/eval/biohub.py:247` — `adj_edge_jaccard = np.mean(per-volume adj)`. The multiplier is
+applied **per volume and macro-averaged**, while `edge_jaccard` is micro-averaged (summed counts).
+So node-budget calibration matters per volume, not in aggregate.
+
+At our fixed `DET_THRESHOLD=0.96875` (d4edge, LB 0.913), using `run_stats` nodes against
+`gt_stats.est_n_nodes` for the four dev-test volumes:
+
+| volume | N_pred | est_n_nodes | k | ratio | multiplier |
+|---|---|---|---|---|---|
+| 44b6_0113de3b | 25,535 | 25,755 | 0.991 | −0.009 | 1.0009 |
+| **44b6_0b24845f** | 18,503 | 32,795 | **0.564** | −0.436 | **1.0436** |
+| 6bba_05b6850b | 6,217 | 6,362 | 0.977 | −0.023 | 1.0023 |
+| 6bba_05db0fb1 | 70,021 | 69,800 | 1.003 | +0.003 | 0.9997 |
+| aggregate | 120,276 | 134,712 | 0.893 | −0.107 | 1.0107 |
+
+**Three volumes sit at k ≈ 0.98–1.00; one detects only 56% of its estimated cells.** A 1.78× spread
+from a single global threshold.
+
+`44b6_0b24845f` is a persistent outlier across three independent measurements: k = 0.564 here, the
+worst loss under `probe_len20` (−57% of nodes), and the largest seed disagreement in `swapw` (+12%).
+It is the volume the model is least sure about, and it is *earning* a 4.4% multiplier bonus by
+under-detecting — almost certainly while destroying its own `edge_J`, since `edge_J ≈ recall²`.
+
+**Prediction for `thr096`/`thr095`:** a global threshold drop is three small effects plus one large
+one. The three saturated volumes cross k = 1 into multiplier penalty for modest recall gain; the
+under-detected volume gains a lot of recall while giving up bonus it should never have had. If the
+scores come back muted, that mixture is why — and it argues for adaptivity rather than a lower
+global constant.
+
+**Caveat on §11.2.** The pad-probe solve (`k ≈ 0.968`) assumed a *single global* k. With the
+multiplier applied per volume over a 1.78× spread, that figure is an effective aggregate, not a
+per-volume truth. The qualitative conclusion (multiplier ≈ 1.00, no large bonus to protect) stands;
+the precise number should not be over-read.
+
+**Blocked follow-up:** per-volume adaptive thresholding targeting k ≈ 1 would fix this directly, but
+`estimated_number_of_nodes` lives in the `.geff` `extra` metadata and `test/` ships **`.zarr` only**
+(`docs/data.md`). It is not available at inference. A proxy would have to be estimated from the
+image itself, or from detection counts at a reference threshold.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
