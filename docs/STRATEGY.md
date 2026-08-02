@@ -536,7 +536,58 @@ materialises `weights/` as a **symlink into the read-only `/kaggle/input` mount*
 a real copy before training, then write-probe the directory.
 
 Confirmed by run 1: the competition `train` mount carries **199 zarr + 199 geff, all usable**.
-Still unmeasured: s/iter on a T4 — the number that decides whether training is feasible here at all.
+
+Run 2 **PASSED**. Measured on a Kaggle T4 (8 iterations, batch 4, 6 train / 2 val volumes):
+
+| config | s/iter | h/epoch (199 vols) | h @100 epochs | checkpoint | `load_model` |
+|---|---|---|---|---|---|
+| window 2 | **3.90** | 5.34 | 534 | 8.4 MB ✓ | ✓ `window_size=2` |
+| window 3 | **11.18** | 15.13 | 1513 | 8.4 MB ✓ | ✓ `window_size=3` |
+
+Both checkpoints wrote with a correct `config.json` and reloaded through the *inference* loader.
+
+**A T4 is ~8× slower than the author's hardware** (their 1217 s/epoch over ~2,463 iters implies
+≈0.49 s/iter). ⇒ **From-scratch training is infeasible here**: 100 epochs = 534 GPU-h against a
+remaining quota of ~240 GPU-h (30/week × 8 weeks).
+
+Caveats on the measurement: 8 iterations includes CUDA/cuDNN warmup, so 3.90 s/iter is probably
+pessimistic — re-measure over ~50 iterations before committing. And validation returned
+`acc=0.0000 recall=0.0000`, which is expected for a randomly-initialised model that detects nothing
+but means **the early-stopping metric is still untested**; warm-start must be shown to produce
+non-zero validation before it is trusted to stop a long run.
+
+### 12.4 Making iterations fast without sacrificing performance
+Audited the shipped trainer: `autocast` 0, `GradScaler` 0, `cudnn.benchmark` 0, `channels_last` 0,
+no window caching. Everything below is therefore additive. Speed factors are **estimates** unless
+marked measured; each row gives what it costs to verify.
+
+| # | change | why it does not cost accuracy | est. speedup | time to verify |
+|---|---|---|---|---|
+| 1 | **Warm-start** `--unet-weights` from the 400ep checkpoint | starts from a converged model; we need displacement, not convergence | **~20× fewer epochs** (400 → ~15) | one re-smoke, **~15 min** |
+| 2 | **Freeze the UNet, train only the edge transformer** | detection recall is already 97.5% and saturated; `edge_J` is the bottleneck and 99% of the score. `max_nodes=11` (measured) confirms the transformer is tiny — the volumetric encoder is the cost | 2–4× | one re-smoke, **~15 min** |
+| 3 | **AMP fp16 + `GradScaler`**, `cudnn.benchmark=True` | tensor-core path on 3D convs; fixed 64³ shapes make autotuning pay back immediately | 2–3× | one re-smoke, **~15 min** |
+| 4 | **Cache preprocessed windows as a Kaggle dataset** | pure I/O, no model change | removes **~30 min/session** (measured: 71 s for 8 volumes ⇒ ~30 min for 199) | build dataset ~40 min, then **~15 min** to verify |
+| 5 | **Batch 8** (the public config's value) | standard; better GPU utilisation | ~1.3× | folded into any re-smoke |
+| 6 | **Drop window-3** | measured 2.9× slower *and* the dual-seed blender rejects mismatched inference grids, so it needs its own pipeline | avoids a 2.9× tax | already measured |
+
+Stacked (1+2+3+5), 5.34 h/epoch should fall to roughly **0.5–1.0 h/epoch**.
+
+### 12.5 End-to-end timings — what each step costs before you see a number
+
+| step | measured / estimated | notes |
+|---|---|---|
+| kernel setup (wheels, repo, weights copy) | **~8.3 min** measured | paid every kernel run |
+| load 199 train volumes | **~30 min** est. from 71 s / 8 vols | → ~0 with idea 4 |
+| re-smoke a speed change | **~15 min** measured (11.6 min run 2) | the unit of iteration for §12.4 |
+| full warm-start training, 15 epochs | **~10–15 GPU-h** est. after 1+2+3+5 | fits one 12 h session; 534 h without them |
+| inference with the new checkpoint | **~21 min** measured | dev-sample commit run |
+| LB rerun after submitting | **~4–6 h** measured (08-02 batch) | hidden-test rerun, not the commit run |
+| **training change → LB number** | **~16 h** | 9 h train + 0.4 h infer + ~6 h rerun |
+
+Budget context: ~30 GPU-h/week, 12 h session cap, deadline 2026-09-29, **5 submissions/day**.
+A single training experiment costs roughly half a week of GPU quota, so verify each §12.4 change
+with a 15-minute re-smoke *before* spending it — the smoke has already caught one fatal bug
+(§12.3) that would otherwise have surfaced hours into a long run.
 
 ## 8. Operational notes
 

@@ -37,6 +37,13 @@ cells). Explains the public POINT_THRESHOLD=0.955. Threshold sweep in progress.
 | 17 | 08-02 | LB | **Swap primary/secondary checkpoints** | swapw | — | _queued_ | Reinterpreted after §11.5: both are 400-epoch models, so this measures **seed variance**, not a training-quality gap. **Ran; the seeds disagree per-volume far more than in total** — nodes 120,276→120,617 (+0.28%) but per-volume Δ = −658, **+2,252 (+12%)**, −296, −957. Totals cancel; the models genuinely see different cells. |
 | 18 | 08-02 | LB | **SECONDARY_EDGE_WEIGHT 0.15 → 0.50** | secw | — | _running_ | Two equal-quality 400ep seeds deserve an even blend; 0.85/0.15 under-uses the second model. Row 17's per-volume divergence makes this the **stronger of the two ensembling bets** — it perturbs edge logits substantially, where swapw's totals barely move. |
 
+| 19 | 08-02 | smoke | **Training smoke run 1** | trainsmoke v1 | — | **FAIL** | `weights/` is a symlink into read-only `/kaggle/input` ⇒ `OSError [Errno 30]`, no checkpoint. Both arms died in ~8 s. Confirmed the train mount: **199 zarr + 199 geff, all usable**. |
+| 20 | 08-02 | smoke | **Training smoke run 2** (symlink fixed) | trainsmoke v2 | — | **PASS** | T4, batch 4, 8 iters. **window2 3.90 s/iter → 5.34 h/epoch**; **window3 11.18 s/iter → 15.13 h/epoch**. Both checkpoints (8.4 MB) reload via inference `load_model`. `max_nodes=11`. ⇒ T4 is ~8× slower than the author's hardware; from-scratch is infeasible (534 GPU-h @100ep vs ~240 h quota). Caveat: 8 iters includes warmup; validation returned 0/0 (untrained model) so the early-stop metric is **untested**. |
+
+**Timing reference (measured 08-02).** Kernel setup ~8.3 min · load 199 volumes ~30 min ·
+re-smoke ~15 min · inference run ~21 min · LB rerun ~4–6 h · **training change → LB number ~16 h**.
+See STRATEGY §12.5 for the full table and §12.4 for the speedup plan with per-idea verification cost.
+
 **Seed variance is the live lever (08-02).** Row 17 is the first evidence that anything in this
 pipeline still has slack: two independently-seeded 400-epoch models produce up to 12% different node
 counts on the same volume. Detection recall is 97.5% and `edge_J` is stuck at 0.909 across the whole
