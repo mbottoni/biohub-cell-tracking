@@ -54,6 +54,24 @@ print("TRAIN_DIR:", TRAIN_DIR, "exists:", TRAIN_DIR.exists(), flush=True)
 if not TRAIN_DIR.exists():
     raise FileNotFoundError(f"no train mount at {TRAIN_DIR}")
 
+# Smoke run 1 died here: dataspec sets WEIGHTS_PATH = <repo>/weights, and the
+# setup cell materialises that as a SYMLINK into the read-only /kaggle/input
+# mount (link_or_copy_tree prefers os.symlink). Training then cannot write its
+# checkpoint -- "[Errno 30] Read-only file system". Replace the symlink with a
+# real copy so the directory is writable while still holding the pretrained
+# weights that --unet-weights warm-starts from.
+import shutil
+_w = REPO_DIR / "weights"
+if _w.is_symlink():
+    _target = _w.resolve()
+    print(f"weights/ is a symlink -> {_target}; copying to make it writable", flush=True)
+    _w.unlink()
+    shutil.copytree(_target, _w)
+probe = _w / ".write_probe"
+probe.write_text("ok")
+probe.unlink()
+print(f"weights dir writable: {_w}", flush=True)
+
 zarrs = {p.name[:-5] for p in TRAIN_DIR.glob("*.zarr")}
 geffs = {p.name[:-5] for p in TRAIN_DIR.glob("*.geff")}
 stems = sorted(zarrs & geffs)

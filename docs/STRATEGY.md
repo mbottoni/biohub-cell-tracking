@@ -499,6 +499,45 @@ it, so that lead is unverified; (4) stop spending submissions on post-processing
 greps for the wrong filename is worse than none — it produced a confident answer from an absent
 file. Check `ARTIFACT_MANIFEST.json` before trusting any dataset slug.
 
+## 12. Training our own model (2026-08-02) — do NOT copy the public recipe
+
+### 12.1 The public model's validation is fully leaky — 400 epochs is not a target
+`secondary_seed_weights/.../split_manifest.json` reports **train=199, validation=40, overlap=40**.
+Every validation volume is also a training volume (`dataset_splits_alltrain.json`, method
+`unet_transformer_alltrain_seed314159_v1`). Two of them — `44b6_0113de3b`, `44b6_0b24845f` — are
+the visible test volumes.
+
+Consequences:
+- Their `validation_score` is a **training-set score**. It cannot detect overfitting, so "best
+  epoch 381" was selected on a metric that cannot tell memorisation from generalisation, and the
+  +0.032 gain from epoch 50 → 381 is not evidence that 400 epochs are needed.
+- Their selection metric compounds it: `score = acc · recall` with `acc = 0.9998`, so selection is
+  effectively **maximise node recall** — on a pipeline whose detection recall is already 97.5%,
+  whose bottleneck is `edge_J`, and whose metric *penalises* over-detection via the node ratio.
+
+⇒ Train against a clean holdout and early-stop on it. Expect convergence far below 400 epochs.
+⇒ 138 GPU-h (400 epochs at their 1217 s/epoch) was never the right budget to plan against.
+
+### 12.2 The honest split (`configs/honest_split.json`)
+`scripts/local/make_honest_split.py` — 169 train / 30 holdout, **overlap 0**, stratified by embryo
+× density tercile so the holdout matches the corpus (median density 0.029 vs corpus 0.0356), unlike
+the §9.3 golden-8 which was ~2× denser than train. The 4 dev-test volumes are forced into the
+holdout so validation is measured on exactly what the visible LB scores.
+
+### 12.3 Smoke test first — and it already earned its keep
+`kernels/trainsmoke` (built off d4edge cells 0-7, so the environment matches inference) proves the
+loop before any GPU-days are committed, and measures s/iter on a **T4** rather than trusting the
+author's hardware.
+
+Run 1 **FAILED**, as intended: `dataspec.WEIGHTS_PATH = <repo>/weights`, but the setup cell
+materialises `weights/` as a **symlink into the read-only `/kaggle/input` mount**
+(`link_or_copy_tree` prefers `os.symlink`), so training cannot write a checkpoint —
+`OSError: [Errno 30] Read-only file system`. Both arms died in ~8 s. Fix: replace the symlink with
+a real copy before training, then write-probe the directory.
+
+Confirmed by run 1: the competition `train` mount carries **199 zarr + 199 geff, all usable**.
+Still unmeasured: s/iter on a T4 — the number that decides whether training is feasible here at all.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
