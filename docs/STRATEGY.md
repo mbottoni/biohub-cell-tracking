@@ -615,6 +615,32 @@ Corrected recipe: **batch 4, no cudnn.benchmark, warm start ON, freeze ON, `--ma
 early-stop on the honest split.** Next smoke must vary exactly one thing to confirm the rate
 returns to ~3.1 s/iter.
 
+### 12.8 Edge-head fine-tune — smoke PASS, and freezing is worth 4.3x not 1.25x
+
+`kernels/edgeft_smoke` (batch 4, no cudnn.benchmark, warm start + frozen UNet):
+
+| measure | value |
+|---|---|
+| **s/iter** | **0.90** (baseline 3.90; fasttrain batch-8 22.23) |
+| full run 10,000 steps | **2.5 GPU-h** (was estimated 4–9) |
+| warm start | matched **136/136** tensors |
+| frozen | 580,386 trainable / 2,076,706 (**27.9%**) |
+| grid vs primary | window 2, downsample (1,4,4) — **BLENDABLE: True** |
+
+**This isolates the §12.6 regression.** Freezing measured only 1.25× at batch 8 with
+`cudnn.benchmark`; at batch 4 without it the same change yields **3.90 → 0.90 s/iter**. The batch-8
+regime was masking the benefit, not merely adding overhead. (Part of the 4.3× is better warmup
+amortisation over 20 iters vs 8, so treat 4.3× as the config-level gain, not freezing alone.)
+
+Consequence: the whole "training is infeasible on Kaggle" conclusion was an artifact of measuring
+the wrong configuration. 10,000 steps at 0.90 s/iter is **2.5 GPU-h** — under one tenth of a week's
+quota, against the 534 GPU-h a 100-epoch batch-8 plan implied.
+
+Two cosmetic issues left in the log, neither blocking: the summary line still prints
+"Best score (acc*recall)" though selection now uses `-test_loss`, and `test_loss` prints at 4 dp so
+it reads as 0.0000 — the selection uses the float, and it did discriminate (epoch 0 best, epoch 1
+not), but the log cannot show the margin. Worth widening if early stopping ever looks indecisive.
+
 ### 12.5 End-to-end timings — what each step costs before you see a number
 
 | step | measured / estimated | notes |
