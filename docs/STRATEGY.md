@@ -466,10 +466,34 @@ sha `12f6881e…`, secondary `9bac2fa0…`), not a weak/strong pair. The seconda
 equal-quality models should be blended more evenly than 0.85/0.15, so raising
 `SECONDARY_EDGE_WEIGHT` to 0.50 is a proper 2-model ensemble rather than a fix for a bad primary.
 
-⇒ Priority: (1) finish the division measurement — still the only untested term worth up to 0.1;
-(2) even-weight ensembling of the two seeds (`secw`); (3) architectural / different-family
-diversity (e.g. the `cellmot-baseline-artifacts` line) rather than more epochs of the same model;
-(4) stop spending submissions on post-processing knobs.
+### 11.6 The division term is a liability, not an opportunity (2026-08-02)
+The 4 visible test volumes are byte-identical to train volumes, so their ground truth is already in
+`docs/gt_stats.csv`. It says:
+
+| volume | GT divisions |
+|---|---|
+| 44b6_0113de3b | 0 |
+| 44b6_0b24845f | 0 |
+| 6bba_05b6850b | 0 |
+| 6bba_05db0fb1 | **3** |
+
+**Three annotated divisions in total — and our pipeline inserts 350.** Across all 199 train volumes
+the median is **0** divisions per volume (mean 0.8, max 5; 112 volumes have none).
+
+`divprobe` (rate caps ×5) confirmed the caps were never the constraint: candidates 355→355, added
+323→350, `safe_division_skipped_cap` = 0 in *both* the probe and the baseline. It was not submitted
+— a +27-division delta on 120k nodes cannot be read.
+
+So the term cannot be farmed by adding more. Worse, each inserted division carries a second-child
+edge, which is a plain FP against `edge_J` — the term holding ~99% of the score. `kernels/divoff`
+(`OUTPUT_SAFE_DIVISIONS=0`) asks what those 350 spurious divisions cost. This also explains §9.2's
+"every div-adding config scored WORSE" without needing the leaky harness to explain it: we were
+adding ~90 divisions per volume where ~1 exists.
+
+⇒ Priority: (1) **`divoff`** — divisions as a *removal* lever; (2) even-weight ensembling of the two
+400ep seeds (`secw`, `swapw`); (3) architectural / different-family diversity — but note the
+`cellmot-baseline-artifacts` dataset is *attached but never referenced* in both notebooks that ship
+it, so that lead is unverified; (4) stop spending submissions on post-processing knobs.
 
 **Method note:** the `Artifact name:` line was in our logs from the first run. A diagnostic that
 greps for the wrong filename is worse than none — it produced a confident answer from an absent
