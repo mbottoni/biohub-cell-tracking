@@ -27,6 +27,30 @@ mistake. Examples now in the doc: §10.6 (concluded the metric hack pays — it 
 (node-ratio thesis, dead), §12.x (argued the association head was the lever — §13 shows detection
 recall is).
 
+## Debug locally first (M1 / MPS), then run on Kaggle
+
+**Prototype and debug on the M1; run real training on Kaggle.** The T4 is ~14× faster per
+iteration (§12.9), but that is throughput. What kills iteration speed is *latency*: a Kaggle cycle
+is push → queue → ~50 s setup → read captured, filtered logs — minutes per attempt. Locally the
+loop is seconds and the traceback is immediate.
+
+    python scripts/local/setup_local_train.py          # materialise + patch (idempotent)
+    python scripts/local/setup_local_train.py --run    # + a short smoke on one volume
+
+Local also gives **richer logs than Kaggle ever showed us** — the trainer prints a per-phase
+breakdown that our kernel log filtering swallowed:
+
+    [timing] data: 4.7s (14%) | forward: 15.2s (47%) | backward: 12.6s (39%)
+
+Two bugs this session — the `os` NameError inside a patch, and the read-only weights symlink —
+would each have been caught locally in seconds instead of a ~6 min kernel round trip. Any new
+patch to the trainer should be exercised locally before it is pushed.
+
+MPS specifics: conv3d **backward** on MPS is ~2.5× slower than CPU while **forward** is ~1.5×
+faster. With the UNet frozen — the config we actually run — that profile suits us. For full
+fine-tuning pass `--cpu`. Do not size hardware decisions from local timings; see the proxy warning
+below.
+
 ## Measurement discipline
 
 These are earned, not stylistic:
