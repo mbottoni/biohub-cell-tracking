@@ -566,7 +566,7 @@ marked measured; each row gives what it costs to verify.
 | 1 | **Warm-start** `--unet-weights` from the 400ep checkpoint | starts from a converged model; we need displacement, not convergence | **~20× fewer epochs** (400 → ~15) | one re-smoke, **~15 min** |
 | 2 | **Freeze the UNet, train only the edge transformer** | detection recall is already 97.5% and saturated; `edge_J` is the bottleneck and 99% of the score. `max_nodes=11` (measured) confirms the transformer is tiny — the volumetric encoder is the cost | 2–4× | one re-smoke, **~15 min** |
 | 3 | **AMP fp16 + `GradScaler`**, `cudnn.benchmark=True` | tensor-core path on 3D convs; fixed 64³ shapes make autotuning pay back immediately | 2–3× | one re-smoke, **~15 min** |
-| 4 | **Cache preprocessed windows as a Kaggle dataset** | pure I/O, no model change | removes **~30 min/session** (measured: 71 s for 8 volumes ⇒ ~30 min for 199) | build dataset ~40 min, then **~15 min** to verify |
+| 4 | **Cache preprocessed windows as a Kaggle dataset** | pure I/O, no model change | removes **~5–12 min/session** (corrected: the 71 s figure was whole-run wall including train+val; actual load is ~12–28 s for 8 volumes ⇒ ~5–12 min for 199) | build dataset ~40 min, then **~15 min** to verify |
 | 5 | **Batch 8** (the public config's value) | standard; better GPU utilisation | ~1.3× | folded into any re-smoke |
 | 6 | **Drop window-3** | measured 2.9× slower *and* the dual-seed blender rejects mismatched inference grids, so it needs its own pipeline | avoids a 2.9× tax | already measured |
 
@@ -576,8 +576,8 @@ Stacked (1+2+3+5), 5.34 h/epoch should fall to roughly **0.5–1.0 h/epoch**.
 
 | step | measured / estimated | notes |
 |---|---|---|
-| kernel setup (wheels, repo, weights copy) | **~8.3 min** measured | paid every kernel run |
-| load 199 train volumes | **~30 min** est. from 71 s / 8 vols | → ~0 with idea 4 |
+| kernel setup (wheels, repo, weights copy) | **4.5 min** measured (fasttrain) | of which **~3.7 min is copying the secondary seed checkpoint, which TRAINING DOES NOT USE** — drop that dataset from training kernels |
+| load 199 train volumes | **~5–12 min** est. from ~12–28 s / 8 vols | → ~0 with idea 4. ⚠ an earlier revision said ~30 min, from misreading whole-run wall as load time |
 | re-smoke a speed change | **~15 min** measured (11.6 min run 2) | the unit of iteration for §12.4 |
 | full warm-start training, 15 epochs | **~10–15 GPU-h** est. after 1+2+3+5 | fits one 12 h session; 534 h without them |
 | inference with the new checkpoint | **~21 min** measured | dev-sample commit run |
