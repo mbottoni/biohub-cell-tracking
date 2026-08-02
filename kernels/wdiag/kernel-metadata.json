@@ -1,0 +1,14 @@
+{
+  "id": "maruanbottoni/biohub-weights-diagnostic",
+  "title": "biohub weights diagnostic",
+  "code_file": "wdiag.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": [
+    "pilkwang/biohub-tracking-support-pack-50ep-v1",
+    "pilkwang/biohub-temporal-unet3d-seed314159-v1"
+  ]
+}
