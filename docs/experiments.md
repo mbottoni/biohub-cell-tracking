@@ -34,8 +34,14 @@ cells). Explains the public POINT_THRESHOLD=0.955. Threshold sweep in progress.
 | 14 | 08-02 | — | **Division probe: SAFE_DIV rate caps ×5** (geometry fixed) | divprobe | — | **not submitted** | **No-op — caps were never binding.** candidates 355→355, added 323→**350**, `safe_division_skipped_cap`=0 in *both* runs. A +27-division delta on 120k nodes is unreadable. Not worth a submission; kept as the record of why. |
 | 15 | 08-02 | local | **GT division census** (`docs/gt_stats.csv`) | — | — | n/a | The 4 visible test volumes are byte-identical to train (docs/data.md) so their GT is known: **3 annotated divisions total** (0/0/0/3). Across all 199 volumes: median **0** per volume, mean 0.8, max 5, **112 volumes have zero**. We insert **350**. ⇒ the division lever points at *removal*. |
 | 16 | 08-02 | LB | **Divisions OFF** (`OUTPUT_SAFE_DIVISIONS=0`) | divoff | — | _queued_ | Each inserted division also adds a second-child edge = plain FP against edge_J. Tests what 350 spurious divisions cost. |
-| 17 | 08-02 | LB | **Swap primary/secondary checkpoints** | swapw | — | _running_ | Reinterpreted after §11.5: both are 400-epoch models, so this measures **seed variance**, not a training-quality gap. |
-| 18 | 08-02 | LB | **SECONDARY_EDGE_WEIGHT 0.15 → 0.50** | secw | — | _running_ | Two equal-quality 400ep seeds deserve an even blend; 0.85/0.15 under-uses the second model. |
+| 17 | 08-02 | LB | **Swap primary/secondary checkpoints** | swapw | — | _queued_ | Reinterpreted after §11.5: both are 400-epoch models, so this measures **seed variance**, not a training-quality gap. **Ran; the seeds disagree per-volume far more than in total** — nodes 120,276→120,617 (+0.28%) but per-volume Δ = −658, **+2,252 (+12%)**, −296, −957. Totals cancel; the models genuinely see different cells. |
+| 18 | 08-02 | LB | **SECONDARY_EDGE_WEIGHT 0.15 → 0.50** | secw | — | _running_ | Two equal-quality 400ep seeds deserve an even blend; 0.85/0.15 under-uses the second model. Row 17's per-volume divergence makes this the **stronger of the two ensembling bets** — it perturbs edge logits substantially, where swapw's totals barely move. |
+
+**Seed variance is the live lever (08-02).** Row 17 is the first evidence that anything in this
+pipeline still has slack: two independently-seeded 400-epoch models produce up to 12% different node
+counts on the same volume. Detection recall is 97.5% and `edge_J` is stuck at 0.909 across the whole
+public field, so if two seeds disagree that much, an ensemble of them is under-exploited at
+0.85/0.15. Ordering for the next submissions: `secw` (0.50 blend) → `divoff` → `swapw`.
 
 ### Decomposition of our 0.913 (from exp 10, the pad probe)
 
