@@ -572,6 +572,49 @@ marked measured; each row gives what it costs to verify.
 
 Stacked (1+2+3+5), 5.34 h/epoch should fall to roughly **0.5–1.0 h/epoch**.
 
+### 12.6 Fast-iteration smoke — MEASURED: batch 8 + cudnn.benchmark is a 3x REGRESSION
+
+`kernels/fasttrain`, T4, 24 iters, window 2, three arms sharing batch 8 + `cudnn.benchmark`:
+
+| run | s/iter | h/epoch | vs 3.90 s/iter baseline | val_acc | val_recall |
+|---|---|---|---|---|---|
+| A cold, UNet trainable | 28.95 | 19.80 | **0.27×** | 0.9987 | 0.9051 |
+| B + warm start | 27.91 | 19.09 | **0.28×** | 0.9998 | 0.9743 |
+| C + frozen UNet | 22.23 | 15.21 | **0.35×** | 0.9998 | **0.9842** |
+
+**Every arm is ~3× SLOWER than the batch-4 baseline.** Ideas 5 (batch 8) and cudnn.benchmark are
+rejected. Cause not isolated — both were changed globally across all three arms, which was a
+methodology error: this file had just argued for one change per smoke.
+
+The strongest clue is **validation**, which is forward-only and therefore untouched by freezing:
+it costs **513–519 s in all three arms** vs **12.4 s** in the batch-4 smoke (§12.3) — 42× worse,
+~21 s/batch vs 0.26 s/batch. An 80× cost for a 2× batch is not normal scaling. Suspect batch 8
+exceeding T4 VRAM (first UNet layer alone is ~4.3 GB at 8×2×32×64³) and thrashing the allocator,
+or `cudnn.benchmark` re-autotuning per shape. Untangle with one arm each.
+
+**What did work, and is now verified:**
+- **Warm start (idea 1) — confirmed by construction.** `matched 136/136 tensors; 0 left at init`,
+  and the quality shows it: after 24 iterations, cold reaches recall 0.9051 (edge loss 0.0055) while
+  warm reaches **0.9743** (edge loss 0.0001). The `--unet-weights` trap is real and avoided.
+- **Freezing (idea 2) is only 1.25× on training**, not the estimated 2–4× — the UNet *forward* still
+  runs to produce features; only its backward is skipped. It does **not** speed up validation at all.
+  But it gave the **best validation recall of the three (0.9842)** at 27.9% of the parameters.
+- **The early-stop metric works** — closes the §12.3 caveat that it had only ever returned zeros.
+
+### 12.7 The reframe: count STEPS, not epochs
+"Epoch" is an arbitrary unit here, and planning against it is what made training look infeasible.
+With a warm start we do not need passes over all 199 volumes — we need enough optimizer steps to
+displace the model. At the corrected batch-4 rate with freezing (≈3.1 s/iter est.), **5,000 steps
+≈ 4.3 GPU-h** and **10,000 steps ≈ 8.6 GPU-h** — both inside one 12 h session and one week's quota,
+against the 534 GPU-h that a naive 100-epoch plan implied.
+
+Use `--max-iters` to define a short epoch (e.g. 500 steps) so validation and checkpointing happen
+often enough for early stopping on `configs/honest_split.json` to bite.
+
+Corrected recipe: **batch 4, no cudnn.benchmark, warm start ON, freeze ON, `--max-iters 500`,
+early-stop on the honest split.** Next smoke must vary exactly one thing to confirm the rate
+returns to ~3.1 s/iter.
+
 ### 12.5 End-to-end timings — what each step costs before you see a number
 
 | step | measured / estimated | notes |
