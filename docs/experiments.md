@@ -34,12 +34,21 @@ cells). Explains the public POINT_THRESHOLD=0.955. Threshold sweep in progress.
 **Reference points:** public LB ~0.897, strong rule-based ~0.857. Blob baseline 0.644. Learned
 detector recall is there; the work is converting it to score via threshold + node-count control.
 
-## Runtime (measured 08-01, supersedes the "~6h/run" figure in STRATEGY §10.2)
+## Runtime — two different numbers, do not conflate them (measured 08-01)
 
-A full inference kernel is **~21 min end-to-end**, not ~6h: setup 4.5 min, prediction 9.2 min
-(2 GPU shards over the 4 dev-sample volumes), post-proc + nbconvert 7.5 min. Compute is therefore
-*not* the throughput limit — the **5 submissions/day** is. Note each submission triggers a full
-notebook rerun on hidden test, and batched submissions appear to serialize in the queue.
+**Commit run (what we watch): ~21 min end-to-end.** Setup 4.5 min, prediction 9.2 min, post-proc +
+nbconvert 7.5 min. But this runs over the **4-volume dev sample** in `test/`, not the real test set.
+
+**Scoring rerun (what sets the LB): ≥2h, not yet measured.** At submission Kaggle swaps in the
+hidden test set (`docs/data.md`) and reruns the whole notebook. Four submissions on 08-01 were still
+`pending` at 122 min / 91 min with no error. If the hidden set holds ~10× the dev sample's volumes,
+prediction alone scales from 9 min to ~1.5h, which would make STRATEGY §10.2's "~6h/run" a
+description of *this* number and broadly right.
+
+⚠ An earlier revision of this section claimed the ~21 min figure superseded §10.2 and that compute
+is not the throughput limit. That was wrong — it compared a dev-sample run against a hidden-test
+rerun. Iteration on configs is cheap; **getting a score is not**. Measure the true rerun latency
+before planning around it.
 
 **Local MPS timing:** ~1.6 s/step warm (base-16, 64³), ~3.5 min/epoch on 24 vols. `--calibrate`
 over-estimates ~2× (measures cold steps before MPS kernel warmup) — trust the first real
