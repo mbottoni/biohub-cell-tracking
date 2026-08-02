@@ -641,6 +641,32 @@ Two cosmetic issues left in the log, neither blocking: the summary line still pr
 it reads as 0.0000 — the selection uses the float, and it did discriminate (epoch 0 best, epoch 1
 not), but the log cannot show the margin. Worth widening if early stopping ever looks indecisive.
 
+### 12.9 Local M1 / MPS — works, but ~14x slower than a T4. Use it for debugging, not training.
+
+Ran the real trainer on the M1 (`/tmp/localtrain`, one volume, 10 iters, batch 4). It needed two
+small patches and then trained and checkpointed successfully:
+  * device selection is hardcoded `cuda`-or-`cpu` → added an MPS branch;
+  * three unconditional `torch.cuda.synchronize()` timing calls → guarded.
+
+**Measured: 12.3 s/iter** (unfrozen), against **0.90 s/iter** on a T4 — **13.7× slower**. Internal
+split: data 22%, forward 56%, backward 23%. Freezing removes most of the backward share, so a frozen
+run lands ≈9.5 s/iter — still ~10× the T4. A 10,000-step fine-tune would be **~26 h locally vs
+2.5 GPU-h on Kaggle**.
+
+**A synthetic conv3d proxy badly over-promised.** It measured MPS forward at 58 ms/step and MPS
+1.5× *faster* than CPU forward-only, suggesting MPS might beat the T4. The real UNet forward is
+~3 s/iter — roughly 50× the proxy. A 3-layer conv stack is not a UNet; do not size hardware from a
+toy graph. (Third time this session an extrapolation from a small proxy misled: also the 8-iteration
+s/iter figures and the "71 s ⇒ 30 min" load estimate.)
+
+**Verdict: stay on Kaggle for training.** At 2.5 GPU-h per fine-tune against ~30 GPU-h/week, quota
+allows ~12 runs/week — so quota is *not* the binding constraint for this workload, and local's only
+real advantage does not apply.
+
+**Local is still worth keeping** as a debug environment: it catches code bugs (like the `os`
+NameError that cost a 6-minute kernel cycle) in seconds, with no setup, queue, or GPU slot. Keep
+`/tmp/localtrain` reproducible via the two patches above.
+
 ### 12.5 End-to-end timings — what each step costs before you see a number
 
 | step | measured / estimated | notes |
