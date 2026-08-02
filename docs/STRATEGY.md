@@ -684,6 +684,58 @@ A single training experiment costs roughly half a week of GPU quota, so verify e
 with a 15-minute re-smoke *before* spending it — the smoke has already caught one fatal bug
 (§12.3) that would otherwise have surfaced hours into a long run.
 
+## 13. EDA (2026-08-02) — edge_J is detection-limited, not linking-limited
+
+Measured over all 199 GT graphs (`docs/gt_stats.csv`, volume 104x104x104 um, T=100).
+
+### 13.1 Association is geometrically trivial
+| quantity | value |
+|---|---|
+| GT displacement per frame | **1.82 um** median (p90 3.63, and p90 never exceeds 10 um in any volume) |
+| cells per frame (`est_n_nodes`/100) | 179 median (p90 576) |
+| mean cell spacing | 18.5 um median (p10 12.5) |
+| **displacement / spacing** | **0.103 median**, p90 0.164, **max 0.221** |
+
+A cell moves ~10% of the way to its nearest neighbour between frames; >0.5 is where linking turns
+ambiguous. Even the hardest volume sits at 0.22. Our gates (`MOTION_RELINK_TIGHT` 6.0,
+`RELAXED` 10.0, `OUTPUT_EDGE_MAX` 14.0) are 3-8x larger than typical motion, so they are not binding.
+
+### 13.2 GT is strictly consecutive
+`edge_dt_max = 1.0` and `edge_dt_skip_frac = 0` in **all 199 volumes**. So
+`OUTPUT_ENFORCE_NEXT_FRAME=1` costs nothing, and there is no hidden pool of skip-edges to recover.
+
+### 13.3 edge_J ~ recall^2 — and that closes the whole gap
+An edge scores only if BOTH endpoints are detected, so with linking near-perfect (13.1),
+`edge_J ~ r^2`:
+
+| node recall r | ceiling edge_J |
+|---|---|
+| 0.990 | 0.980 |
+| 0.975 | 0.951 |
+| **0.953** | **0.908** |
+| 0.940 | 0.884 |
+
+Our measured `edge_J = 0.909` implies **effective recall ~0.953**. Detection recall alone explains
+essentially the entire missing 0.09. The public model's reported 0.975 is on the leaky split (12.1).
+
+⇒ **The lever is detection recall on annotated cells, not the association head.** This supersedes
+the 12.x framing that the edge transformer is where the score is lost.
+
+### 13.4 The threshold trade, quantified — and 9.2 retired
+Adding nodes costs `0.1*dk` on the multiplier; recall gain multiplies `edge_J` by `(r'/r)^2`.
+Net positive when **`dr/r > 0.05*dk`**.
+
+Adding 10% more nodes (`k` 0.97 -> 1.07, multiplier 1.003 -> 0.993, -1.0%) pays if recall rises
+>0.5% *relative* (0.953 -> 0.958). A 1-point absolute recall gain is worth **~+0.010**.
+
+This retires 9.2's "detector-ensembling-to-ADD is DEAD", whose premise was a large negative-ratio
+bonus to protect; the pad probe (11.2) showed the multiplier is ~1.00, so there is almost no bonus
+at stake. It also explains why the tuned public forks converged on `DET_THRESHOLD = 0.965`, below
+our 0.96875.
+
+⇒ Next experiment: **lower `DET_THRESHOLD`** (0.96875 -> 0.96 and 0.95), one submission each.
+Read `nodes` from run_stats to get `dk` and back out the realised recall gain.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
