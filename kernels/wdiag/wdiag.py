@@ -16,7 +16,12 @@ from pathlib import Path
 for root in sorted(Path("/kaggle/input").glob("*")):
     print("=" * 70)
     print("DATASET:", root.name)
-    for pat in ("**/history.csv", "**/training_config.json", "**/config.json", "**/SNAPSHOT_MANIFEST.json"):
+    # ARTIFACT_MANIFEST.json first: dataset *slugs* lie. The support pack slug
+    # says "50ep" while its manifest says 400ep-snapshot, and an earlier version
+    # of this script did not glob for that filename -- so it "answered" the
+    # epoch-count question from a file it never read.
+    for pat in ("**/ARTIFACT_MANIFEST.json", "**/history.csv", "**/training_config.json",
+                "**/config.json", "**/SNAPSHOT_MANIFEST.json"):
         for p in sorted(root.glob(pat))[:6]:
             rel = p.relative_to(root)
             if p.name == "history.csv":

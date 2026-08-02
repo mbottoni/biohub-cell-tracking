@@ -441,15 +441,39 @@ Break-even needs the `edge_J` loss under `0.0966·p`. **Treat the multiplier as 
 | **divisions** | probe running | **the only untested term worth up to 0.1** |
 | **retraining** | not started | **highest ceiling** — see below |
 
-`edge_J ≈ 0.909` is where the entire public field is frozen, and everyone shares the same
-**50-epoch** weights. Longer-trained variants demonstrably exist (pilkwang references `300ep`, and
-a `400ep` TTA comment appears in the support pack). Rank 8 scored **0.930 on a single submission** —
-someone who arrived with a model rather than hill-climbing into one. The leaders' +0.03 over the
-wall is most plausibly **in the weights, not the post-processing**, which is consistent with the
-0.913 cluster having spent hundreds of submissions on post-processing without breaking through.
+`edge_J ≈ 0.909` is where the entire public field is frozen, and everyone shares the same public
+checkpoints.
 
-⇒ Priority: (1) finish the division measurement, (2) retrain on all 199 volumes for many more
-epochs, (3) stop spending submissions on post-processing knobs.
+### 11.5 The weights are NOT undertrained — "50ep" is a stale slug (2026-08-02)
+The dataset `pilkwang/biohub-tracking-support-pack-**50ep**-v1` ships an `ARTIFACT_MANIFEST.json`
+that reads `biohub-tracking-support-pack-**400ep**-snapshot-v1`, and every kernel we have ever run
+printed it on the `Artifact name:` line. The primary is a 400-epoch model, not a 50-epoch one.
+
+The two attached checkpoints are therefore **two independently-seeded 400-epoch models** (primary
+sha `12f6881e…`, secondary `9bac2fa0…`), not a weak/strong pair. The secondary's shipped curve
+(`history.csv`: 0.946 @ ep50 → 0.978 @ ep381, gains decelerating — 200-300 mean 0.9685,
+300-400 mean 0.9721) describes both.
+
+**Two consequences:**
+1. "We run the weaker model as primary" is **false**. `kernels/swapw` is a seed-A/seed-B swap and
+   measures seed variance, not a training-quality gap.
+2. **"Retrain for more epochs" is a weak lever.** The public weights are already at 400/500 epochs
+   on all 199 volumes with decelerating validation gains; pushing to 500 looks worth ≈ +0.003 on
+   *validation detection*, which is not where `edge_J` is losing. The leaders' +0.03 is therefore
+   probably **not** more epochs of this architecture.
+
+`kernels/secw` survives the correction with a *better* rationale than it was built on: two
+equal-quality models should be blended more evenly than 0.85/0.15, so raising
+`SECONDARY_EDGE_WEIGHT` to 0.50 is a proper 2-model ensemble rather than a fix for a bad primary.
+
+⇒ Priority: (1) finish the division measurement — still the only untested term worth up to 0.1;
+(2) even-weight ensembling of the two seeds (`secw`); (3) architectural / different-family
+diversity (e.g. the `cellmot-baseline-artifacts` line) rather than more epochs of the same model;
+(4) stop spending submissions on post-processing knobs.
+
+**Method note:** the `Artifact name:` line was in our logs from the first run. A diagnostic that
+greps for the wrong filename is worse than none — it produced a confident answer from an absent
+file. Check `ARTIFACT_MANIFEST.json` before trusting any dataset slug.
 
 ## 8. Operational notes
 
