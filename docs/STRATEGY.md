@@ -782,6 +782,51 @@ the precise number should not be over-read.
 (`docs/data.md`). It is not available at inference. A proxy would have to be estimated from the
 image itself, or from detection counts at a reference threshold.
 
+### 13.6 The threshold lever is real in sign but ~10× weaker than 13.4's arithmetic (2026-08-03)
+
+Both reads landed. `DET_THRESHOLD` 0.96875 (base, 0.913) → **0.96: 0.914** → **0.95: 0.914**.
+
+**This is our first score above the 0.913 wall.** It is also +0.001, at the noise floor (§11.4 puts
+readability at ≥0.005). Two independent configs moving the same direction is weak-but-consistent
+evidence that the sign is right; it is not proof either beats base.
+
+**The shape of the curve is the informative part.** `thr095` adds ~1.7× the nodes `thr096` does and
+returns the same 0.914. Inverting through §11.2's decomposition, +0.001 of score is
+`Δedge_J ≈ +0.001`, i.e. recall 0.9534 → **0.9539 — a tenth of a point**. §13.4's illustration
+("~10% more nodes should buy ~0.5% relative recall, worth +0.005") over-predicted the yield by
+roughly an order of magnitude, and the second half of the node addition bought nothing readable.
+
+**Why: threshold can only admit peaks that already exist.** Detections come from local-max pooling
+over the heat map; the confidence cut then filters those peaks. Lowering the cut recovers cells
+whose peak is *present but low*. It cannot recover a cell that produced **no local maximum at all**
+— merged with a neighbour, or absent from the field. The flatness says the missing ~4.7 recall
+points are mostly of the second kind.
+
+`orfuse` (exp 24) is the same physics observed from the other side: saturating the probability
+field flattened it, local-max pooling then found *no* maxima, and detections were destroyed exactly
+where confidence was highest. Peak *existence*, not peak *height*, is what gates our recall.
+
+⇒ **Retire global-threshold tuning.** Do not spend further submissions on 0.94/0.93; the curve is
+flat where it should be steepest. §13.3's conclusion survives intact — recall is still the lever,
+and `edge_J ≈ recall²` still holds — but the reachable knob is **candidate generation**, not the
+confidence cut. Candidates, in rough EV order:
+
+1. **Peak extraction geometry** — the NMS / local-max window radius. Two cells inside one window
+   yield one detection no matter the threshold, and §13.1 measured mean spacing at 18.5 µm with
+   p10 = 12.5 µm, so crowded volumes are exactly where merging should bite. Note `44b6_0b24845f`,
+   the k = 0.564 outlier of §13.5, is the densest of the four. This parameter is inside the
+   installed inference package, not exposed as a `BIOHUB_*` env var — check whether it is reachable
+   before planning around it.
+2. **`OUTPUT_MIN_TRACK_LEN` 6 → 3 or 2, in the *additive* direction.** Every prune we have run
+   raised it (`len20`, −0.026). The additive direction has never been tested, and §11.3 measured
+   annotated components at p25 = 12 nodes — short tracks are not disproportionately unannotated.
+3. **A detector that finds different cells** — the only route left with a large ceiling, and the
+   one the 0.947 leader is presumably on. Note §11.5: more epochs of *this* architecture is not it.
+
+**Method note.** §13.4 produced a quantitative prediction that was wrong by ~10× and it was still
+the most valuable thing in §13 — it made the flat curve legible as a fact about peak extraction
+rather than as an uninformative null. Keep writing the arithmetic down before the submission.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)

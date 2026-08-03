@@ -46,8 +46,8 @@ See STRATEGY §12.5 for the full table and §12.4 for the speedup plan with per-
 
 | 19b | 08-02 | LB | **secw: SECONDARY_EDGE_WEIGHT 0.15 → 0.50** | secw | — | **0.913** | **Flat vs base.** Even-weight blending of the two 400ep seeds changes nothing, despite 12%/volume node divergence. Retires the ensemble-weight lever. |
 | 21 | 08-02 | train | **Edge-head fine-tune, 10,000 steps** | edgeft | holdout recall 0.961 | **not submitted** | 194 min, 0.69 s/iter. **Epoch 0 never beaten**: test_loss flat at 0.0002 for all 20 epochs, recall drifts 0.9619→0.9608. The association head was already at a local optimum. Not submitted — functionally identical to the model already scored 0.913. |
-| 22 | 08-03 | LB | **DET_THRESHOLD 0.96875 → 0.96** | thr096 | — | _pending_ | nodes +1.1%; per-volume k 0.991/0.564/0.977/1.003 → 0.995/0.589/0.986/1.009. Movement concentrated on the under-detected volume, as §13.5 predicted. |
-| 23 | 08-03 | LB | **DET_THRESHOLD → 0.95** | thr095 | — | _pending_ | nodes +1.9%; k → 0.997/0.607/0.989/1.012. |
+| 22 | 08-03 | LB | **DET_THRESHOLD 0.96875 → 0.96** | thr096 | — | **0.914** | nodes +1.1%; per-volume k 0.991/0.564/0.977/1.003 → 0.995/0.589/0.986/1.009. Movement concentrated on the under-detected volume, as §13.5 predicted. **+0.001 — our first score above the 0.913 wall, but at the noise floor.** |
+| 23 | 08-03 | LB | **DET_THRESHOLD → 0.95** | thr095 | — | **0.914** | nodes +1.9%; k → 0.997/0.607/0.989/1.012. **Same 0.914 as thr096 despite ~1.7× the added nodes** — the curve is flat between 0.96 and 0.95. See §13.6. |
 | 24 | 08-03 | — | **OR-fusion (dual of harmonic)** | orfuse | — | **BUG, not submitted** | Must add nodes; instead nodes −0.1% and volume 3 **lost 23%** (k 0.977→0.750). Cause: harmonic-on-complement saturates to p≈1 when either seed is confident, and the clamp at 1−1e−6 **flattens the logit field**. Peaks come from local-max pooling, so a plateau yields *no* maxima — detections destroyed exactly where confidence is highest. Needs a formulation that raises p without saturating. |
 
 **edge_J ≈ recall² now has two independent confirmations (08-03).**
