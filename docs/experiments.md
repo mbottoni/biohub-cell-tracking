@@ -105,3 +105,4 @@ when it is chosen, and every time it is touched:
 
 - Chosen: _TBD_
 - Touched: _never_
+| 25 | 08-03 | local | **Division geometry over 199 GT graphs** | `scripts/local/division_geometry.py` | — | n/a | Corrects §14. 151 annotated divisions. Real sister separation median **10.57 µm**; our `SAFE_DIV_SISTER_MAX_UM` is **8.5** — below the median of the truth. Exact three-gate admission of real divisions = **0.265**; at (12/12/14.4) it is **0.894**. Ranking `parent_dist + 0.15·sister` sorts **ascending**, so it prefers the least division-like candidates (real divisions score median 5.74, ordinary motion 1.82). ⇒ we are structurally blind to ~3/4 of divisions. Revised EV **+0.01..+0.03** (was +0.02..+0.09). |

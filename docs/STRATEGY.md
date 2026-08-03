@@ -933,6 +933,112 @@ up to 12% per-volume disagreement between the seeds, so the union is materially 
 `MIN_TRACK_LEN` up (§11.3), ensemble blend weights (exp 19b), more training epochs (§11.5), the
 public metric hack (§11.1).
 
+## 15. Division geometry, measured — §14's thesis survives but its numbers were wrong (2026-08-03)
+
+⚠ **Corrects §14.1 and §14.3.** §14 was arithmetic over an unknown TP. This section measures the
+missing quantity on all 199 GT graphs (`scripts/local/division_geometry.py`). The structural
+argument holds; the expected value is **+0.01 .. +0.03, not +0.02 .. +0.09**, and `divoff` is
+**not** the decisive probe §14.3 claimed.
+
+### 15.1 The hole in §14: `div_J = TP/(TP+FP+FN)` is 0 when TP is 0
+
+Removing false positives buys nothing unless we ever hit a real division. §14 never established
+that we do. So: are our gates capable of admitting a real division at all?
+
+`add_safe_divisions_postlink` (cell 11) applies three distance gates — verified by reading the
+code, not the names. A source with exactly one existing child, plus an *orphan* node at t+1:
+
+    child_dist  = d(parent, existing child)   <= SAFE_DIV_EXISTING_CHILD_MAX_UM = 7.65
+    parent_dist = d(parent, candidate)        <= SAFE_DIV_MAX_UM                = 4.66
+    sister_dist = d(existing child, candidate)<= SAFE_DIV_SISTER_MAX_UM         = 8.5
+
+### 15.2 Real divisions look nothing like what the gates select for
+
+151 annotated divisions across 199 volumes (87 volumes have at least one), against 128,581
+ordinary single-child steps:
+
+| quantity | median | p90 |
+|---|---|---|
+| division parent -> daughter (nearer) | **4.08 um** | — |
+| division parent -> daughter (farther) | **7.13 um** | 10.05 |
+| **division sister <-> sister** | **10.57 um** | 14.36 |
+| ordinary (non-dividing) motion | **1.82 um** | 4.14 |
+
+The geometry is self-consistent and physical: a parent splits and the daughters land roughly one
+cell diameter apart (10.6 um), each about half that from the parent's last position (5.3-5.75 um).
+Compare §13.1's mean cell spacing of 18.5 um — sisters really are anomalously close, so the signal
+exists.
+
+**But `SAFE_DIV_SISTER_MAX_UM = 8.5` sits below the median of the truth.** Admission rates for real
+divisions, exact three-gate test allowing either daughter to be the "existing child":
+
+| EXISTING | CAND | SISTER | real divisions admitted |
+|---|---|---|---|
+| **7.65** | **4.66** | **8.5** (current) | **0.265** |
+| 10 | 10 | 12 | 0.616 |
+| 12 | 12 | 14.4 | **0.894** |
+| 12 | 12 | 18 | 0.954 |
+| 99 | 99 | 8.5 | 0.291 |
+
+The sister gate is the binding one: it alone caps us at 0.291. **Our configuration is structurally
+incapable of seeing ~3/4 of all real divisions.**
+
+### 15.3 The ranking is inverted
+
+Within a frame, proposals are sorted by `score = parent_dist + 0.15 * sister_dist`, **ascending** —
+smallest distances win — and truncated at
+`frame_cap = round(n_sources * SAFE_DIV_FRAME_FRAC_CAP)`.
+
+Real divisions score a median 5.74 on that function. Ordinary motion (median step 1.82) scores far
+lower. So the sort actively prefers the *least* division-like candidates, and real divisions —
+which sit in the upper tail of the admitted range — are the first dropped when the cap binds.
+
+**And we do not know whether the cap binds.** §11.6 reported `safe_division_skipped_cap = 0`, but
+that stat is only incremented by the *global* cap; the `frame_cap` break increments nothing. With
+~0.76% of sources per frame, `frame_cap` is order 10 while candidates are plausibly many more.
+**Instrument this before tuning it** — add a counter on the frame-cap break.
+
+### 15.4 Revised expected value, and a falsifiable prediction
+
+Our four dev volumes carry **3** GT divisions and 26.5% gate admission, so expected TP <= 0.8 before
+any detection or linking loss — realistically ~0. With FP ~ 6.4 (§14.1) and FN ~ 3:
+
+    div_J ~ 0.03   =>   contribution ~ 0.003
+
+**Prediction: `divoff` comes back flat (0.913-0.916), not down.** It should gain ~0.003 of `edge_J`
+from dropping ~350 false child edges and lose ~0.003 of division term. §14.3 called it "decisive";
+it is not — the expected result is a null, and a null cannot distinguish "we farm nothing" from
+"two small effects cancelled". **Demote it.** It is still the cheapest bound on `D`, but it is no
+longer the first submission.
+
+**The actual play is the opposite of what the config does now:** widen the gates so real divisions
+are *admissible*, then cut the count hard with a *correct* ranking. Concretely —
+
+1. `SAFE_DIV_SISTER_MAX_UM` 8.5 -> **14.4**, `SAFE_DIV_MAX_UM` 4.66 -> **12**,
+   `SAFE_DIV_EXISTING_CHILD_MAX_UM` 7.65 -> **12**. Admission 0.265 -> 0.894.
+2. Replace the ascending `parent_dist + 0.15*sister_dist` sort with a **likelihood-shaped** score,
+   e.g. `|sister - 10.6| + |parent - 5.3|`, which peaks on the measured division geometry instead
+   of on stationary cells.
+3. Turn on `BIOHUB_DEEPCENTER_SAFE_DIV_VETO` (currently `'0'`, while the analogous gap veto is `1`)
+   and tighten `SAFE_DIV_GLOBAL_FRAC_CAP` so the total insert count *falls* even as the gates widen.
+
+Estimated outcome: TP from ~0 to perhaps 40-60% of GT divisions, FP held near current levels by the
+tighter caps => `div_J ~ 0.1-0.26` => **+0.01 .. +0.03**. The +0.1 ceiling needs near-perfect
+division detection and is not reachable by gate tuning alone.
+
+### 15.5 What survives from §14 unchanged
+
+- FP is counted **only at matched nodes**, and annotation over the dev volumes is 2,193 nodes
+  against 120,276 predicted (**1.6%**). Our ~350 insertions therefore cost only ~6 visible FPs.
+  This is why divisions are cheap to get wrong and valuable to get right.
+- The division term is still the largest unclaimed pool on the board, and still the only plausible
+  account of the LB's dense shelf at 0.913-0.917 versus a thin tail to 0.947 (§14.2).
+- §13.6's conclusion is untouched: `edge_J` is stuck and the threshold is spent.
+
+**Method note.** §14 was written from arithmetic over an unmeasured quantity and got the magnitude
+wrong by ~3x within a single session. The measurement that fixed it took ~10 minutes on data we
+already had. Measure before ranking.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
