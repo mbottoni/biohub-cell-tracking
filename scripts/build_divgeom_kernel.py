@@ -79,6 +79,14 @@ NEW_CAP = """            if added_this_frame >= frame_cap:
                 stats["safe_division_frame_cap_hit"] += 1
                 break"""
 
+# `stats` is a PLAIN pre-seeded dict in filter_output_graph, not a defaultdict,
+# so a new counter must be declared there or the first `+= 1` raises KeyError.
+# v1 of this kernel died exactly that way -- the local fixture used a
+# defaultdict and masked it.
+OLD_SEED = '        "safe_division_skipped_cap": 0,'
+NEW_SEED = ('        "safe_division_skipped_cap": 0,\n'
+            '        "safe_division_frame_cap_hit": 0,')
+
 # (env var, old literal, new literal) -- literals include their original quoting.
 CONFIG = [
     ("BIOHUB_SAFE_DIV_MAX_UM", '"4.66"', '"12.0"'),
@@ -102,7 +110,9 @@ def patch_config(cfg: str, entries) -> str:
 
 def patch_pipeline(cell: str) -> str:
     """Patch the safe-division scorer + cap instrumentation in cell 11."""
-    for old, new, label in ((OLD_SCORE, NEW_SCORE, "score"), (OLD_CAP, NEW_CAP, "frame_cap")):
+    for old, new, label in ((OLD_SCORE, NEW_SCORE, "score"),
+                            (OLD_CAP, NEW_CAP, "frame_cap"),
+                            (OLD_SEED, NEW_SEED, "stats_seed")):
         if cell.count(old) != 1:
             raise RuntimeError(f"{label}: anchor count = {cell.count(old)}, expected 1")
         cell = cell.replace(old, new, 1)

@@ -25,6 +25,7 @@ from __future__ import annotations
 import ast
 import json
 import math
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -85,6 +86,25 @@ def load_impl(kernel: str) -> tuple[callable, dict]:
     }
 
 
+
+def seed_stats(kernel: str) -> dict:
+    """Reproduce filter_output_graph's PLAIN pre-seeded stats dict.
+
+    It is not a defaultdict, so any counter the patch introduces must also be
+    declared in that literal. divgeom v1 died on Kaggle with
+    `KeyError: safe_division_frame_cap_hit` because this fixture used a
+    defaultdict and silently absorbed the missing key. Parse the real literal
+    out of the notebook so the fixture cannot be more permissive than the
+    caller.
+    """
+    nb = json.loads((REPO / f"kernels/{kernel}/{kernel}.ipynb").read_text())
+    cell11 = "".join(nb["cells"][11]["source"])
+    i = cell11.find("    stats = {")
+    lit = cell11[cell11.find("{", i):cell11.find("}", i) + 1]
+    keys = re.findall(r'"([a-z0-9_]+)":', lit)
+    return {k: 0 for k in keys}
+
+
 def build_case(path: Path):
     """GT graph with one child edge removed per real division."""
     gt = load_geff(path)
@@ -129,7 +149,7 @@ def run(kernel: str, uncap: bool = False) -> dict:
         nodes, edges, held = build_case(p)
         if not held:
             continue
-        stats: dict = defaultdict(int)
+        stats = seed_stats(kernel)   # plain dict, exactly like filter_output_graph
         out = fn(nodes, edges, stats)
         added = {(int(e["source_id"]), int(e["target_id"]))
                  for e in out[len(edges):]} if len(out) > len(edges) else set()
@@ -167,7 +187,7 @@ def run_hybrid(budget: int) -> list[dict]:
                 continue
             # Equal absolute budget per volume, independent of graph size.
             g["SAFE_DIV_GLOBAL_FRAC_CAP"] = budget / max(1, len(edges))
-            stats: dict = defaultdict(int)
+            stats = seed_stats(kernel)
             res = fn(nodes, edges, stats)
             added = {(int(e["source_id"]), int(e["target_id"]))
                      for e in res[len(edges):]} if len(res) > len(edges) else set()
