@@ -1039,6 +1039,59 @@ division detection and is not reachable by gate tuning alone.
 wrong by ~3x within a single session. The measurement that fixed it took ~10 minutes on data we
 already had. Measure before ranking.
 
+### 15.6 `divgeom` built and run end-to-end — the mechanism works as designed (2026-08-03)
+
+`kernels/divgeom` implements 15.4. Local test (`scripts/local/test_divgeom.py`) lifts the **actual
+patched function** out of the built notebook, with that notebook's own config, and replays it over
+all 199 GT graphs — deleting one child edge per real division (the harder assignment: the *farther*
+daughter) and asking whether the heuristic puts it back:
+
+| config | real divisions recovered |
+|---|---|
+| `d4edge` (shipped gates) | 19/151 = **0.126** |
+| `divgeom` (re-centred, caps lifted) | 133/151 = **0.881** |
+
+**0.881 independently confirms the 0.894 predicted from the gate distributions in 15.2** — a
+functional test of shipped code against a distribution calculation, two unrelated routes.
+
+**Kaggle commit run (v2, COMPLETE, 11.25 predict-min):**
+
+| | candidates | inserted | global-cap breaks | frame-cap breaks | nodes |
+|---|---|---|---|---|---|
+| `d4edge` | 355 | 350 | 0 | *unmeasured* | 120,276 |
+| **`divgeom`** | **13,495** | **119** | 276 | **80** | 120,118 |
+
+Four things this establishes:
+
+1. **The widened gates expand the pool 38×** (355 -> 13,495), as intended.
+2. **The tightened cap lands where designed** — 119 insertions against a ~120 target.
+3. **`frame_cap` DOES bind — 80 breaks.** §11.6 concluded from `safe_division_skipped_cap = 0` that
+   the caps never bind; that stat only ever covered the *global* cap and the frame cap had been
+   truncating silently since the beginning. 15.3 suspected it; this measures it.
+4. **The node budget is untouched** (−0.13%), so this is a clean single-lever change against
+   `edge_J` — whatever the LB says is attributable to divisions.
+
+Submission verified: 235,932 rows, 115,814 edges, **exactly 119 forks**, matching the counter.
+
+**The ranking now carries the experiment, and it is the part we could not test.** 119 of 13,495
+proposals survive — a 0.88% selection rate — so the score function decides essentially everything.
+The local fixture cannot exercise it: with wide gates, old rank and new rank score *identically*
+(93/136 at budget 2; 125/209 vs 124/209 at budget 5), because a GT graph is a ~1.6-3.6% sample and
+too few candidates ever compete within a frame. At inference density they compete 113:1. **If
+`divgeom` moves the LB, the follow-up that isolates the re-rank is wide-gates + old-rank.**
+
+**Expected LB.** With 119 inserted, visible FP ~ 119 x 0.0182 ~ 2.2 against 3 GT divisions:
+`div_J = TP/(TP + 2.2 + (3-TP))`. TP=1 -> +0.019; TP=2 -> +0.038; TP=0 -> 0.000 and we land flat.
+The base case (350 inserted, 26.5% admission) is `div_J ~ 0.03` -> +0.003. So the read is roughly
+**flat if the ranking failed, +0.02..+0.04 if it worked.**
+
+**Method note — the fixture must never be more permissive than the caller.** v1 died on Kaggle
+after ~17 min with `KeyError: safe_division_frame_cap_hit`: `stats` in `filter_output_graph` is a
+plain pre-seeded dict, and a new counter has to be declared in that literal. Our test used
+`defaultdict(int)` and absorbed the missing key silently. `seed_stats()` now parses the real literal
+out of the notebook. Related: Kaggle derives a kernel's slug from its **title**, not the id in
+`kernel-metadata.json` — v1 was silently created at a different slug, which broke `kernels status`.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
