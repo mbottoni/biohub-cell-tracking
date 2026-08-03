@@ -827,6 +827,112 @@ confidence cut. Candidates, in rough EV order:
 the most valuable thing in §13 — it made the flat curve legible as a fact about peak extraction
 rather than as an uninformative null. Keep writing the arithmetic down before the submission.
 
+## 14. The division term is a PRECISION play worth up to +0.1 (2026-08-03)
+
+⚠ **This partially corrects §11.6.** That section was right that adding divisions cannot help and
+that our 350 insertions are mostly wrong. It then concluded "divisions are a liability,
+deprioritise" — and never did the arithmetic on what *precision* is worth. The arithmetic says the
+division term is the largest unclaimed pool of score on the board.
+
+### 14.1 The metric makes division FPs nearly free to remove and TPs enormously valuable
+
+From `src/ctrack/eval/biohub.py:161-196`, `division_jaccard` is micro-summed over volumes with
+
+    TP: GT dividing node whose *matched* pred node also divides
+    FN: GT dividing node not recovered
+    FP: pred division at a *matched* node whose GT node isn't dividing
+
+**FP is counted only at matched nodes**, and GT annotation is a sparse sample. Over the four dev
+volumes (`docs/gt_stats.csv`): 2,193 annotated nodes against 134,712 estimated and 120,276
+predicted — an annotation rate of **1.6%**. So of our ~350 inserted divisions, only
+
+    350 x (2193 / 120276) ~ 6.4
+
+are visible as FPs. GT offers **3** divisions on those volumes. With `D = 0.1 * div_J`:
+
+| scenario | TP | FP | FN | div_J | score contribution |
+|---|---|---|---|---|---|
+| current (spray 350) | 0 | 6.4 | 3 | 0.00 | 0.000 |
+| current, lucky | 1 | 6.4 | 2 | 0.106 | +0.011 |
+| current, all three hit | 3 | 6.4 | 0 | 0.319 | +0.032 |
+| **precise, one hit** | 1 | 0 | 2 | 0.333 | **+0.033** |
+| **precise, all three** | 3 | 0 | 0 | 1.000 | **+0.100** |
+
+The swing between spraying and being precise is **+0.07 to +0.10**. Nothing else on our board is
+within an order of magnitude of that.
+
+### 14.2 The leaderboard shape corroborates it
+
+68 teams sit above us; the distribution is a dense shelf (18 at 0.915, 12 at 0.916, 7 at 0.917)
+then a thin tail to 0.947. The shelf is what shared checkpoints with `edge_J ~ 0.909` and
+`div_J ~ 0` produce. The gap from the shelf to the leader is **+0.033** — squarely inside the
+division term's range and hard to explain from `edge_J`, which §13.6 just showed is stuck.
+
+This is a hypothesis consistent with the LB shape, not a proof. But it is testable for one
+submission.
+
+### 14.3 We do not know our own `div_J` — and `divoff` measures it
+
+§11.2's decomposition never pinned `D`; it tabulated D = 0.00 / 0.02 / 0.05 and could not
+distinguish them. So we do not know whether we are already collecting ~0.03 of division score or
+none of it, and that determines whether precision work is worth +0.03 or +0.09.
+
+`kernels/divoff` (`OUTPUT_SAFE_DIVISIONS=0`, built 08-02, **never submitted**) drives TP to 0, hence
+`div_J` to 0. Then
+
+    D_base ~ (score_base - score_divoff) + edge_J gain from dropping ~350 FP child edges (~+0.003)
+
+- `divoff` ~ 0.910  =>  D ~ 0.006. We collect almost nothing; the full +0.09 is open.
+- `divoff` ~ 0.885  =>  D ~ 0.03. We already hit the TPs; precision is worth up to +0.07 on top.
+
+Either outcome is decisive, and it costs one already-built submission. **Treat `divoff` as a probe,
+not a candidate** — like `probe_pad`, it is expected to score below base and is run for the number.
+
+### 14.4 Two precision knobs are already exposed, both untuned
+
+1. `BIOHUB_DEEPCENTER_SAFE_DIV_VETO` is currently **`'0'`** in our best config, while the analogous
+   `BIOHUB_DEEPCENTER_GAP_VETO` is `1`. Turning it on requires the independent center model to
+   confirm each division — precision, exactly the direction 14.1 wants, for a one-line change.
+2. `BIOHUB_ILP_DIVISION_WEIGHT` (default 1.0) is the ILP's per-division *cost*. Raising it
+   suppresses divisions at the source. Note this is a **second, independent** division path:
+   `divoff` disables only the post-processing insertion, so it does not zero ILP divisions. Read
+   `run_stats` to confirm how many survive before over-reading the probe.
+
+Also tighten `SAFE_DIV_MAX_UM` (4.66), `SAFE_DIV_SISTER_MAX_UM` (8.5),
+`SAFE_DIV_FRAME_FRAC_CAP` (0.0076) — but §11.6 measured `safe_division_skipped_cap = 0`, so the
+caps are not currently binding and tightening the *rate* caps alone will be a no-op. The distance
+gates and the veto are the live ones.
+
+**Caveat carried forward.** `_evaluate_divisions` is our simplified out-degree reading; the
+reference additionally verifies daughter lineages via grandchildren and a bipartite match
+(`biohub.py:173-177`). That makes real TPs *harder* than modelled, which pushes further toward
+precision, not less. Do not tune divisions hard against the local harness — use the LB.
+
+### 14.5 Ranked plan (supersedes §13.6's ordering)
+
+| # | lever | est. impact | cost | status |
+|---|---|---|---|---|
+| 1 | **`divoff` as a `D`-probe** | information only | 1 sub, built | do first |
+| 2 | **Division precision** (DeepCenter veto on, tighter gates) | **+0.02 .. +0.09** | 1-2 subs, ~1 line | gated on 1 |
+| 3 | **Peak-pooling radius** (`pool_kernel_um`) | ~+0.01 per recall point | 1 sub, patchable | ready |
+| 4 | **Logit-max seed fusion** (fix `orfuse`) | +0.005 .. +0.015 | 1 sub, fix built kernel | ready |
+| 5 | Per-volume adaptive detection (k -> 1) | +0.01 .. +0.02 | needs an `est_n_nodes` proxy | blocked |
+| 6 | A genuinely different detector | highest ceiling | weeks, ~240 GPU-h | last resort |
+
+**On 3:** §13.6 flagged peak extraction as unreachable pending a check. It is reachable —
+`pool_k = pool_kernel_from_um(cfg.pool_kernel_um, voxel_size)` sits inside the `_merged`
+`predict_video` string in cell 9 that we already replace wholesale (`build_recall_kernels.py`
+patches the detection blend the same way). Override `pool_k` directly; print the default first.
+
+**On 4:** `orfuse` failed on a saturation bug (exp 24), not on a bad thesis. Harmonic-on-complement
+clamps to 1-1e-6 and flattens the logit field, and local-max pooling then finds no maxima. A max or
+log-sum-exp **in logit space** unions the two seeds' peaks without ever saturating. `swapw` measured
+up to 12% per-volume disagreement between the seeds, so the union is materially larger than either.
+
+**Retired — do not spend submissions here:** global `DET_THRESHOLD` (§13.6), node pruning /
+`MIN_TRACK_LEN` up (§11.3), ensemble blend weights (exp 19b), more training epochs (§11.5), the
+public metric hack (§11.1).
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
