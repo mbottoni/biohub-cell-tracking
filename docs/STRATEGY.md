@@ -1806,6 +1806,115 @@ that; the other 80% needs a compute answer we do not have.
 train's 0.76/volume and that the ~1.4% annotated-landing rate holds. #1 checks both before
 anything is committed.
 
+## 24. Division lever measured — the selector wins, but it is not what blocks us (2026-08-04)
+
+Executing §23.6 item #2. Three measurements, all local, zero submissions. The headline is that
+§23.3's ranking of this lever was **too optimistic and I am revising it down** before spending
+anything on it — but the sub-lever that survives is real, and the mechanism is now known.
+
+### 24.1 A fitted selector beats the hand-written ranking 2.4x on identical data
+
+`scripts/local/division_separability.py`, 199 GT graphs, wide gates (12/14.4/12), 7,027
+candidate rows / 135 true second-daughters, 5-fold **grouped by volume** (out-of-fold):
+
+| ranking | AP | TP at top-151 |
+|---|---|---|
+| random (positive rate) | 0.0192 | — |
+| shipped `parent + 0.15·sister` | 0.0889 | **21 / 135** |
+| `divgeom` `|p−5.75| + |s−10.57|` (§16) | 0.1228 | 25 / 135 |
+| **fitted gradient boosting** | **0.2827** | **50 / 135** |
+
+**3.2x the shipped AP and 2.4x its true positives at the same insertion budget.** §16's
+hand-written ranking was barely better than the shipped one; the fit is a different regime.
+
+Two robustness checks, because this is exactly the shape of claim that has burned us before:
+
+* **Construction bias refuted.** Positives are built by designating the *nearer* daughter as
+  the already-linked child, forcing `parent_dist ≥ child_dist` for every positive. But **98.7%
+  of negatives satisfy it too**, so it is not exploitable. Ablating the biased pair
+  (`child_dist`, `asym`) still gives AP 0.2554 and **52/135** at top-151 vs the shipped 21.
+* **Permutation importance** says three of the top five features are ones the shipped heuristic
+  **does not have at all**:
+
+      parent_dist          +0.2137
+      parent_over_spacing  +0.1127   <-- density-normalised; NEW
+      sister_dist          +0.0587
+      cos_angle            +0.0544   <-- daughters on opposite sides; NEW
+      cand_fwd_len         +0.0375   <-- does the candidate continue as a track; NEW
+
+  `parent_over_spacing` being second is the mechanistic reason the gates could never be tuned:
+  a fixed 4.66 µm gate means completely different things in a 3,780-node volume and a
+  78,600-node one, and annotation coverage spans 150x across the corpus.
+
+⚠ This pool is annotated cells only — **47 candidates/volume against a real run's ~3,374**
+(§16: 13,495 over 4 volumes), so ~70x too little competition. Absolute precision here is
+meaningless. Only the relative ordering on identical rows transfers.
+
+### 24.2 The realistic pool cannot be reconstructed from `submission.csv`
+
+`scripts/local/division_candidates.py` rebuilds the candidate pool from the predicted graph
+(~30,000 nodes/volume — the right density). It found **135 labelled candidates and 0
+positives**, which is a property of the reconstruction, not of the data:
+
+`submission.csv` is **post**-insertion. A source that successfully became a division now has
+out-degree 2, so it is excluded from the out-degree-1 source set; and an orphan consumed as a
+second child now has in-degree 1, so it is excluded from the candidate set. **The successful
+insertions are exactly the rows the reconstruction deletes.** Verified directly: of the 3 GT
+divisions in `6bba_05db0fb1`, the one we score as TP maps to a predicted node with out-degree
+2, and the two FNs map to out-degree-1 nodes.
+
+⇒ Fitting on the real distribution needs the pool dumped **at the call site**, i.e. a `divdump`
+kernel in the shape of `probdump`. Do not try to recover it offline.
+
+### 24.3 ⚠ Both division FNs are unreachable by ANY selector — n=2, provisional
+
+The decisive diagnostic. For the two GT divisions we miss, where is the second daughter?
+
+| GT division | second daughter | admissible as a candidate? |
+|---|---|---|
+| 25000381 (t=24) | **not detected at all** (no matched predicted node) | **no** — detection failure |
+| 63001217 (t=62) | detected as pred 50328, but **in-degree 1** | **no** — already linked to another parent |
+
+In both cases there were **0 orphans within 12 µm of the source**. No ranking function over an
+empty candidate set can recover either one.
+
+**This is §21.1's pattern again** — there, 72% of swap-correct edges were never candidates, so
+no `BONUS` could reach them. Here, 2/2 division FNs are inadmissible, so no selector can reach
+them. Candidate admissibility, not ranking, is the binding constraint for the second time.
+
+⚠ **n = 2.** This is precisely the 3-division instrument that §20.3 warned about and that §23.3
+criticised §20 for trusting. I am not concluding from it. It is a *mechanism hypothesis* with a
+pre-registered test: `evalset_d4edge` carries **25** GT divisions, and re-running this
+diagnostic there either confirms "FNs are inadmissible" or refutes it.
+
+### 24.4 Revised EV for the division lever — down, not up
+
+If §24.3 holds at n=25, the selector cannot add TPs; it can only remove FPs. §20.2's arithmetic
+then bounds it exactly:
+
+    now         TP 1, FP 5, FN 2  ->  div_J = 0.125  ->  +0.0125 of score
+    FP -> 0     TP 1, FP 0, FN 2  ->  div_J = 0.333  ->  +0.0333 of score
+    gain                                                 +0.021 local, ~+0.010 LB (§17.1)
+
+So **§23.6's "+0.02..+0.04" for lever #2 is revised to ~+0.021 local / ~+0.010 LB**, and the
+"+0.0875 headroom" of §23.3 remains real but is **not reachable by selection** — it is gated by
+detection and by linking, which is where §18's association work already points.
+
+What survives, and it is not nothing: §24.1's model is precisely the tool for cutting FPs at
+constant TP, and unlike `divveto` (which removed all 5 FPs *and* the TP, §20.1) a ranked
+selector can be operated at a budget that keeps the TP.
+
+### 24.5 Audit: no structural leak, and the FP budget confirmed
+
+`scripts/local/audit_submission.py` on `d4edge`:
+
+* **0 edges with `dt ≠ 1`** out of 116,134, in every volume. GT is 100% `dt = 1`, so this class
+  of guaranteed-non-TP edge does not exist in our output. Gap-closing is compliant. ☑ closed.
+* Max out-degree 2 (no impossible ≥3), all edge lengths ≤ 7.3 µm against a 14.0 µm cap.
+* **323 predicted divisions, 6 on annotated nodes = 1.86%** — which reconciles exactly with the
+  scorer's TP 1 + FP 5 = 6. Confirms §23.3's ~1.4% estimate and independently validates both
+  the audit and `ctrack.eval.biohub`.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
