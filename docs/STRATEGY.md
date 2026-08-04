@@ -1479,6 +1479,81 @@ robust +0.0024 (§19.2), and retired the entire division programme including a s
 queued (`divoff`). **Cost: zero submissions.** Compare §16, where the same class of question cost a
 readable 0.006 on the board.
 
+## 21. The association model is GOOD — the candidate gate is what loses us the score (2026-08-04)
+
+`relinkw6` (BONUS 6.0) and `probdump` both landed. Together they close §18.3's bet.
+
+### 21.1 The bonus saturates, and `probdump` says exactly why
+
+| config | headline adj | **robust adj** |
+|---|---|---|
+| `relinkw3` (BONUS 3) | +0.0121 | **+0.0024** |
+| `relinkw6` (BONUS 6) | +0.0125 | **+0.0028** |
+
+Doubling the bonus bought **+0.0004**. §18.3 predicted the reachable fraction should rise 7.7% ->
+33.8%; it did not. The dump explains it:
+
+| of the 65 swaps | |
+|---|---|
+| correct edge is **NOT a candidate** (`prob` identically 0) | **47 / 65 = 72%** |
+| correct edge **is** a candidate | 18 / 65 |
+| ...and the transformer ranks it **above** the taken edge | **18 / 18 = 100%** |
+| median `prob(correct)` vs `prob(taken)` | **0.838 vs 0.000** |
+
+`learned_prob` returns 0.0 for non-candidates, so on 72% of swaps the bonus term is *identically
+zero* and no value of `MOTION_RELINK_LEARNED_BONUS` can ever move them. **The lever has a hard
+ceiling of 28% of swaps** — that is the saturation, measured.
+
+### 21.2 The headline result: the transformer is right every time it is allowed to speak
+
+**18/18.** Where the correct edge survives to become a candidate, the association model prefers it
+over the distractor 100% of the time, by a median margin of 0.838 probability. ⚠ This overturns the
+pessimistic branch of §18.4 and inverts §13's framing completely: **the shipped association model is
+not the weak component. The candidate gate in front of it is.**
+
+It also fully closes §21/`edgeft` (exp 21): fine-tuning that head was always going to do nothing,
+because the head is right already and its correct answers are being filtered out upstream.
+
+### 21.3 What is filtering them — measured, not guessed
+
+| | median | max |
+|---|---|---|
+| all 112,876 candidate edges | 1.72 µm | 15.33 |
+| swap-correct edges **present** | 8.50 µm | 13.99 |
+| swap-correct edges **missing** | 8.76 µm | 14.56 |
+
+- **0%** of the missing edges exceed the longest observed candidate ⇒ **not a distance cap**.
+- **79%** sit beyond the candidate p99 (7.5 µm) ⇒ they are in the far tail of an otherwise
+  short-edge distribution.
+- The correct target is typically the **2nd nearest** node at t+1 (median rank 2; it is among the
+  5 nearest 89% of the time) ⇒ **not a neighbourhood/kNN restriction either.**
+
+⇒ By elimination the gate is the **probability threshold**, `BIOHUB_DUAL_SEED_EDGE_THRESHOLD =
+0.48`. These are genuine, geometrically close successors that the transformer scored under 0.48, so
+they never entered the candidate set.
+
+### 21.4 Next: `edgethr` — lower the candidate threshold
+
+`BIOHUB_DUAL_SEED_EDGE_THRESHOLD` **0.48 -> 0.15**, on top of BONUS 6. This is the only change that
+addresses the 72%, and the two knobs are coupled: admitting a candidate does nothing unless the
+bonus can lift it over the motion margin, and the bonus does nothing for a candidate that is absent.
+They ship together for the same reason §16's gates and caps did.
+
+**And with the same risk, explicitly noted.** `divgeom` failed by flooding a candidate pool and
+trusting a ranking. The differences now: the diagnosis is measured (72%, not inferred), the ranking
+is validated at 18/18 rather than assumed, and **`score_submission.py` will grade it locally before
+any submission**. If the robust delta does not clear ~0.005, it does not go to the board.
+
+**Ceiling.** Even perfect recovery of all 65 swaps is bounded by §18's oracle: macro association
+headroom **+0.077**, of which the two thick volumes contribute ~+0.044 robust. Realistic target for
+`edgethr` is **+0.005 .. +0.015 robust**.
+
+### 21.5 Standing
+
+- LB best **0.914**, rank **86 / 1966**. Leader 0.947. **5 submissions available, 0 used today.**
+- Best local config: `relinkw6`, robust **+0.0028** — below the 0.005 readable floor, so **not worth
+  a submission yet**. Keep iterating locally; that is what the instrument bought us.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
