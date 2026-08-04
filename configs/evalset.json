@@ -1,0 +1,38 @@
+{
+  "seed": 20260804,
+  "n_strata": 4,
+  "forced": [
+    "44b6_0113de3b",
+    "44b6_0b24845f",
+    "6bba_05b6850b",
+    "6bba_05db0fb1"
+  ],
+  "stems": [
+    "44b6_0113de3b",
+    "44b6_0b24845f",
+    "44b6_5f15d135",
+    "44b6_66f9292d",
+    "44b6_74d0c52e",
+    "44b6_87bba6c4",
+    "44b6_9be80b04",
+    "44b6_a2bb48bb",
+    "6bba_05b6850b",
+    "6bba_05db0fb1",
+    "6bba_062c8d37",
+    "6bba_07e24132",
+    "6bba_0e7c0d07",
+    "6bba_2819ca14",
+    "6bba_6feeb0b1",
+    "6bba_705ec2c9",
+    "6bba_784a78c9",
+    "6bba_786893ac",
+    "6bba_7af54fde",
+    "6bba_ae82a791",
+    "6bba_d2b9fc0c",
+    "6bba_d3da753b",
+    "6bba_debd7bfa",
+    "6bba_e5e44988"
+  ],
+  "gt_edges": 16649,
+  "gt_divisions": 25
+}

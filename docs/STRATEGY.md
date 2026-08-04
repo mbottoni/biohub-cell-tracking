@@ -1424,6 +1424,15 @@ post-processing.
 
 ## 20. ☠ STOP TUNING DIVISIONS — three attempts, three ways to destroy the same TP (2026-08-04)
 
+> **⚠ PARTLY SUPERSEDED by §23.3 (same day).** Everything below about the three *knob*
+> interventions is correct and they stay dead. But the conclusion "divisions are closed" does
+> not follow from it. `division_jaccard` is **micro**-pooled, so the term's headroom is
+> **+0.0875** — larger than §18's association oracle — and every number here was measured
+> against **3** GT divisions when 151 are on disk. This section established that *the
+> instrument cannot see divisions*, and then filed it as *the term has no headroom*. The
+> untried lever is a fitted selector over the wide candidate pool; the hand-written ranking of
+> §16 is not evidence against it.
+
 `divveto` (`DEEPCENTER_SAFE_DIV_VETO=1`, original gates), commit run, scored locally, **not
 submitted**:
 
@@ -1614,6 +1623,13 @@ which is very likely what separates 0.947 from the 0.913 shelf.
 
 ### 22.5 Recommendation
 
+> **⚠ ORDERING SUPERSEDED by §23.6.** The read below — that `edgethr30` is our best measured
+> config and worth ~+0.003..+0.006 — still stands, and it is submitted. What is superseded is
+> the implied next step of ranking more configs in the same space: §23.1 shows that space is
+> ~0.006 wide across eight LB reads, while the leader is +0.033 away. Fix the instrument
+> (§23.2), then fit models to the 128,883 labelled edges and 151 labelled divisions we own
+> rather than tuning the next scalar.
+
 `edgethr30` is our best measured config at **+0.0062 transferable adj / ~+0.0037 net**, marginally
 ahead of `relinkw6`. Both sit at the edge of the 0.005 readable floor. `edgethr30` is the better
 pick on mechanism — its gain is detection-FN recovery (24 → 14), which is a real structural
@@ -1621,6 +1637,174 @@ improvement, whereas its `div_J` penalty is a 3-sample artifact (§20.3) that sh
 ~30-division hidden set.
 
 ⚠ Neither is a large win. The honest expectation is **+0.003 .. +0.006**, i.e. 0.914 → ~0.918-0.920.
+
+## 23. The instrument is the bottleneck, not the pipeline — critique and re-ranked plan (2026-08-04)
+
+§22 ended with "closing that gap needs a *better association model*, not a knob" and a
+recommendation to keep spending on `edgethr`-class configs. This section argues that read is
+half right and its ordering is wrong: the binding constraint is not which knob we turn, it is
+that **we have been measuring on 1.65% of the ground truth we already own**, and one of the
+terms we retired on that evidence is the largest single block of score still on the table.
+
+Supersedes §22.5's recommendation and §20's "divisions are closed".
+
+### 23.1 The knob space is exhausted and the leader was never in it
+
+Every score from 0.888 → 0.914 came from `BIOHUB_*` env vars over pilkwang's frozen weights.
+The measured diameter of that space, over eight LB reads:
+
+| config | LB delta vs base |
+|---|---|
+| `thr096` / `thr095` | **+0.001** |
+| `d4edge` | +0.001 (within noise) |
+| `secw` | 0.000 |
+| `divgeom` | −0.006 |
+| `harmonic` | −0.023 |
+| `probe_len20` / `probe_pad` | −0.028 / −0.046 |
+
+**The best knob we have ever found is worth +0.001.** The public field clusters at 0.913
+because everyone is searching this same space over the same public artifact — 0.913 is that
+artifact's fixed point, not a frontier. The leader is at **0.947, +0.033**, which is 33x the
+largest knob effect ever measured here. They are not running a tuned version of our pipeline.
+
+⇒ Continuing to rank knobs is searching a space we have proven, eight times, is ~0.006 wide.
+
+### 23.2 ⚠ Our instrument is 1.65% of the GT we own — and it is a biased 1.65%
+
+The four `test/` volumes are byte-identical to train volumes, which is why §17 could score
+locally at all. But they are a tiny and unrepresentative slice of what is on disk:
+
+| | 4 dev volumes | 199 train volumes |
+|---|---|---|
+| GT edges | 2,127 | **128,883** |
+| GT divisions | 3 | **151** |
+| median `est_n_nodes` | 32,795 | **17,909** |
+| median annotation coverage | 1.76% | **3.56%** |
+| volumes with <200 GT edges | **2 of 4** | ~25% |
+
+Denser in cells and thinner in annotation is the worst combination a fixture can have, and
+**half of it is statistically unusable**. Every thin-volume pathology in this log is a
+consequence: §19.2's "80% of the headline is one edge on a 49-edge volume", §20.3's
+3-sample `division_jaccard`, and §22.1's 2x robustness bug — which exists only because a
+thin-volume correction had to be invented in the first place.
+
+**The shipped kernel has always supported the fix.** Cell 5:
+
+    _test_dir_override = os.environ.get("BIOHUB_TEST_DIR", "").strip()
+    TEST_DIR = Path(_test_dir_override) if _test_dir_override else COMP_DIR / "test"
+
+`list_test_stems()` globs `TEST_DIR/*.zarr` and `read_test_frame` reads
+`TEST_DIR/{dataset}.zarr` — both read-only, so a symlink farm into the read-only train mount
+works. (Exp 19's Errno 30 was a *write* through such a symlink, not a read; that precedent was
+misread as "symlinks don't work here".)
+
+`configs/evalset.json` (`scripts/local/select_evalset.py`) picks 24 volumes stratified on
+`est_n_nodes` x embryo, force-including the dev 4:
+
+| | dev | evalset | gain |
+|---|---|---|---|
+| volumes | 4 | 24 | 6x |
+| GT edges | 2,127 | **16,649** | **7.8x** |
+| GT divisions | 3 | **25** | **8.3x** |
+| thick volumes (≥200 edges) | 2 | **18** | 9x |
+
+Cost: one commit run (~2 h GPU), **zero submissions**. Deliberately *not* enriched for
+divisions — a representative draw already yields ~0.76/volume, and enrichment would bias
+`division_jaccard`, which is micro-pooled (§23.3). Division *model fitting* uses all 199 GT
+graphs offline and needs no inference, so it has no claim on this budget.
+
+The contamination objection does not bite: pilkwang's weights saw all 199 train volumes, but
+they also saw the dev 4, so contamination is a constant across any A/B we run. We strictly gain.
+
+**Method note.** §17's own closing line was "build the instrument before the hypothesis". That
+lesson was applied once and then not carried far enough — the instrument was built at the size
+that happened to be free, not the size the question needed.
+
+### 23.3 ⚠ `division_jaccard` is MICRO-pooled — §20's "divisions are closed" is an instrument conclusion
+
+From `ctrack.eval.biohub.summarise`, confirmed by reading the code:
+
+* `adj_edge_jaccard` — **macro**, `np.mean` of per-volume values (as §17.3 found).
+* `division_jaccard` — **micro**, `_jaccard(sum tp, sum fp, sum fn)` over the whole set, with
+  the whole term dropped when no volume has a GT division.
+
+So the division term is a single pooled ratio, and today it is:
+
+    div_J = TP/(TP+FP+FN) = 1/(1+5+2) = 0.125   ->  contributes 0.0125
+    perfect                                      ->  contributes 0.1000
+    HEADROOM                                                     +0.0875
+
+**That is larger than §18's association oracle of +0.077.** §20 concluded "divisions are
+closed" after three interventions all drove TP → 0 — but every one of those was measured
+against **3** GT divisions, where `div_J` is quantised in steps of ~0.125 and a single TP is
+the entire term. What §20 actually established is that *the instrument cannot see divisions*.
+That is an argument for fixing the instrument, not for retiring the term. We own **151**
+labelled divisions across 199 volumes.
+
+Two further facts make the term softer than §14 assumed:
+
+* Division FP counts only at **matched annotated** nodes. We insert ~350 divisions per 4
+  volumes and only **5** became FP — a ~1.4% annotated-landing rate. The FP budget is far
+  cheaper than "350 spurious divisions" suggests.
+* §15 measured that the shipped gates admit **26.5%** of real divisions, and gates at
+  (12/12/14.4) admit **89.4%**. The candidate geometry is not the blocker; selection is.
+
+☠ What stays dead: `divgeom`'s widened gates *with a hand-written ranking* (§16), the
+centre-model veto (§20), `divoff`. What is **not** dead, and was never tried: a fitted
+selector over the wide candidate pool.
+
+### 23.4 The pattern behind every dead lever
+
+§16.2 diagnosed its own failure exactly right — "the EDA measured `P(geometry|division)`
+(recall), not `P(division|geometry)` (precision)" — and then never built the thing that
+estimates a precision. It widened gates by hand and ranked 13,495 candidates by a hand-written
+formula, `|parent−5.75| + |sister−10.57|`. That is the signature of a problem that needs a
+classifier and got a threshold.
+
+Generalising across the whole log: **we hold 128,883 labelled edges and 151 labelled divisions,
+and every lever ever attempted has been a hand-set scalar constant tuned against 2,127 edges
+and 3 divisions.** `MOTION_RELINK_LEARNED_BONUS`, `DET_THRESHOLD`, `SAFE_DIV_*`,
+`DUAL_SEED_EDGE_THRESHOLD`, `SECONDARY_EDGE_WEIGHT`, `MIN_TRACK_LEN` — every one a scalar. Not
+one model has been fitted to the supervision sitting on disk.
+
+§22.4's "association by reweighting is done" is true of *one scalar inside a fixed linear
+cost*. It is not a statement about the cost function, which has never been learned.
+
+### 23.5 Two facts from the corpus EDA worth having on record
+
+**GT is 100% `dt = 1`.** Across all 199 volumes `edge_dt_max = 1` and `edge_dt_skip_frac = 0`,
+no exceptions. Any predicted edge with `dt ≠ 1` is structurally incapable of being a TP.
+Gap-closing inserts synthetic midpoint nodes so it *should* be compliant — but this has never
+been audited on an actual `submission.csv`.
+
+**`BIOHUB_RUN_OUTPUT_DIAGNOSTICS` is dead in the notebook.** It is read into a variable in
+cell 5 that no cell ever references. `build_edgethr_kernel.py` flips it 0 → 1 as one of its two
+"changes"; that half was a no-op. (It may still be read by the external support-pack code, so
+this is "no effect in the notebook", not "no effect anywhere".)
+
+### 23.6 Ranked plan
+
+Ranked by (impact x probability) / cost. Every item has a local pre-check, and #1 is what makes
+the pre-checks trustworthy.
+
+| # | lever | grounding | est. | status |
+|---|---|---|---|---|
+| **1** | **Widen the eval set** (`BIOHUB_TEST_DIR`) | §23.2 — 1.65% → 12.9% of GT, 2 → 18 thick volumes | enabler | **running** |
+| **2** | **Division classifier** on wide candidates | §23.3 — micro headroom +0.0875; 151 labels; §15's 89.4% admission; §16 failed on a *hand* ranking | **+0.02..+0.04** | next |
+| 3 | **Learned edge re-ranker** on dumped features | §22.4 plateau is one scalar, not the cost fn; 128,883 labelled edges; `probdump` proves the dump works | +0.01..+0.03 | queued |
+| 4 | **Sub-voxel localisation refinement** | §18.2 — swaps have 3.45 µm match error vs 1.72 baseline; ~3.5 µm noise per endpoint against 5.20 µm true motion | +0.005..+0.02 | queued |
+| 5 | **Per-volume detection threshold** | §17.3 macro + coverage spans 150x + per-volume k spans 0.564..1.003; global sweep is spent | +0.005..+0.015 | needs #1 |
+| 6 | **Cheap audits** (dt≠1 edges, division-FP siting) | §23.5 | 0..+0.01 | queued |
+| 7 | A genuinely new association model | §18 oracle +0.077 | blocked: §12's 534 GPU-h vs ~240 h quota | — |
+
+**Honest ceiling statement.** Our oracle on the current node set is 0.9754 local (~0.967
+LB-equivalent under §17.1's offset). The leader at 0.947 sits *inside* it, which means they
+could be running comparable detections with a much better linker. #3 is the affordable ~20% of
+that; the other 80% needs a compute answer we do not have.
+
+⚠ Both #2's +0.0875 and its FP arithmetic assume the hidden test's division rate matches
+train's 0.76/volume and that the ~1.4% annotated-landing rate holds. #1 checks both before
+anything is committed.
 
 ## 8. Operational notes
 
