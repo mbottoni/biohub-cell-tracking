@@ -1274,6 +1274,96 @@ submission files were always on disk. §16's method note blamed measuring `P(evi
 the deeper fault was inferring from LB deltas at 4-6 h per read when a direct measurement was
 available for free. Build the instrument before the hypothesis.
 
+## 18. The oracle ceiling: association is 76% of what is left (2026-08-04)
+
+`scripts/local/link_ceiling.py`. For a fixed node set the best achievable edge_J is
+`(# GT edges with BOTH endpoints matched) / (# GT edges)` — no linker can beat it, a perfect one
+reaches it. That is a **pure detection** quantity, so the gap to our measured `edge_J` is exactly
+what association could still buy. This replaces §13.3's `recall²` heuristic with a measurement.
+
+| volume | GT edges | **oracle** | actual edge_J | gap | detFN | assocFN | swaps | FP |
+|---|---|---|---|---|---|---|---|---|
+| 44b6_0113de3b | 50 | 0.9600 | 0.9038 | +0.056 | 2 | 1 | 1 | 2 |
+| 44b6_0b24845f | 49 | 0.9592 | 0.8846 | +0.075 | 2 | 1 | 1 | 3 |
+| 6bba_05b6850b | 845 | 0.9976 | 0.9709 | +0.027 | 2 | 8 | 6 | 15 |
+| 6bba_05db0fb1 | 1,183 | 0.9848 | 0.8359 | **+0.149** | 18 | 65 | 57 | 133 |
+| **macro** | | **0.9754** | **0.8988** | **+0.0766** | 24 | 75 | 65 | 153 |
+
+Counts reconcile exactly with `evaluate`. **Detection costs us 24 edges; association costs 75 FN and
+153 FP. Association is 76% of all remaining loss** — and the ceiling says a perfect linker on our
+current nodes would be worth **+0.077** of score. ☠ §13.3 and §13.6 are dead: detection was never
+the lever.
+
+### 18.1 The swaps are real, not a matching artifact
+
+The obvious objection: the matcher tolerates 7.0 µm and the dense volume has ~11.7 µm spacing, so
+maybe GT nodes match the wrong detections. Tested — **no**:
+
+| for the 65 swaps | median |
+|---|---|
+| dist(node **we linked to**, GT target) | **7.28 µm** |
+| dist(node the **metric matched**, GT target) | **2.87 µm** |
+| our link lands closer than the matched node | **0 / 65** |
+
+The metric's matching is right and our links are wrong. We linked the source to a genuinely
+different physical cell.
+
+### 18.2 They are fast cells, and geometry provably cannot fix them
+
+| | correct links (n=2,038) | swaps (n=65) |
+|---|---|---|
+| GT displacement | 1.46 µm | **5.20 µm** |
+| pred-pred distance | 1.15 µm | **8.76 µm** |
+| detection match error | 1.72 µm | 3.45 µm |
+
+Swapped cells move 3.6x faster than average, and their detections are twice as poorly localised.
+**In 100% of swaps the link we took was shorter than the correct one** (median margin 6.93 µm), and
+simulating the relinker's own cost at other velocity weights flips **0 of 65 at every setting
+tested (0.5 / 0.75 / 1.0 / 1.25)**. ☠ `MOTION_RELINK_VELOCITY_WEIGHT` is dead — killed for free,
+before a submission.
+
+⇒ No distance, gate, or motion-extrapolation tuning can recover these. The **learned edge
+probability is the only term in the cost that can**, which is the strongest possible statement of
+§17.5.
+
+### 18.3 What that implies for `relinkw` — and a warning
+
+`cost = motion + 0.05·raw − BONUS·prob`, and `prob ∈ [0,1]`, so a swap can only flip if
+`BONUS > margin`:
+
+| BONUS | swaps it could flip, at best |
+|---|---|
+| 1.0 (current) | 1.5% |
+| **3.0** (`relinkw3`) | **7.7%** |
+| **6.0** (`relinkw6`) | **33.8%** |
+| 10.0 | 92.3% |
+
+**Pre-registered: `relinkw3` should be flat and `relinkw6` small at best.** The thesis needs
+BONUS ≈ 10 to be tested at all. (Caveat: the margins are measured on raw distance while the cost
+uses motion-compensated distance, so these are indicative bounds, not exact.)
+
+**⚠ The asymmetry is the real risk.** There are **2,038 correct edges against 65 swaps** — a 31:1
+ratio. A bonus large enough to override geometry on the swaps can equally override it on links that
+are currently right. Corrupting 2% of correct edges (41) would wipe out a perfect fix of all 65
+swaps. So this lever is not "free upside"; it is a bet on the transformer being sharply
+discriminative exactly where geometry is misleading.
+
+### 18.4 The next instrument, before betting on the bonus
+
+We cannot currently see the edge probabilities — they are internal to the run. **Dump them from a
+commit run** (one free run) and measure offline, on these 65 known-wrong cases, whether the
+transformer ranks the correct target above the distractor. That converts §18.3's bet into a
+measurement:
+
+- if it ranks correct > distractor on most swaps ⇒ raise BONUS, upside up to +0.077;
+- if it does not ⇒ the shipped association model cannot solve this, and the lever is a **new
+  association model**, not a reweighting — which is very likely where the 0.947 leader is.
+
+**Method note.** Every conclusion in this section came from files already on disk and cost zero
+submissions. Two candidate levers (`VELOCITY_WEIGHT`, and `relinkw3` as a meaningful test) were
+killed before spending anything, and the headline lever was re-scoped from "+0.02" to "up to +0.077
+but structurally risky". This is the loop §17 was built for, working as intended.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
