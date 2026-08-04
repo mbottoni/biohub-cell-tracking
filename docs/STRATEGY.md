@@ -1915,6 +1915,39 @@ selector can be operated at a budget that keeps the TP.
   scorer's TP 1 + FP 5 = 6. Confirms §23.3's ~1.4% estimate and independently validates both
   the audit and `ctrack.eval.biohub`.
 
+## 25. ☠ Sub-voxel localisation refinement is dead — quantisation is 5% of the error (2026-08-04)
+
+§23.6 ranked lever #4 at +0.005..+0.02 on §18.2's observation that swapped cells have 3.45 µm
+detection match error against a 1.72 µm baseline, i.e. the linker's distance costs are fed
+noisy inputs. Killed locally, for free, before any GPU spend.
+
+**Predicted coordinates are pure integer voxels.** Every `z`, `y`, `x` in `submission.csv` is
+integer-valued — there is no sub-voxel refinement anywhere in the pipeline. So the lever looked
+open. It is not, because quantisation is not what dominates the error:
+
+| residual (matched pred node − its GT node), n = 2,177 | z | y | x |
+|---|---|---|---|
+| systematic bias (mean) | −0.639 | +0.007 | −0.239 |
+| **random scatter (std)** | **1.707** | **0.943** | **1.039** |
+
+    quantisation RMS (uniform within one voxel)   0.498 um
+    observed total RMS                            2.210 um
+    variance share                                   5.1%
+    RMS after perfectly removing it               2.153 um  =>  2.6% reduction
+
+**A 2.6% reduction in localisation RMS cannot move a linker whose competing assignments differ
+by several µm** (§17.5: the relink cost is `motion_dist + 0.05·raw_dist − BONUS·prob`, and
+§18.2's swap margins are a median 6.93 µm). The residual is genuine detector scatter — in z it
+is 1.05 voxels, i.e. the detector is uncertain by about one voxel, not misrounded by one.
+
+**And the systematic component is not correctable either.** It looks tempting at 39.6% of the
+median error, but it is not a global convention offset — per-volume z bias runs −0.07, −0.91,
+−1.52, −0.03 µm. Two volumes near zero, two strongly negative. A global correction would help
+two and hurt two, and since `adj_edge_jaccard` is a macro mean (§17.3) that is a wash at best.
+Measuring the bias per volume requires the GT we do not have at inference.
+
+☠ Lever #4 struck from §23.6. Cost to kill: one local script, zero GPU, zero submissions.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
