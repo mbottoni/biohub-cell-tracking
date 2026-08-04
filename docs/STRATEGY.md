@@ -1092,6 +1092,83 @@ plain pre-seeded dict, and a new counter has to be declared in that literal. Our
 out of the notebook. Related: Kaggle derives a kernel's slug from its **title**, not the id in
 `kernel-metadata.json` — v1 was silently created at a different slug, which broke `kernels status`.
 
+## 16. ☠ `divgeom` LOST 0.006 — the EDA answered the wrong question (2026-08-04)
+
+**LB 0.908 vs 0.914 base.** Not the predicted flat, and not the predicted gain: a *readable* loss
+(≥0.005). §15.4's intervention was wrong, and §15.6's "flat ⇒ ranking failed / up ⇒ it worked"
+framing did not admit the outcome that actually occurred.
+
+### 16.1 What the run diff shows
+
+`run_stats`, d4edge vs divgeom, same four dev volumes:
+
+| stat | d4edge | divgeom | delta |
+|---|---|---|---|
+| `safe_division_candidates` | 355 | 13,495 | **+13,140** |
+| `safe_divisions_added` | 323 | 119 | −204 |
+| `edges` | 116,134 | 115,814 | **−320** |
+| `nodes` | 120,276 | 120,118 | **−158** |
+| `short_track_components_removed` | 1,133 | 1,171 | +38 |
+| `short_track_nodes_removed` | 4,431 | 4,585 | **+154** |
+| `short_track_edges_removed` | 3,298 | 3,414 | +116 |
+
+Edges fell by 320 while only 204 division edges were removed. The other 116 is exactly the extra
+short-track deletion.
+
+### 16.2 Error 1 — the EDA measured recall and I read it as precision
+
+§15.2 measured **P(geometry | division)**: real divisions have sisters at 10.57 um, so a gate at
+8.5 um rejects most of them. True, and it is why admission rose 0.265 -> 0.894.
+
+It never measured **P(division | geometry)** — the quantity that decides whether a *candidate* is
+real. Widening the gates raised the proposal pool **38x, 355 -> 13,495**, against a base rate of
+**0.76 real divisions per volume**. At that base rate, matching the *typical* geometry of a division
+is not discriminative: thousands of coincidental orphan-near-parent pairs land in the same window,
+and a score centred on the division mean cannot separate them. We then kept 119 of 13,495 — a 0.88%
+cut driven entirely by an untested ranking — and apparently kept ~none of the real ones, where the
+old tight-gate rule was catching some.
+
+**The tight gates were doing precision work.** `div_J = TP/(TP+FP+FN)` punishes volume; a narrow,
+specific window is the right shape for it. §15.2 read "below the median of the truth" as a defect.
+It is a recall/precision trade, and the LB says the shipped trade was better than mine.
+
+**The warning was already in our own notes and I submitted anyway.** §15.6 recorded that the local
+fixture's precision (0.526) was "optimistic and must not be read as a false-positive rate", and that
+the re-rank was unexercised. Those were the two load-bearing unknowns, and both broke.
+
+### 16.3 Error 2 — safe divisions are not a pure division lever
+
+Adopting an orphan splices it into a track component. Insert fewer divisions and 204 orphans stay
+orphaned, fall under `MIN_TRACK_LEN = 6`, and `filter_short_track_components` deletes them: +154
+nodes and +116 edges removed. So `safe_divisions_added` is **also a node-retention knob**, and any
+change to it moves `edge_J` independently of `div_J`.
+
+This means the −0.006 is a *mixture* — lost division TPs plus lost annotated nodes — and one LB read
+cannot separate them. It also retro-taints §11.6's framing of `divoff` as a clean division probe:
+turning divisions off would strand ~323 orphans and delete ~245 nodes, confounding the very term it
+was built to measure. **`divoff` is not a clean probe. Do not run it as one.**
+
+### 16.4 What this establishes, and what is next
+
+- **The division term is probably live.** You cannot lose 0.006 to a division change unless there
+  was division score to lose. d4edge is plausibly earning `div_J ~ 0.06` (TP ~ 5 of ~30 GT
+  divisions on the hidden set, consistent with the 26.5% gate admission).
+- **☠ Widening the division gates is dead.** Do not revisit. The pool explodes faster than any
+  geometric ranking can filter it.
+- **The live question is precision on the EXISTING pool.** `divgeom_veto` should be rebuilt on the
+  **original** gates (4.66 / 8.5 / 7.65) plus `DEEPCENTER_SAFE_DIV_VETO=1` — an *independent* signal
+  (the center model) rather than more of the same geometry. That is the one untried precision
+  mechanism, and it does not touch the pool size, so it also does not disturb node retention.
+- Any future division experiment must report `short_track_nodes_removed` alongside
+  `safe_divisions_added`, or the two levers stay confounded.
+
+**Method note.** Three estimates in two days: +0.02..+0.09 (arithmetic over an unmeasured TP) ->
++0.01..+0.03 (measured the geometry) -> bimodal (isolated the untested ranking) -> **−0.006
+measured**. Every revision came from measuring something already in hand, and the final one came
+from the LB. The recurring failure is not arithmetic, it is measuring the conditional in the
+convenient direction: `P(evidence | hypothesis)` is easy to get from GT, `P(hypothesis | evidence)`
+is the one that decides. §10.1 and §11.1 are the same mistake in different clothes.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
