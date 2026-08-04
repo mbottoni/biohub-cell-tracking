@@ -1422,6 +1422,63 @@ post-processing.
 - `probdump` remains the decisive instrument: if the correct edge is not even a candidate,
   `learned_prob` is 0 and no bonus can ever reach it.
 
+## 20. ☠ STOP TUNING DIVISIONS — three attempts, three ways to destroy the same TP (2026-08-04)
+
+`divveto` (`DEEPCENTER_SAFE_DIV_VETO=1`, original gates), commit run, scored locally, **not
+submitted**:
+
+| | d4edge | divveto | delta |
+|---|---|---|---|
+| edge_jaccard | 0.8895 | 0.8910 | +0.0015 |
+| adj (robust part) | | | **+0.0008** |
+| **division_jaccard** | **0.1250** | **0.0000** | **−0.1250** |
+| **score** | 0.9216 | 0.9100 | **−0.0116** |
+
+### 20.1 The veto is not a filter, it is an off-switch
+
+    deepcenter_safe_div_checked     0 -> 355
+    deepcenter_safe_div_accepted    0 ->   0
+    deepcenter_safe_div_rejected    0 -> 355     <-- 100%
+    safe_divisions_added          323 ->   0
+
+At `DEEPCENTER_SAFE_DIV_THRESHOLD = 0.12` the centre model scores **every** candidate below
+threshold. So `divveto` is functionally identical to `divoff` — which means **§14.3's "decisive
+probe" is now answered for free**: turning divisions off costs **−0.0116 locally**, and by §17.1's
+~2x scaling roughly **−0.006 on the LB**, the same as `divgeom`. ☠ `divoff` no longer needs a
+submission; do not spend one on it.
+
+### 20.2 The single TP is the whole term, and everything breaks it
+
+| config | div TP | div FP | div FN | div_J |
+|---|---|---|---|---|
+| **d4edge (shipped)** | **1** | 5 | 2 | **0.125** |
+| divgeom (widen gates + re-rank) | 0 | 3 | 3 | 0.000 |
+| divveto (centre-model veto) | 0 | 0 | 3 | 0.000 |
+
+Three independent interventions, three routes to `TP = 0`. `divveto` even did the "right" thing —
+it removed all 5 false positives — and still lost, because Jaccard with `TP = 0` is 0 regardless.
+**The shipped configuration is at a local optimum we cannot knob-turn our way out of.**
+
+### 20.3 And the local instrument cannot guide us here
+
+The four dev volumes hold **3** annotated divisions. `division_jaccard` is therefore a 3-sample
+statistic quantised in steps of ~0.125, and any threshold tuned against it is fitted to a single
+true positive. §17.1 flagged this; §20.2 is what it looks like in practice.
+
+⇒ **Divisions are closed.** The term is worth **+0.0125** today and we have no instrument capable of
+improving it safely, while §18's association headroom is **+0.077** — six times larger, measured on
+~2,100 GT edges rather than 3. Every remaining submission and commit run goes to association.
+
+☠ Dead, do not revisit: `divgeom`/widened gates (§16), `divveto`/centre-model veto (§20),
+`divoff` (answered here for free), safe-division rate caps (§11.6), division geometry re-ranking
+(§16). The division post-processing stays exactly as shipped.
+
+**Method note — the loop is now paying for itself.** In one session the local instrument has killed
+`MOTION_RELINK_VELOCITY_WEIGHT` (§18.2), correctly deflated `relinkw3` from a headline +0.0107 to a
+robust +0.0024 (§19.2), and retired the entire division programme including a submission we had
+queued (`divoff`). **Cost: zero submissions.** Compare §16, where the same class of question cost a
+readable 0.006 on the board.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
