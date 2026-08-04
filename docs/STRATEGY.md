@@ -1169,6 +1169,111 @@ from the LB. The recurring failure is not arithmetic, it is measuring the condit
 convenient direction: `P(evidence | hypothesis)` is easy to get from GT, `P(hypothesis | evidence)`
 is the one that decides. §10.1 and §11.1 are the same mistake in different clothes.
 
+## 17. We can score locally, and it changes almost everything (2026-08-04)
+
+`scripts/local/score_submission.py`. The four `test/` volumes are byte-identical to train volumes,
+so their GT is on disk, and a commit run's `submission.csv` is a complete predicted graph over
+exactly those four. Every quantity we have spent two weeks *inferring from LB deltas* is directly
+computable, for free, before spending a submission.
+
+### 17.1 It is validated against the board
+
+| | local | LB |
+|---|---|---|
+| `d4edge` | 0.9216 | 0.914 |
+| `divgeom` | 0.9092 | 0.908 |
+| **delta** | **−0.0124** | **−0.006** |
+
+Right sign, right order of magnitude, absolute level optimistic by ~0.008. **New workflow: commit
+run (~21 min, costs no submission) -> download `submission.csv` -> score locally -> submit only if
+local says up.** That is the loop that was missing for the whole project.
+
+Caveat: four volumes hold only 3 annotated divisions, so `division_jaccard` is quantised in steps of
+~0.125 and is a coarse instrument. `edge_jaccard` rests on ~2,100 GT edges and is stable.
+
+### 17.2 The `divgeom` loss was 100% divisions — §16.3 was wrong
+
+| | edge_J | adj | div_J | score |
+|---|---|---|---|---|
+| `d4edge` | 0.8895 | 0.9091 | **0.1250** | 0.9216 |
+| `divgeom` | 0.8898 | 0.9092 | **0.0000** | 0.9092 |
+
+`edge_J` moved **+0.0003**. ⚠ **§16.3's "error 2" is refuted** — the short-track/node-retention side
+effect is mechanically real but costs nothing measurable. The entire −0.0124 is the division term.
+
+**And the division term is live and quantified for the first time:** `d4edge` scores
+**TP=1, FP=5, FN=2 -> div_J = 0.125**, worth **+0.0125** of score. `divgeom` scores TP=0 -> 0.
+So §16.2 was right: widening the gates destroyed the one real division the tight config was
+catching. ☠ Confirmed dead.
+
+### 17.3 The score is a MACRO average — small volumes count as much as big ones
+
+`edge_jaccard` is micro (summed counts) but **`adj_edge_jaccard` is the mean of per-volume values**,
+and the score uses the macro one:
+
+| volume | GT edges | edge_J | adj | node recall |
+|---|---|---|---|---|
+| 44b6_0113de3b | 50 | 0.9038 | 0.9046 | **0.9423** |
+| 44b6_0b24845f | 49 | 0.8846 | 0.9232 | 0.9804 |
+| 6bba_05b6850b | 845 | 0.9709 | 0.9731 | 0.9988 |
+| 6bba_05db0fb1 | 1,183 | **0.8359** | 0.8356 | 0.9910 |
+
+A volume with **50** annotated edges carries the same 25% of the score as one with 1,183. Any
+tuning that optimises aggregate counts is optimising the wrong average.
+
+### 17.4 ⚠ `edge_J ~ recall²` is FALSE where it matters — §13.3 and §13.6 are wrong
+
+§13.3 concluded "detection-limited, not linking-limited" from an aggregate inversion. Measured
+per volume:
+
+| volume | node recall | recall² (predicted edge_J) | actual edge_J | gap |
+|---|---|---|---|---|
+| 6bba_05b6850b | 0.9988 | 0.998 | 0.971 | −0.027 |
+| **6bba_05db0fb1** | **0.9910** | **0.982** | **0.836** | **−0.146** |
+
+On the volume that dominates micro `edge_J` and carries 25% of the macro score, detection is
+essentially perfect (99.1%) and `edge_J` is 0.836: **133 FP and 83 FN edges built on correct nodes.**
+That is ~15 points of association loss, not detection loss. §13.6's "retire everything except
+candidate generation" followed from the wrong premise.
+
+**This also explains §11.2's decomposition drift.** `1.1·edge_J + D = 1.00` with D = 0.0125 gives
+edge_J = 0.897 — close to the measured 0.8895, so the algebra was fine; the *interpretation*
+(recall² ⇒ detection) was not.
+
+### 17.5 The learned association model is a ~1 µm tiebreaker — which explains `edgeft`
+
+`run_stats`: `motion_relink_replaced_raw_edges` equals `raw_edges` on every volume. The relinker
+**replaces 100% of the transformer's edges** (`edges = motion_edges`) and re-derives them from a
+Hungarian assignment whose cost is
+
+    cost = motion_dist + 0.05 * raw_dist - MOTION_RELINK_LEARNED_BONUS * prob
+
+`motion_dist` is in µm and competing assignments inside `MOTION_RELINK_RELAXED_UM = 10` differ by
+several µm; `prob ∈ [0,1]` with bonus 1.0. **The learned signal is worth at most 1 µm of tiebreak
+against a distance-dominated objective.**
+
+⇒ **§21 (`edgeft`) is explained.** We fine-tuned an association head for 10,000 steps and nothing
+moved because its output is discarded and re-derived geometrically. The flat loss curve was not
+evidence that association is solved — it is evidence that we were tuning a component that barely
+reaches the objective. §12.x was closer to right than §13 gave it credit for.
+
+### 17.6 Ranked plan — every item now has a local pre-check
+
+| # | lever | grounding | est. | local test first? |
+|---|---|---|---|---|
+| 1 | **`MOTION_RELINK_LEARNED_BONUS` sweep** (1.0 -> 3, 6) | 17.4 + 17.5: the dominant volume is linking-limited and the learned term is a rounding error in the cost | +0.005 .. +0.02 | yes |
+| 2 | **Division precision on the ORIGINAL gates** (`DEEPCENTER_SAFE_DIV_VETO=1`) | 17.2: TP=1, FP=5. Cut FP to 0 at constant TP -> div_J 0.125 -> 0.33 | **+0.02** | yes |
+| 3 | **Per-volume detection threshold** | 17.3: `44b6_0113de3b` has the worst recall (0.9423) and carries 25% | +0.005 .. +0.01 | yes |
+| 4 | `MOTION_RELINK_RELAXED_UM` / velocity weight | same premise as 1, adjacent knob | small | yes |
+
+☠ Dead, do not revisit: widened division gates (§16), global `DET_THRESHOLD` (§13.6), node pruning
+(§11.3), ensemble blend weights (exp 19b), more epochs (§11.5), the metric hack (§11.1).
+
+**Method note.** The instrument that settled all of this was buildable on day one — the GT and the
+submission files were always on disk. §16's method note blamed measuring `P(evidence|hypothesis)`;
+the deeper fault was inferring from LB deltas at 4-6 h per read when a direct measurement was
+available for free. Build the instrument before the hypothesis.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
