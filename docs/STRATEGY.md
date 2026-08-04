@@ -1915,6 +1915,64 @@ selector can be operated at a budget that keeps the TP.
   scorer's TP 1 + FP 5 = 6. Confirms §23.3's ~1.4% estimate and independently validates both
   the audit and `ctrack.eval.biohub`.
 
+### 24.6 The linker is a strict 1-1 matching, so it structurally cannot emit a division
+
+Measured over all 116,134 edges of `d4edge`:
+
+| volume | in-degree histogram | out-degree histogram |
+|---|---|---|
+| 44b6_0113de3b | `{1: 24,795}` | `{1: 24,717, 2: 39}` |
+| 44b6_0b24845f | `{1: 17,347}` | `{1: 17,215, 2: 66}` |
+| 6bba_05b6850b | `{1: 6,015}` | `{1: 5,995, 2: 10}` |
+| 6bba_05db0fb1 | `{1: 67,977}` | `{1: 67,561, 2: 208}` |
+
+**Every node that has a parent has exactly one.** No node anywhere has in-degree ≥ 2. And the
+out-degree-2 counts (39/66/10/208 = **323**) match `safe_divisions_added` exactly, while
+`run_stats` shows `division_like_sources` equal to the same figure.
+
+⇒ **Every division in our output comes from the post-hoc safe-division scavenge; not one comes
+from the ILP.** `motion_relink_replaced_raw_edges` equals `raw_edges` on every volume (§17.5),
+so the relinker discards the ILP's solution — including its division variables `v_i`, which
+cell 3's objective explicitly prices at 1.0 — and re-derives a strict bipartite 1-1 assignment.
+A Hungarian cannot give a node two children, so divisions can only be added afterwards, and
+only from nodes the assignment left orphaned.
+
+**That is the mechanism behind §24.3 case (b).** The daughter of GT division 63001217 was
+detected, but the assignment had already consumed it as some other cell's child, giving it
+in-degree 1 and permanently disqualifying it as a division candidate. This is not a threshold;
+it is the shape of the algorithm.
+
+### 24.7 ⚠ At the shipped gates there is almost no selection left to improve
+
+`run_stats` again:
+
+    safe_division_candidates    39 /  79 /  10 / 227   = 355
+    safe_divisions_added        39 /  66 /  10 / 208   = 323   (91%)
+
+**We accept 91% of what the gates admit.** The "ranking" that §16 tried to improve, and that
+§24.1 shows a fitted model would improve 2.4x, is barely operating at the shipped configuration
+— it is choosing 323 of 355.
+
+This closes the loop on §16 and on my own §23.3 framing:
+
+* A better *ranking* at the shipped gates has ~nothing to rank. To give the model room you must
+  widen the gates, which is exactly `divgeom` (355 → 13,495 candidates).
+* But widening cannot reach the actual FNs, because §24.3 found **0 orphans within 12 µm** of
+  both missed sources. Their daughters are undetected or already linked. Wider gates admit only
+  *more wrong candidates*.
+
+⇒ That is precisely why `divgeom` lost 0.006, and it means **§23.3's "+0.0875 headroom" is real
+but almost entirely unreachable through the division post-processing.** What remains for lever
+#2 is only FP-trimming within the existing 355: drop the 5 FPs while keeping the 1 TP, worth
+`div_J 0.125 → 0.333` = **+0.021 local / ~+0.010 LB**, as §24.4 already revised it. The
+classifier is still the right tool for that trim — `divveto` failed (§20.1) precisely because it
+was an off-switch rather than a ranked budget — but the lever is a trim, not a recovery.
+
+**The real division lever is upstream**: make division-awareness part of the assignment
+(let a likely-dividing source claim a second child during matching) instead of scavenging
+orphans afterwards. That is a pipeline change, not a knob, and it shares a root cause with
+§18's association work — both are blocked by what the 1-1 assignment decides.
+
 ## 25. ☠ Sub-voxel localisation refinement is dead — quantisation is 5% of the error (2026-08-04)
 
 §23.6 ranked lever #4 at +0.005..+0.02 on §18.2's observation that swapped cells have 3.45 µm
