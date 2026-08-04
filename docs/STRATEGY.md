@@ -1554,6 +1554,74 @@ headroom **+0.077**, of which the two thick volumes contribute ~+0.044 robust. R
 - Best local config: `relinkw6`, robust **+0.0028** — below the 0.005 readable floor, so **not worth
   a submission yet**. Keep iterating locally; that is what the instrument bought us.
 
+## 22. `edgethr` — right answer, wrong mechanism; and an instrument bug (2026-08-04)
+
+### 22.1 ⚠ The "robust delta" in §19.2 and §21.5 was understated 2x
+
+It summed the per-volume contributions of the thick volumes but still divided by **all 4**. What
+transfers to a ~40-volume hidden set is the **mean per-volume adj delta**, estimated over the
+volumes thick enough to measure — so the sum must be divided by the number *retained*, not by `n`.
+Fixed in `score_submission.py`. Corrected table:
+
+| config | transferable adj | div_J delta | **net expected score** |
+|---|---|---|---|
+| `relinkw3` (BONUS 3) | +0.0049 | −0.014 | +0.0035 |
+| `relinkw6` (BONUS 6) | +0.0056 | −0.014 | **+0.0042** |
+| **`edgethr30`** (thr 0.30, BONUS 6) | **+0.0062** | −0.025 | **+0.0037** |
+| `edgethr15` (thr 0.15, BONUS 6) | +0.0026 | −0.034 | +0.0000 |
+| `divveto` | +0.0017 | −0.125 | −0.0108 |
+
+§21.5's "relinkw6 robust +0.0028, not worth submitting" was half the true figure.
+
+### 22.2 The gate hypothesis is refuted — it helped for a reason I did not predict
+
+| config | edge_J | **detFN** | assocFN | swaps | FP |
+|---|---|---|---|---|---|
+| d4edge | 0.8988 | 24 | 75 | 65 | 153 |
+| relinkw6 | 0.9109 | 22 | 70 | 61 | 143 |
+| **edgethr30** | **0.9172** | **14** | 72 | 62 | 139 |
+| edgethr15 | 0.9157 | 12 | **76** | **65** | 146 |
+
+§21.4 predicted opening the gate would convert swaps. **It did not** — swaps went 65 → 62 → 65.
+What it actually did was cut **detection-FN 24 → 14**: more candidate edges keep more nodes out of
+the short-track filter, so more GT nodes get matched. That is §16.3's node-retention mechanism,
+which §17.2 found cost nothing there, mattering here in the opposite direction.
+
+### 22.3 ⚠ The 18/18 was selection-biased, and the arithmetic was available beforehand
+
+§21.2 measured the transformer at 18/18 **on edges that had already passed the 0.48 gate** (median
+prob 0.838) and I generalised it to the 47 that had not. Those are, by construction, the model's
+*low-confidence* cases. At threshold 0.30 a newly admitted edge has `prob ∈ [0.30, 0.48]`, so
+`BONUS × prob ≤ 6 × 0.48 = 2.9 µm` against §18.2's median margin of **6.93 µm** — never enough.
+Flipping them would need `BONUS ≈ 17`, and at `thr = 0.15` the admitted probs are lower still, which
+is why `edgethr15` is *worse* than `edgethr30`.
+
+**This is §16's error repeated**: measuring a conditional on the convenient subset and generalising
+it to the inconvenient one. The margin arithmetic that refutes it needed no run at all.
+
+### 22.4 Association by reweighting is done — the plateau is real
+
+| | transferable adj |
+|---|---|
+| relinkw3 / relinkw6 / edgethr30 | +0.0049 / +0.0056 / **+0.0062** |
+| §18 oracle headroom (thick volumes) | **+0.044** |
+
+Four configurations spanning a 4x range of bonus and a 3x range of candidate threshold all land
+between +0.005 and +0.006. **~87% of the association headroom is unreachable by reweighting the
+existing model.** §18.2 said why: geometry points at the wrong cell and the correct one is the
+model's low-confidence case. Closing that gap needs a *better association model*, not a knob —
+which is very likely what separates 0.947 from the 0.913 shelf.
+
+### 22.5 Recommendation
+
+`edgethr30` is our best measured config at **+0.0062 transferable adj / ~+0.0037 net**, marginally
+ahead of `relinkw6`. Both sit at the edge of the 0.005 readable floor. `edgethr30` is the better
+pick on mechanism — its gain is detection-FN recovery (24 → 14), which is a real structural
+improvement, whereas its `div_J` penalty is a 3-sample artifact (§20.3) that should shrink on a
+~30-division hidden set.
+
+⚠ Neither is a large win. The honest expectation is **+0.003 .. +0.006**, i.e. 0.914 → ~0.918-0.920.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)

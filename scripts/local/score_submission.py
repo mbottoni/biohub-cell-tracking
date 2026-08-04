@@ -109,10 +109,17 @@ def main() -> None:
             print(f"    {x['dataset']:>16}  GT edges {gt_edges:>5}  "
                   f"adj {x['adj_edge_jaccard']:.4f} -> {y['adj_edge_jaccard']:.4f}  "
                   f"contributes {d:>+8.4f}{flag}")
-        robust = sum((y["adj_edge_jaccard"] - x["adj_edge_jaccard"]) / n
-                     for x, y in zip(ra, rb) if (x["edge_tp"] + x["edge_fn"]) >= 200)
-        print(f"\n  ROBUST part of the adj delta (volumes with >=200 GT edges): {robust:>+8.4f}")
-        print(f"  headline adj delta                                        "
+        # The hidden set is ~10x these four volumes, so what transfers is the MEAN
+        # per-volume adj delta, estimated from the volumes whose GT is thick enough
+        # to measure. Dividing that sum by n (=4) would understate it by the
+        # fraction of volumes dropped -- average over the retained ones instead.
+        thick = [(x, y) for x, y in zip(ra, rb) if (x["edge_tp"] + x["edge_fn"]) >= 200]
+        if thick:
+            robust = sum(y["adj_edge_jaccard"] - x["adj_edge_jaccard"]
+                         for x, y in thick) / len(thick)
+            print(f"\n  ESTIMATED transferable delta (mean per-volume adj over the "
+                  f"{len(thick)} thick volumes): {robust:>+8.4f}")
+        print(f"  headline adj delta (all {n}, inflated by thin volumes):        "
               f"{b['adj_edge_jaccard']-a['adj_edge_jaccard']:>+8.4f}")
 
 
