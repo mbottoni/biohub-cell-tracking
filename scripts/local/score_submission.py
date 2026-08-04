@@ -90,10 +90,30 @@ def main() -> None:
         print(f"  SCORE             {agg['score']:.4f}")
 
     if len(results) == 2:
-        (pa, a, _), (pb, b, _) = results
+        (pa, a, ra), (pb, b, rb) = results
         print(f"\n===== delta: {pb.parent.name} - {pa.parent.name} =====")
         for k in ("edge_jaccard", "adj_edge_jaccard", "division_jaccard", "score"):
             print(f"  {k:<18} {a[k]:>8.4f} -> {b[k]:>8.4f}   {b[k]-a[k]:>+8.4f}")
+
+        # `adj_edge_jaccard` is a MACRO mean over 4 volumes (17.3), so one edge on a
+        # 50-GT-edge volume moves the reported score by ~0.005 -- indistinguishable
+        # from a real effect. The hidden set has ~10x the volumes, so that noise does
+        # NOT transfer. Always read the per-volume decomposition, never the headline.
+        print("\n  per-volume contribution to the adj delta (each volume is 1/N of the macro mean):")
+        n = len(ra)
+        by = sorted(zip(ra, rb), key=lambda p: -abs(p[1]["adj_edge_jaccard"] - p[0]["adj_edge_jaccard"]))
+        for x, y in by:
+            d = (y["adj_edge_jaccard"] - x["adj_edge_jaccard"]) / n
+            gt_edges = x["edge_tp"] + x["edge_fn"]
+            flag = "  <-- THIN, treat as noise" if gt_edges < 200 else ""
+            print(f"    {x['dataset']:>16}  GT edges {gt_edges:>5}  "
+                  f"adj {x['adj_edge_jaccard']:.4f} -> {y['adj_edge_jaccard']:.4f}  "
+                  f"contributes {d:>+8.4f}{flag}")
+        robust = sum((y["adj_edge_jaccard"] - x["adj_edge_jaccard"]) / n
+                     for x, y in zip(ra, rb) if (x["edge_tp"] + x["edge_fn"]) >= 200)
+        print(f"\n  ROBUST part of the adj delta (volumes with >=200 GT edges): {robust:>+8.4f}")
+        print(f"  headline adj delta                                        "
+              f"{b['adj_edge_jaccard']-a['adj_edge_jaccard']:>+8.4f}")
 
 
 if __name__ == "__main__":

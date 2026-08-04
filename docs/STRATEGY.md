@@ -1364,6 +1364,64 @@ submissions. Two candidate levers (`VELOCITY_WEIGHT`, and `relinkw3` as a meanin
 killed before spending anything, and the headline lever was re-scoped from "+0.02" to "up to +0.077
 but structurally risky". This is the loop §17 was built for, working as intended.
 
+## 19. `relinkw3` measured — the margin model held, the headline number was noise (2026-08-04)
+
+Commit run, scored locally. **Not submitted.**
+
+| | d4edge | relinkw3 | delta |
+|---|---|---|---|
+| edge_jaccard | 0.8895 | 0.8961 | +0.0066 |
+| adj_edge_jaccard | 0.9091 | 0.9212 | **+0.0121** |
+| division_jaccard | 0.1250 | 0.1111 | −0.0139 |
+| **score** | 0.9216 | 0.9323 | **+0.0107** |
+
+At face value our first config to beat `d4edge`. It is mostly an artifact.
+
+### 19.1 §18.3's mechanism prediction was accurate
+
+Predicted: `BONUS = 3.0` can flip at most 7.7% of 65 swaps ≈ 5. Measured: swaps **65 → 62**,
+`edge_tp` +6, `edge_fp` −8, `edge_fn` −6 on `6bba_05db0fb1`. The margin model held.
+
+### 19.2 But the headline is 80% one edge on a 49-edge volume
+
+`adj_edge_jaccard` is a MACRO mean over 4 volumes (§17.3), so per-volume contributions are:
+
+| volume | GT edges | adj | contributes |
+|---|---|---|---|
+| **44b6_0b24845f** | **49** | 0.9232 → 0.9618 | **+0.0096** ⚠ thin |
+| 6bba_05db0fb1 | 1,183 | 0.8356 → 0.8453 | +0.0024 |
+| 6bba_05b6850b | 845 | 0.9731 → 0.9732 | +0.0000 |
+| 44b6_0113de3b | 50 | 0.9046 → 0.9046 | +0.0000 ⚠ thin |
+
+**One edge on a 49-edge volume is worth +0.0096 of reported score.** The hidden test has ~10x the
+volumes, so that noise averages away and does not transfer.
+
+    ROBUST delta (volumes with >=200 GT edges):  +0.0024
+    headline delta                               +0.0121
+
+⇒ `relinkw3`'s real expected LB movement is **~+0.002 — below the 0.005 readable threshold.**
+§18.3's call of "flat" was right in substance; I then mis-scored my own prediction by reading the
+headline instead of the decomposition, which is §17.3's finding applied against itself.
+
+**`score_submission.py` now prints this decomposition and flags any volume under 200 GT edges.**
+The instrument had the same overread available to it as the LB does; now it defends against it.
+
+### 19.3 Divisions moved too — this was not a clean single lever
+
+`division_jaccard` fell 0.125 → 0.111 (TP held at 1, one extra FP). Relinking changes which nodes
+are orphans and which have out-degree 1, so it feeds the safe-division candidate pool. Any future
+association experiment must report `div_J` alongside `edge_J`; they are coupled through the
+post-processing.
+
+### 19.4 Standing read
+
+- `relinkw6` becomes the real test: §18.3 says it can flip ≤33.8% of swaps, ~4x `relinkw3`, so the
+  **robust** component should land near +0.010 if the mechanism scales — that would be readable.
+- The 31:1 correct-to-swap asymmetry (§18.3) is still the risk, and `relinkw6` is where it starts
+  to bite.
+- `probdump` remains the decisive instrument: if the correct edge is not even a candidate,
+  `learned_prob` is 0 and no bonus can ever reach it.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
