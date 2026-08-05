@@ -2269,6 +2269,76 @@ detection made association's share larger, not smaller.
 
 `edgethr30` remains the config to submit. `bonus17` is not worth a submission.
 
+## 29. The collapsed volumes: fixed µm thresholds on a corpus with no fixed scale (2026-08-04)
+
+§27.1 flagged `44b6_87bba6c4` (oracle 0.9597, actual **0.5743**) as the largest unexplained
+deficit in the corpus. Investigated locally, free.
+
+### 29.1 What predicts the oracle-actual gap, over the 24 volumes
+
+| predictor | corr with gap | corr with swap-rate | corr with FP-rate |
+|---|---|---|---|
+| **annotation density** | **−0.577** | −0.510 | −0.546 |
+| **disp_p90** (motion) | **+0.460** | +0.516 | +0.459 |
+| est_n_nodes (cell count) | +0.451 | +0.364 | +0.428 |
+
+⚠ These are moderate — `disp_p90` gives R² ≈ 0.21 — on n = 24. Directionally consistent across
+three different response variables, which is what makes them worth acting on, but not a law.
+
+### 29.2 The two worst volumes have **different** mechanisms
+
+|  | gap | oracle | detFN | assFN | swap | FP | GT edges | disp_p90 | density | est_n |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `44b6_87bba6c4` | 0.3855 | **0.9597** | **6** | 27 | 23 | 53 | 149 | **8.00** | 0.0054 | 28,102 |
+| `6bba_786893ac` | 0.2217 | 0.9462 | **75** | 126 | 105 | 253 | 1,395 | 3.37 | 0.0248 | 58,979 |
+| *corpus-of-24 median* | | | | | | | | *3.55* | *0.0358* | *18,712* |
+
+My first read — "the collapsed volumes are fast-motion" — is **wrong as a general claim** and I am
+recording it because it was nearly written up. `6bba_786893ac`, the second worst, has
+*below-median* motion (3.37). Its problem is detection: 75 detection-FNs and the lowest oracle in
+the set, in the densest volume (3.2x the median cell count).
+
+`44b6_87bba6c4` is the fast-motion case: detection is essentially fine (6 detFN, oracle 0.96) and
+the linker destroys it, at **0.36 FP per GT edge — twice the next worst volume in the corpus.**
+Its `disp_p90` of 8.00 µm sits *above* `MOTION_RELINK_TIGHT_UM = 6.0`, so more than 10% of its
+true links fall outside the tight pass, into the contested 6–10 µm relaxed regime.
+
+**The common thread is not speed, it is scale**: both are large volumes with below-median
+annotation coverage. The metric counts an edge as FP when *either* endpoint matched an annotated
+node, so in a big, thinly-annotated volume every annotated cell sits among thousands of
+unannotated distractors and each mis-link lands "in the dark" as a pure FP. That is exactly what
+the FP-rate correlations say (−0.546 with density, +0.428 with cell count).
+
+### 29.3 The unifying diagnosis — and a lever that is not on the dead list
+
+**The pipeline uses fixed µm thresholds throughout** — `MOTION_RELINK_TIGHT_UM` 6.0,
+`RELAXED_UM` 10.0, `SAFE_DIV_MAX_UM` 4.66, `OUTPUT_EDGE_MAX_UM` 14.0 — on a corpus where the
+natural scale is not fixed at all: annotation coverage spans **150x** (0.00127 → 0.202), cell
+count **21x** (3,780 → 78,600), and `disp_p90` roughly **5x** (1.72 → 8.00 µm).
+
+This is the same finding twice, arrived at independently:
+
+* §24.1's permutation importance ranked **`parent_over_spacing` second** of fourteen features for
+  division selection — density-normalised distance beat almost everything.
+* §29.1 shows the linking gap tracks motion and density, not absolute distance.
+
+**And the pipeline's own author already conceded the point in one place**: gap-closing has
+`GAP_DENSITY_ADAPTIVE = 1` with a reference distance, gain, and neighbour count — a full
+density-adaptive scheme. The motion relinker, which §17.5 shows rewrites **100%** of edges, has
+no such mechanism. That asymmetry looks like an oversight rather than a decision.
+
+⇒ **Scale-adaptive relink radii** is a real, measured, untried lever, and it is not on the dead
+list. ⚠ It is *not* a single env var: widening `MOTION_RELINK_TIGHT_UM` globally would help
+`87bba6c4` and hurt the dense volumes, and with `adj` a macro mean (§17.3) that trade is likely a
+wash. It needs per-volume adaptation keyed to something measurable at inference (median
+nearest-neighbour spacing, or observed frame-to-frame displacement), which is a code change of
+the same shape as `GAP_DENSITY_ADAPTIVE`.
+
+**Cheap falsification before building it:** run one commit-run pair with
+`MOTION_RELINK_TIGHT_UM` at 6.0 vs ~9.0 on the 24-volume set. If `87bba6c4` improves markedly
+while the dense volumes degrade, adaptation is worth building; if `87bba6c4` does not move, the
+radius is not the constraint and this dies for one run.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
