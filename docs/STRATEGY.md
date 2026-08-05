@@ -2339,6 +2339,71 @@ the same shape as `GAP_DENSITY_ADAPTIVE`.
 while the dense volumes degrade, adaptation is worth building; if `87bba6c4` does not move, the
 radius is not the constraint and this dies for one run.
 
+## 30. ⚠ `edgethr30` scored 0.913 — FLAT. Both instruments over-predicted by ~0.004 (2026-08-05)
+
+| config | local (dev 4) | local (evalset 24) | **public LB** |
+|---|---|---|---|
+| `d4edge` | 0.9216 | 0.8947 | **0.913** |
+| `thr096` / `thr095` | — | — | **0.914** ← still our best |
+| **`edgethr30`** | 0.9253 (+0.0037 net) | 0.8986 (**+0.0039 net**) | **0.913 (+0.000)** |
+
+§28.5 said "`edgethr30` remains the config to submit" and §22.5 predicted 0.914 → ~0.918-0.920.
+**Both were wrong.** The board says flat against `d4edge` and **0.001 below** our standing best.
+The LB quantises to 0.001, so a real +0.004 would have read 0.917; it read 0.913. The true delta
+is ~0.000.
+
+### 30.1 The widened instrument did NOT fix delta prediction for this class of change
+
+This is the uncomfortable part. §26 established that the dev-4 instrument was wrong about levels
+and §28.3 noted it was *approximately right about this delta* (+0.0062 dev-4 vs +0.0053 on 24
+volumes) — I treated that agreement as corroboration. **Both agreed with each other and both
+disagreed with the board.** Two instruments concurring is not evidence when they share a bias.
+
+The shared bias is contamination, and it is specific to what `edgethr30` does. The pilkwang
+weights were trained on **all 199 train volumes**, and every local volume we can score — dev 4 or
+evalset 24 — is a train volume. `edgethr30` lowers `DUAL_SEED_EDGE_THRESHOLD` 0.48 → 0.30, i.e. it
+admits **lower-confidence** edges. On volumes the model memorised, a low-confidence edge is far
+more likely to be correct than on genuinely unseen data. So the measured gain is an artifact of
+scoring a memorising model on its own training set, and it evaporates on the hidden test.
+
+That also explains the mechanism cleanly: §28.4 attributed the gain to detection-FN recovery
+(288 → 196) via node retention. Those extra retained nodes are real *on train volumes*. On hidden
+data the same threshold admits noise instead.
+
+### 30.2 The hard structural limit this exposes
+
+**There is no uncontaminated local data for this model.** The weights saw all 199 train volumes;
+the only held-out data in existence is the hidden test set, reachable at 5 submissions/day and
+~4-6 h per read. So:
+
+| question type | local instrument | trustworthy? |
+|---|---|---|
+| structural / decomposition (oracle ceiling, division FN buckets, in-degree, dt=1 audit, gap predictors) | evalset 24 | **yes** — these do not depend on the model being calibrated |
+| deltas from changes that do **not** touch model confidence (geometry, gates, radii, post-proc caps) | evalset 24 | probably — untested |
+| deltas from changes that **exploit model confidence** (`DUAL_SEED_EDGE_THRESHOLD`, `DET_THRESHOLD`, ensemble weights) | evalset 24 | **NO — measured to over-predict by ~0.004** |
+
+⚠ This retroactively re-frames §10.1's CV inversion, which was recorded as a mystery. It is the
+same effect: local validation on train volumes flatters exactly the knobs that trade confidence
+for recall.
+
+⇒ §23's core critique — that we were measuring on 1.65% of our GT — was correct and the fix was
+worth building; §26's structural findings all stand. But **widening the eval set fixed the sample
+size, not the contamination.** I over-claimed in §26/§28 by treating the widened instrument as
+generally predictive. It is not, for this class of change.
+
+### 30.3 What this does to the standing plan
+
+* **Our best remains 0.914** (`thr096`/`thr095`), unchanged since 08-03. `edgethr30`, `bonus17`,
+  `relinkw3/6`, `edgethr15` are all now measured or inferred flat-to-negative.
+* §28's conclusion that association-by-reweighting is dead **strengthens** — `edgethr30` was the
+  last member of that family with a positive local reading, and the board says it is flat too.
+* The remaining levers (§29's scale-adaptive radii, §26.3's wide-gate fitted selector, §26.5's
+  division-aware assignment) are all **geometry/structure** changes, not confidence changes, so
+  they sit in the middle row of the table above — plausibly measurable locally, but that
+  assumption is now itself untested and should be stated whenever it is relied on.
+* ⚠ Before spending more submissions, note the base rate: **11 LB reads, best +0.001 over the
+  0.913 shelf.** Nothing in the knob space has moved this board.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
