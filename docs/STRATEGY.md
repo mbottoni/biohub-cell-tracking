@@ -2404,6 +2404,125 @@ generally predictive. It is not, for this class of change.
 * ⚠ Before spending more submissions, note the base rate: **11 LB reads, best +0.001 over the
   0.913 shelf.** Nothing in the knob space has moved this board.
 
+## 31. ★ The relink RADIUS is the binding constraint on association (2026-08-05)
+
+Two free local experiments. The first died; the second is the strongest result since §18.
+
+### 31.1 ☠ Collective motion does not explain the swaps
+
+Hypothesis: embryonic cells move as tissue, `MOTION_RELINK_VELOCITY_WEIGHT` failed because it uses
+the cell's *own* history (which a swap corrupts), and a *neighbourhood* flow field would be robust.
+`scripts/local/tissue_flow.py`, flow = median displacement of the 12 nearest linked cells:
+
+| criterion | picks the CORRECT successor |
+|---|---|
+| raw distance | **2 / 379 = 0.5%** |
+| flow-compensated distance | **5 / 379 = 1.3%** |
+
+Local flow magnitude is a median **1.22 µm** against a ~7.5 µm discrepancy — far too small to
+matter. ☠ Dead, for free, no GPU.
+
+### 31.2 ★ But it exposed the real mechanism: the correct successor is OUT OF RANGE
+
+The distances in that null result are the finding:
+
+    distance from source to the CORRECT successor (predicted coords), n=379 swaps
+        p10   6.19    p25   7.67    p50   9.37    p75  11.47    p90  13.75
+
+        beyond MOTION_RELINK_TIGHT_UM   (6.0):  343/379 = 90.5%
+        beyond MOTION_RELINK_RELAXED_UM (10.0): 156/379 = 41.2%   <-- CANNOT BE FORMED
+        beyond OUTPUT_EDGE_MAX_UM       (14.0):  30/379 =  7.9%
+
+        the link we actually TOOK: median 1.86 um, 0.0% beyond TIGHT
+
+**These are not ambiguous decisions.** The relinker takes a node 1.9 µm away while the correct
+answer sits 9.4 µm away — and for **41% of swaps the correct edge is beyond the relinker's maximum
+radius, so no cost function, weight or bonus can ever produce it.** Only 0.5% of swaps are cases
+where the correct successor was even the nearer option.
+
+**This is the fourth independent appearance of the same theme.** §21.1: 72% of swap-correct edges
+are not candidates. §24.3/§26.3: 0/25 divisions reachable at the shipped gate. §28: the bonus is
+inert because `prob ≡ 0` on unreachable edges. Now: 41% of correct successors are outside the
+relink radius. **Every association lever we have tried failed because the correct answer was never
+in the consideration set — not because the ranking was wrong.**
+
+### 31.3 Why the distances are so large — and it is only half real motion
+
+    GT displacement of these same edges:   median 4.82 um   (corpus median 1.82 => 2.7x)
+    predicted distance for the same edges: median 9.37 um
+
+The cells genuinely move 2.7x faster than typical, **and our detections roughly double the apparent
+displacement on top of that** — consistent with §18.2's 3.45 µm match error on swaps against a 1.72
+µm baseline. Note only **7.1%** of these edges have a true GT displacement beyond 10 µm, while
+**41.2%** of the predicted distances do. So the radius is not mainly too small for real biology; it
+is too small for real biology *plus our own localisation error*.
+
+⚠ §25 killed sub-voxel refinement and that stands — the error is genuine detector scatter, not
+quantisation, so it cannot be refined away. The radius has to absorb it instead.
+
+### 31.4 The lever, and why it may be nearly free
+
+Raise `MOTION_RELINK_TIGHT_UM` (6.0) and especially `MOTION_RELINK_RELAXED_UM` (10.0). To reach the
+median correct successor needs TIGHT ≈ 9.4; to reach p75, ≈ 11.5; RELAXED at 14.0 would make ~92%
+of correct successors *formable at all*.
+
+**The asymmetry that makes this promising:** the cost is distance-dominated, and 100% of the wrong
+links we take are already inside 6 µm. Adding *far* candidates cannot outcompete a close correct
+option on any cell that already has one — so widening should be close to inert where we are right,
+and only bite where every close option is wrong, which is exactly the swap population.
+
+⚠ Honest counterweights, both real:
+* This is necessary but not sufficient. Making the edge *formable* does not make it *chosen* —
+  §28 showed the learned term cannot tilt a distance-dominated cost, and at 9.4 µm vs 1.9 µm the
+  geometry argues loudly for the wrong answer. Widening alone may change nothing.
+* §29 found the gap correlates with density, and wider radii cost most in dense volumes. Under a
+  macro mean, hurting the dense majority to help the fast minority can easily net negative.
+* It **cannot be simulated offline** — widening ADDS edges, and `postproc_sim.py` only models
+  removals. This one needs a kernel run.
+
+⇒ This supersedes §29's radius test as the highest-value experiment, and sharpens it: sweep
+`RELAXED_UM` 10 → 14 (the hard ceiling, 41% → 8% unformable) rather than nudging TIGHT to 9.
+It is pure geometry, so it sits in §30.2's trustworthy row.
+
+### 31.5 A new instrument: post-processing optimised offline, exactly, in minutes
+
+`scripts/local/postproc_sim.py`. `submission.csv` is the complete final graph, so **any
+post-processing rule that only REMOVES nodes or edges can be applied to it and scored exactly with
+the real metric on all 24 volumes** — no kernel, no GPU, no submission. A class of experiment that
+has been costing ~4 h each is now a ~10 min local sweep.
+
+| variant | edge_J | adj | div_J | SCORE | delta |
+|---|---|---|---|---|---|
+| **BASELINE (as submitted)** | 0.9039 | 0.8916 | 0.0308 | **0.8947** | — |
+| minlen ≥ 7 | 0.9017 | 0.8900 | 0.0308 | 0.8931 | −0.0015 |
+| minlen ≥ 8 | 0.8992 | 0.8895 | 0.0308 | 0.8926 | −0.0020 |
+| minlen ≥ 10 | 0.8950 | 0.8886 | 0.0308 | 0.8917 | −0.0030 |
+| minlen ≥ 12 | 0.8846 | 0.8776 | 0.0303 | 0.8806 | −0.0140 |
+| minlen ≥ 15 | 0.8708 | 0.8680 | 0.0303 | 0.8711 | −0.0236 |
+| minlen ≥ 20 | 0.8236 | 0.8325 | 0.0154 | 0.8340 | −0.0606 |
+| maxedge ≤ 10.0 µm | 0.9039 | 0.8916 | 0.0308 | 0.8947 | **+0.0000** |
+| maxedge ≤ 8.0 µm | 0.9039 | 0.8916 | 0.0308 | 0.8947 | **+0.0000** |
+| maxedge ≤ 6.0 µm | 0.9034 | 0.8912 | 0.0308 | 0.8943 | −0.0004 |
+| **divtrim ORACLE (uses GT)** | 0.9042 | 0.8915 | **0.0800** | 0.8995 | **+0.0049** |
+
+**☠ `MIN_TRACK_LEN` is monotonically bad above 6.** No shallow optimum hides between the shipped 6
+and exp 9's 20 — every step down the ladder loses. Exp 9's LB loss of −0.027 at L=20 corresponds to
+−0.0606 locally, a ~2.2x scaling consistent with §26.2. (Only L ≥ 7 is testable offline; whether
+L < 6 would be better cannot be answered by removal.) Killed for free.
+
+**`maxedge` is inert**, exactly as predicted — the shipped 14.0 µm cap never binds and no scoring
+edge exceeds 8 µm. Included as a control, and it behaved as a control should, which is mild
+evidence the simulator is faithful.
+
+**★ `divtrim` puts a hard ceiling on lever #2's FP half: +0.0049.** This deletes *exactly* the
+false-positive divisions using ground truth, so **no real selector can beat it.** §24.4 estimated
+this branch at +0.021 from the dev-4 numbers and §26.4 quoted +0.014..+0.028 for the combined
+lever; the FP-removal half alone is now measured at **+0.0049 maximum**, because with FN = 23 the
+Jaccard is dominated by misses, not false alarms. Any realistic classifier lands well under that.
+
+⇒ **The division programme is worth pursuing only through the RECALL half** (§26.3's 9/25 reachable
+at a 12 µm gate). Trimming false positives, however cleverly, is capped at half a point.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
