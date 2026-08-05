@@ -2185,6 +2185,90 @@ delta on record were measured on the dev 4, which §26.2 shows is optimistic by 
 4x on divisions. Those rankings are not trustworthy and should be re-measured on the 24-volume
 set before any further submission is spent.
 
+## 28. BONUS=17 run — §22.4's conclusion survives its own missing experiment (2026-08-04)
+
+§27.2 charged that §22.4 declared association-by-reweighting exhausted while never testing the
+`BONUS ≈ 17` its own arithmetic prescribed. That charge was methodologically correct. The
+experiment has now been run, and **it confirms §22.4 rather than overturning it.**
+
+Three configs, same 24 volumes, same instrument:
+
+| config | edge_J | adj (macro) | div_J | **score** | transferable adj |
+|---|---|---|---|---|---|
+| `d4edge` | 0.9039 | 0.8916 | 0.0308 | 0.8947 | — |
+| **`edgethr30`** | 0.9090 | 0.8972 | 0.0143 | **0.8986** | **+0.0053** |
+| `bonus17` (BONUS 17) | 0.9093 | 0.8978 | 0.0141 | 0.8992 | **+0.0004** |
+
+### 28.1 Tripling the bonus does essentially nothing
+
+`bonus17 − edgethr30`: edge_J **+0.0003**, adj +0.0006, score +0.0006, **transferable adj
++0.0004**. Most volumes are bit-identical. And swaps did not fall — **379 → 385**.
+
+The mechanism is visible in `run_stats`, and it is decisive:
+
+    motion_relink_tight_edges     465,311  ->  465,311    IDENTICAL
+    motion_relink_relaxed_edges    19,266  ->   19,315    +49
+
+**Raising the learned bonus from 6 to 17 — an 11 µm swing in a cost measured in µm — left the
+tight-radius assignment completely unchanged.** Only 49 of 19,266 relaxed edges moved.
+
+Two reasons, both already on record:
+
+* Most links are unambiguous. Median GT displacement is 1.82 µm against ~11.7 µm spacing, so the
+  argmin is robust to large cost perturbations. Swaps are 385 of ~478,000 edges = **0.08%**.
+* On the contested 0.08%, §21.1 measured that the correct edge is **not a candidate in 72%** of
+  swaps, so `learned_prob` is identically 0 and `BONUS × 0 = 0` at any bonus. No value of the
+  knob can reach them.
+
+### 28.2 The honest scoring of §27.2
+
+§27.2's criticism was valid as method — concluding a lever is dead from settings below your own
+model's threshold *is* an untested hypothesis. But the test came back negative, and **§22.4's
+conclusion stands on evidence now instead of extrapolation**: association by reweighting the
+shipped model is finished. Between BONUS 1, 3, 6 and 17, and candidate thresholds 0.48, 0.30 and
+0.15, every configuration lands within +0.006 of the others.
+
+⚠ Note also that §18.3's feared 40:1 corruption never materialised — edge_J went *up*
+marginally, not down. The bonus is not dangerous; it is **inert**. That is a different failure
+mode from the one we pre-registered, and it is worth more than the null result itself: the
+learned term is not competing with geometry at all.
+
+### 28.3 `edgethr30` re-baselined — and the dev-4 delta was roughly right
+
+`edgethr30` is confirmed as our best config at **+0.0053 transferable adj / +0.0039 net score**,
+now measured across **18 thick volumes instead of 2**. Its dev-4 estimate was +0.0062 adj /
++0.0037 net (§22.1).
+
+**So the dev-4 instrument was badly wrong about LEVELS (score 0.9216 vs 0.8947, `div_J` 4x) but
+approximately right about this DELTA.** That is a useful and non-obvious calibration: config
+deltas on the edge term were transferring reasonably even from 2 thick volumes; the division
+term never was. §26.2's warning should be read as level-specific, not delta-specific.
+
+### 28.4 `edgethr30`'s real mechanism, confirmed at scale
+
+The oracle moves with it: detection-FN **288 → 196** (−32%) and the detection ceiling rises
+**0.9764 → 0.9833**. §22.2 found this on 4 volumes — opening the candidate gate retains nodes
+through the short-track filter — and it holds on 24 (`short_track_nodes_removed` 22,773 →
+20,183). `edgethr30` is a *detection-retention* change that was mislabelled an association
+change, exactly as §22.2 said.
+
+Association headroom after it: **+0.0937 = 85% of all remaining loss** (was 80%). Fixing
+detection made association's share larger, not smaller.
+
+### 28.5 Standing plan, revised
+
+| # | lever | status |
+|---|---|---|
+| ☠ | association by reweighting (BONUS / candidate threshold) | **DEAD, now on evidence** (§28.1) — do not revisit |
+| ☠ | sub-voxel localisation | DEAD (§25) |
+| ☠ | division knobs (gates, veto, caps, rate) | DEAD (§16, §20) |
+| **1** | **a better association model** | +0.0937 (85%) — compute-blocked (§12), the only large lever left |
+| 2 | wide gates + **fitted** division selector | +0.014..+0.028 (§26.4), needs `divdump` |
+| 3 | division-aware assignment | 32% of div FNs (§26.5) + shares the association root cause |
+| 4 | the collapsed volumes (`44b6_87bba6c4` 0.57 vs oracle 0.96) | unexplained; costs more than the whole division term |
+
+`edgethr30` remains the config to submit. `bonus17` is not worth a submission.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
