@@ -2119,6 +2119,72 @@ than anything the dev 4 showed, and it is why macro `adj` (0.8916) sits *below* 
 (0.9039). Since the score is a macro mean (§17.3), **these two volumes cost more than the entire
 division term**, and they are a new, unexplored target.
 
+## 27. Oracle at scale: association is 80% of the loss, and §22.4 closed a door it never opened
+
+`link_ceiling.py` on the validated 24-volume set. §18 computed this on 4 volumes and 65 swaps;
+this is 24 volumes and **379 swaps**.
+
+    MACRO oracle (detection ceiling)  0.9764
+    MACRO actual  edge_J              0.8810
+    ASSOCIATION HEADROOM             +0.0954   = 80% of all remaining loss
+    detection-FN 288   association-FN 497 (swaps 379)   FP 902
+    swaps where the WRONG link is SHORTER than the correct one:  377/379 = 99%
+
+Every §18 conclusion survives the 6x sample and strengthens:
+
+* Association headroom rises **+0.0766 → +0.0954**, and its share of remaining loss **76% → 80%**.
+* Detection loss is `1 − 0.9764 = 0.0236` macro. **Association is 4x detection.**
+* §18.2's "100% of swaps took a shorter link" was 65/65; at scale it is **377/379 = 99%**. This
+  is the most robust single fact we have about our errors.
+
+And it dwarfs everything else on the board: association **+0.0954** against the division term's
+realistically-reachable **+0.014..+0.028** (§26.4).
+
+### 27.1 §26.6's collapsed volumes are association failures, not detection failures
+
+| volume | GT edges | oracle | actual | **gap** | detFN | assFN | swaps | FP |
+|---|---|---|---|---|---|---|---|---|
+| **44b6_87bba6c4** | 149 | **0.9597** | **0.5743** | **+0.3855** | 6 | 27 | 23 | 53 |
+| **6bba_786893ac** | 1,395 | 0.9462 | 0.7245 | +0.2217 | 75 | 126 | 105 | 253 |
+| 6bba_0e7c0d07 | 198 | 0.9798 | 0.7479 | +0.2319 | 4 | 19 | 15 | 36 |
+| 6bba_05db0fb1 | 1,183 | 0.9848 | 0.8359 | +0.1489 | 18 | 65 | 57 | 133 |
+
+`44b6_87bba6c4` is the cleanest case in the corpus: **detection could support 0.96 and we deliver
+0.57.** Six detection FNs against 27 association FNs and 53 FPs. Nothing about the detector is
+wrong on this volume — the linker simply fails on it. Under a macro mean this one volume costs
+`0.3855/24 = 0.016` of score, more than the entire division term contributes today (0.0031).
+
+### 27.2 ⚠ §22.4 concluded "reweighting is done" without testing the value its own arithmetic prescribed
+
+§22.3 derived, correctly, that flipping a swap needs `BONUS × prob > margin`, and that with
+newly-admitted candidates at `prob ≤ 0.48` against a median 6.93 µm margin **`BONUS ≈ 17`**
+would be required. §22.4 then declared association-by-reweighting finished — on evidence from
+`relinkw3` (BONUS 3), `relinkw6` (BONUS 6), `edgethr30` and `edgethr15`.
+
+**The prescribed value was never run.** Concluding a lever is exhausted from settings at 3 and 6
+when your own model says 17 is the threshold is not a null result; it is an untested hypothesis.
+This is the same shape of error as §16.2 and §22.3 themselves diagnose.
+
+⚠ The counter-argument is real and must ship with it: §18.3's asymmetry is now **~40:1** correct
+edges to swaps at this scale, so a bonus large enough to override geometry on 379 swaps can
+corrupt far more than 379 currently-correct links. That is *why it needs measuring* rather than
+asserting in either direction — and the 24-volume instrument can now measure it for the cost of
+one commit run and zero submissions.
+
+### 27.3 Standing plan
+
+| # | lever | headroom | reachable est. | next action |
+|---|---|---|---|---|
+| **1** | **Association** | **+0.0954 (80%)** | unknown — §22.4's door is not actually closed | `evalset_relinkw17`: test the prescribed BONUS ≈ 17 |
+| 2 | Divisions | +0.0969 | **+0.014..+0.028** | `divdump` → fit selector → wide gates + selector (§26.3) |
+| 3 | The 1-1 assignment | 32% of div FNs + shares the association root cause | unknown | `evalset_norelink` (built, §24.6) |
+| 4 | Detection | +0.0236 | small | — |
+
+⚠ **Re-baseline everything.** `edgethr30`'s "+0.0062 transferable adj" and every other config
+delta on record were measured on the dev 4, which §26.2 shows is optimistic by +0.027 overall and
+4x on divisions. Those rankings are not trustworthy and should be re-measured on the 24-volume
+set before any further submission is spent.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
