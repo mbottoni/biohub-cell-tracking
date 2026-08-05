@@ -2006,6 +2006,119 @@ Measuring the bias per volume requires the GT we do not have at inference.
 
 ☠ Lever #4 struck from §23.6. Cost to kill: one local script, zero GPU, zero submissions.
 
+## 26. The widened instrument landed — and it overturns the division read (2026-08-04)
+
+`evalset_d4edge` completed: 24 volumes, 477,264 nodes, 457,727 edges, ~4 h GPU, **zero
+submissions**. This is §23.6 lever #1 delivered, and it immediately did the job it was built for.
+
+### 26.1 ☑ Acceptance test PASSED — the instrument is valid
+
+The four dev volumes, scored inside the 24-volume run, reproduce `d4edge` **digit for digit**:
+
+| volume | edge_J | adj | ratio | nrecall | e_tp/fp/fn | d_tp/fp/fn |
+|---|---|---|---|---|---|---|
+| 44b6_0113de3b | 0.9038 | 0.9046 | −0.009 | 0.9423 | 47/2/3 | 0/0/0 |
+| 44b6_0b24845f | 0.8846 | 0.9232 | −0.436 | 0.9804 | 46/3/3 | 0/0/0 |
+| 6bba_05b6850b | 0.9709 | 0.9731 | −0.023 | 0.9988 | 835/15/10 | 0/1/0 |
+| 6bba_05db0fb1 | 0.8359 | 0.8356 | +0.003 | 0.9910 | 1100/133/83 | 1/4/2 |
+
+Every figure matches §17.1's record exactly. `BIOHUB_TEST_DIR` redirection changes nothing about
+how a volume is processed. The instrument can be trusted.
+
+### 26.2 ⚠ The dev-4 instrument was optimistic by +0.027 — and **4x** on divisions
+
+| | dev 4 | **evalset 24** |
+|---|---|---|
+| edge_jaccard (micro) | 0.8895 | **0.9039** |
+| adj_edge_jaccard (macro) | 0.9091 | **0.8916** |
+| division_jaccard (micro) | **0.1250** | **0.0308** |
+| **SCORE** | **0.9216** | **0.8947** |
+
+    divisions:  TP 2    FP 40    FN 23     (TP+FN = 25, exactly the GT count)
+
+**Division recall is 2/25 = 8%, not the 1/3 the dev set implied, and `div_J` is 4x lower.**
+§20.3 warned this statistic was quantised into steps of ~0.125 on 3 samples; it was, and it was
+wrong in the optimistic direction. The division term contributes **0.0031** to our score today,
+not 0.0125 — so its headroom is **+0.0969**, even larger than §23.3 computed.
+
+⚠ **The absolute level does NOT transfer to the LB and must not be used as a predictor.** Dev-4
+local 0.9216 sat *above* LB 0.914; evalset local 0.8947 sits *below* it. Both are contaminated
+train volumes, so this is a composition effect, not a contamination one — the evalset includes
+hard volumes the dev 4 excluded. Use this instrument for **deltas and decomposition on a large
+sample**, which is what it was built for. §17.1's "+0.008 optimistic" calibration is specific to
+the dev 4 and does not carry over.
+
+### 26.3 The pre-registered test fired — §24.3 confirmed at the gate, refuted as a lever claim
+
+`division_fn_diagnosis.py` on 25 GT divisions, at two gates:
+
+| bucket | **gate 4.66 (shipped)** | gate 12.0 (wide) |
+|---|---|---|
+| TP (already a division) | 2 (8%) | 2 |
+| **FN-REACHABLE** (orphan daughter in gate) | **0 (0%)** | **9 (36%)** |
+| FN-consumed (daughter taken by another parent) | 8 (32%) | 8 |
+| FN-daughter (daughter never detected) | 5 (20%) | 5 |
+| FN out-of-gate | 10 (40%) | 1 |
+
+Read carefully, because the two halves point opposite ways:
+
+* **§24.3's hypothesis is CONFIRMED at the shipped configuration.** At the 4.66 µm parent gate,
+  **0 of 25** division FNs are reachable by better selection. A fitted selector bolted onto the
+  shipped gates cannot recover a single division. My n=2 reading was right about *this*.
+* **But it is REFUTED as a statement about the lever.** Widening the parent gate to 12 µm makes
+  **9 of 25 (36%)** reachable — their daughters are genuine orphans, admissible in principle,
+  sitting between 4.66 and 12 µm from the parent. The n=2 dev sample contained zero such cases
+  purely by chance.
+
+**The binding constraint is the gate, and it is far too tight** — consistent with §15, which
+measured real sister separation at a median 10.57 µm against a gate of 8.5, and with §25's
+finding that the geometry was never centred on the truth.
+
+⇒ The combination that has **never been tried** is *wide gates + a fitted selector*. §16
+(`divgeom`) tried wide gates + a hand-written ranking and lost 0.006 by flooding 355 → 13,495
+candidates. The shipped config runs tight gates, where §24.7's 91%/76.8% acceptance shows the
+ranking barely operates. §24.1's model is 2.4x better at ranking on identical rows, and FP
+control is exactly what `divgeom` lacked.
+
+### 26.4 Revised EV for lever #2 — third revision, now on 25 samples not 3
+
+    now                         TP  2, FP 40, FN 23  ->  div_J 0.031  ->  +0.0031
+    wide gates, recover all 9, FP held at 40    TP 11, FN 14  ->  0.169  ->  +0.0138
+    ...and FP trimmed to 20                     TP 11, FN 14  ->  0.244  ->  +0.0213
+    ...and FP trimmed to 10                     TP 11, FN 14  ->  0.314  ->  +0.0283
+
+**Realistic band +0.014 .. +0.028 local**, contingent entirely on the selector holding FPs down
+while the gate is open — the precise failure mode of `divgeom`. My estimate history, kept
+visible: §23.3 said +0.02..+0.04 (arithmetic), §24.4 revised **down** to +0.021 (n=2), this
+revises to +0.014..+0.028 (n=25). The n=2 revision was the unreliable one, which is why it
+shipped as a hypothesis with a pre-registered test rather than a conclusion.
+
+### 26.5 `FN-consumed` at 32% is the largest single bucket — §24.6 confirmed at scale
+
+Eight of 25 GT divisions (32%) fail because the 1-1 assignment already gave the daughter to
+another parent. That was 1 case at n=2; it holds at n=25. **No gate and no selector can reach
+these** — the node is not an orphan. Only a division-aware assignment (§24.7) can, which
+remains the largest structural lever on this term and shares its root cause with §18's
+association work.
+
+Detection accounts for a further 5/25 (20%).
+
+### 26.6 New failure modes that were invisible on 4 volumes
+
+Per-volume `adj` across the 24 spans **0.5713 to 0.9983**. Two volumes are catastrophic and
+have no analogue in the dev set:
+
+| volume | edge_J | adj | node recall |
+|---|---|---|---|
+| **44b6_87bba6c4** | **0.5743** | **0.5713** | 0.9739 |
+| **6bba_786893ac** | **0.7245** | **0.7260** | 0.9625 |
+
+Node recall is 97%+ on both, so **detection is fine and linking collapses** — 53 FP/33 FN edges
+on one, 253 FP/201 FN on the other. This is §17.4's linking-limited pattern, far more extreme
+than anything the dev 4 showed, and it is why macro `adj` (0.8916) sits *below* micro `edge_J`
+(0.9039). Since the score is a macro mean (§17.3), **these two volumes cost more than the entire
+division term**, and they are a new, unexplored target.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
