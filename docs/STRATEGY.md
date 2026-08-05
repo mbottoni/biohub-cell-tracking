@@ -2523,6 +2523,51 @@ Jaccard is dominated by misses, not false alarms. Any realistic classifier lands
 ⇒ **The division programme is worth pursuing only through the RECALL half** (§26.3's 9/25 reachable
 at a 12 µm gate). Trimming false positives, however cleverly, is capped at half a point.
 
+### 31.6 ★ Reading the relinker reverses §31.4's experiment — the TIGHT pass pre-commits
+
+Before spending a run, `motion_relink_edges` was read. It is a **two-stage greedy** assignment,
+not one global one:
+
+    for pass_name, gate_um in (("tight", TIGHT_UM), ("relaxed", RELAXED_UM)):
+        pass_sources = [s for s in source_ids if s in unmatched_sources]
+        pass_targets = [t for t in target_ids if t in unmatched_targets]
+        matches = assign_pass(pass_sources, pass_targets, gate_um)
+
+and `assign_pass` excludes any pair with `raw > gate_um` before `linear_sum_assignment`.
+
+**So a source whose correct successor is 9.37 µm away (§31.2's median) sees only the wrong node
+1.86 µm away inside the 6 µm tight gate, is matched to it, and is struck from `unmatched_sources`
+before the relaxed pass ever runs.** The tight pass pre-commits.
+
+⇒ **§31.4's proposed `RELAXED_UM` 10 → 14 sweep would have measured nothing**, because these
+sources never reach the relaxed pass. That experiment is abandoned unrun; it was designed from the
+distance histogram without checking the control flow, which is §16's error in a new costume.
+
+**The lever is `TIGHT_UM`.** At 6.0 it excludes **90.5%** of correct successors from the only
+assignment that matters. Raising it puts the far-correct and near-wrong targets into the *same*
+Hungarian, where they can be weighed jointly — and where the wrong target's own true parent
+(usually an unannotated cell, invisible to our diagnostics, which is why §31's "93.4% unowned"
+split was uninformative) can claim it and push our source onto its real successor. **That
+competition does not happen today at any setting of any other knob.**
+
+Two arms launched, each ONE change against `d4edge`, to get a curve not a point:
+
+| arm | `MOTION_RELINK_TIGHT_UM` | covers |
+|---|---|---|
+| `tight9` | 6.0 → **9.0** | the p50 correct-successor distance (9.37) |
+| `tight12` | 6.0 → **12.0** | the p75 (11.47) |
+
+**Pre-registered read:** swaps down + adj up ⇒ pre-commitment was the mechanism, and the real fix
+is a single-stage assignment over the full radius. Swaps down but FP up / adj flat ⇒ widening
+trades one error for another and the cost, not the gate, is the problem. Nothing moves ⇒ the cost
+is so distance-dominated that even in a joint assignment the near-wrong target wins, and
+association is closed to everything but a new model.
+
+⚠ Genuine two-sided risk: at 12 µm in a volume with ~11.7 µm spacing every cell has several
+admissible targets. §29 found the oracle gap correlates with density and wide gates cost most
+exactly there; under a macro mean, hurting the dense majority to help the fast minority can net
+negative.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
