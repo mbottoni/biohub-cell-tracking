@@ -2944,6 +2944,74 @@ occasions now where the cheap instrument existed and was built only after paying
 answer. **Standing rule for this project: before any kernel run, ask whether the question can be
 answered by replaying files already on disk.**
 
+## 37. ☠ Phase 3 FAILED — a learned cost does not beat geometry out of sample (2026-08-06)
+
+§35's plan executed end to end. Phases 0–1 passed (§36); **phase 3, the real gate, failed.**
+
+Trained on the 16 evalset volumes on the honest-split TRAIN side, scored on the 8 held-out ones,
+end-to-end through the Hungarian with the real metric:
+
+| cost function | edge_J | adj | score | edge FP | edge FN | Δ |
+|---|---|---|---|---|---|---|
+| **geometric (shipped)** | 0.8927 | 0.8844 | **0.8844** | 238 | 194 | — |
+| learned `−log(p)` | 0.8934 | 0.8842 | 0.8842 | 236 | 193 | **−0.0002** |
+| `geo − 0.5·logit(p)` | 0.8929 | 0.8836 | 0.8836 | 237 | 194 | −0.0008 |
+| `geo − 2.0·logit(p)` | 0.8934 | 0.8842 | 0.8842 | 236 | 193 | −0.0002 |
+| `geo − 8.0·logit(p)` | 0.8934 | 0.8842 | 0.8842 | 236 | 193 | −0.0002 |
+
+Nothing moves. And **three of the four formulations produce bit-identical output** across a 16×
+range of blend weight — the signature of a model that has simply relearned the distance ranking,
+so every monotone transformation of it yields the same argmin.
+
+### 37.1 Why: the training distribution is dominated by cases geometry already solves
+
+    20,935 labelled pairs, 12,477 positive = 59.6% positive
+
+A 59.6% positive rate means the median source has **fewer than two candidates within 10 µm** —
+there is almost nothing to choose between. This is §32.1 restated as a training-set property: 98%
+of links sit below 4 µm and are unambiguous, so a model fitted to all labelled pairs spends its
+capacity on examples where distance is already the right answer.
+
+⚠ And the deeper constraint, which no reweighting fixes: **labels only exist for annotated cells.**
+Only ~3.6% of cells are annotated, so supervision comes from ~13k GT edges rather than the 457k
+predicted edges the linker actually decides. The same sparsity that capped the division work
+(§24.2) caps this.
+
+### 37.2 What this closes
+
+Association has now been attacked along every available axis and the shipped geometry wins each
+time:
+
+| axis | result |
+|---|---|
+| `MOTION_RELINK_LEARNED_BONUS` 1/3/6/17 | inert (§28) |
+| `DUAL_SEED_EDGE_THRESHOLD` 0.48/0.30/0.15 | shipped best, confirmed on the board (§30) |
+| `MOTION_RELINK_VELOCITY_WEIGHT` ×4 | 0/65 flips (§18.2) |
+| `MOTION_RELINK_TIGHT_UM` 6/9/12 | shipped best by a wide margin (§33) |
+| neighbourhood flow term | 1.3% vs 0.5% (§31.1) |
+| hand-made appearance descriptors | chance, underpowered (§34) |
+| **learned cost over geometry + competition structure** | **−0.0002 out of sample (§37)** |
+
+⇒ The +0.0954 oracle headroom is real, and **is not recoverable from geometry, competition
+structure, or the supervision available.** The oracle proves a perfect assignment *exists*; it does
+not prove the information to find it is present in what we can feed a model.
+
+**This is a genuine result, not a failed experiment.** It cost zero GPU and zero submissions, and
+it says the 0.913–0.914 shelf is not a tuning problem — consistent with §33.3's finding that five
+independent knob families all favour the shipped configuration.
+
+### 37.3 What would still be untested after this
+
+Honest list, so nobody re-derives it:
+
+* **Better detections.** The oracle is computed *on our node set*. A different detector changes the
+  ceiling itself, and §27 shows detection loss is only 0.0236 — but the leader's +0.033 has to come
+  from somewhere, and detection is the one stage we have never varied.
+* **Denser supervision.** Every model here learned from ~3.6% of cells. Pseudo-labelling the other
+  96% from confident tracks was on the Kaggle playbook (§9.4 item #3) and was never attempted.
+* **Image features inside the association model** (§35.4 phase 5b). §34's null used four hand-made
+  scalars and was underpowered, so it neither supports nor refutes this.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
