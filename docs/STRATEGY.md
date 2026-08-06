@@ -2734,6 +2734,70 @@ optimum. The leader's +0.033 is not hiding in this configuration space.
   *division* admission, which §33 did NOT test and which failed for a different reason in §16);
   division-aware assignment (§26.5, 32% of division FNs).
 
+## 34. Is the association headroom INFORMATION-blocked or compute-blocked? (2026-08-06)
+
+§33 closed association to every knob, leaving "train a better association model" — priced by §12
+at 534 GPU-h against a ~240 h quota. Before treating that as the plan, a prior question that is
+free to ask: **do the images even contain information that distinguishes the correct successor
+from the one we wrongly take?** If not, the +0.0954 is unreachable rather than expensive.
+
+### 34.1 ⚠ The first version of this test was CONFOUNDED, and I nearly published it
+
+Compared normalised cross-correlation of ~6×6×8 µm patches: source vs correct target, source vs
+the taken distractor. Result: the correct target was **less** similar, 37.1% at **z = −4.8**.
+
+I was one step from writing "appearance is anti-informative ⇒ the headroom is information-blocked."
+**That would have been wrong.** The distractor sits a median **1.86 µm** from the source and the
+correct target **9.37 µm** (§31.2) — so the distractor's patch physically *overlaps* the source's
+and the correct target's does not. NCC was measuring spatial overlap, not cell identity.
+
+Confound confirmed directly: `corr(patch NCC, distance between the two cells) = −0.171`.
+
+This is §32.1's error again — reading a measurement whose confound had not been controlled — and
+it is recorded rather than quietly fixed because it is the third instance of the same failure mode
+in three days.
+
+### 34.2 The corrected test: no detectable signal, but it vetoes nothing
+
+Cell-level descriptors with no spatial term (peak, integrated intensity, local contrast, radial
+falloff), compared as vectors:
+
+    correct target's descriptor is closer to the source:  52.8%   z = +0.8   (n = 235)
+
+Chance. Four hand-made scalars do not separate the correct successor from the distractor.
+
+⚠ **Three reasons this is weak evidence and must not be used as a veto:**
+
+1. Four hand-designed scalars failing says little about what a trained network would find. The
+   whole premise of learned association is that such structure is not hand-specifiable.
+2. **The test is underpowered.** At n = 235 the standard error is 3.3 points, so a real 55% effect
+   would land at z ≈ 1.5 — indistinguishable from this result. It cannot rule out a modest signal.
+3. It uses GT-matched identities, so it is an upper bound on the *convenience* of the signal, not
+   on its existence.
+
+**What it does change:** I went looking for encouragement for option 1 and did not find it. The
+informational premise behind "train a better association model" is **unsupported — neither
+confirmed nor refuted.** That is a materially weaker position than "compute-blocked but sound",
+which is how §33.4 left it.
+
+### 34.3 Standing on the three remaining options, with evidence quality stated
+
+| option | ceiling | ceiling evidence | capture evidence | precedent |
+|---|---|---|---|---|
+| **1. new association model** | **+0.0954** | **strong** — oracle bound, 16,649 edges | **none**; architecturally discarded (§17.5/§24.6), informationally unsupported (§34.2) | `edgeft` flat loss; BONUS inert 1→17 |
+| 2. division selector (recall) | +0.0118 | moderate — 9/25, n=25 | **weak** — fitted on a pool 70× too sparse (§24.1), real pool not reconstructable (§24.2) | **§16 lost 0.006 on the board** |
+| 3. division-aware assignment | +0.0123 | measured — 8/25 | **none** — requires rewriting the assignment | **§33: a 3 µm change cost 0.021** |
+
+**The asymmetry is the honest answer.** Options 2 and 3 together, both succeeding perfectly, total
+~+0.024 — still short of the leader's +0.033 — and both belong to intervention families with
+losing board precedents. Option 1 is the only one sized to close the gap and is the one with the
+least support.
+
+⇒ **Cheapest next fact: `evalset_norelink`** (built, unrun). The relinker discards 100% of learned
+edges, so a better association model has nowhere to plug in unless the ILP path is viable on its
+own. That run answers a prerequisite for option 1 for ~4 GPU-h and zero submissions, and it is
+worth knowing *before* anyone contemplates the 534 GPU-h.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
