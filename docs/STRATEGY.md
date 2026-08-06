@@ -2798,6 +2798,99 @@ edges, so a better association model has nowhere to plug in unless the ILP path 
 own. That run answers a prerequisite for option 1 for ~4 GPU-h and zero submissions, and it is
 worth knowing *before* anyone contemplates the 534 GPU-h.
 
+## 35. PLAN — a new association model (2026-08-06)
+
+### 35.0 ⚠ Correction: association is NOT compute-blocked
+
+§33.4, §34.3 and several commits describe option 1 as "compute-blocked, 534 GPU-h against a ~240 h
+quota." **That figure is for the wrong thing.** Exp 20 measured the **TemporalUNet detector**
+from scratch (window2 5.34 h/epoch, window3 15.13 h/epoch). Association is separable:
+
+    exp 21 (edgeft): edge head only, 10,000 steps, 194 min at 0.69 s/iter
+
+and a cost model over *precomputed node positions* is minutes on the M1. We never need to retrain
+the detector — we keep pilkwang's detections and replace only the linking decision. The compute
+wall is real for detection and does not apply here.
+
+### 35.1 What the model must do — and why "a better edge model" is not enough
+
+`motion_relink_replaced_raw_edges == raw_edges` on every volume (§17.5, §24.6): the relinker
+**discards 100% of learned edges** and re-derives them from
+
+    cost = motion_dist + 0.05*raw_dist - BONUS * learned_prob
+
+§28 proved the `BONUS` channel is inert across 1/3/6/17. So a better *edge probability* has no way
+in. **The model must replace the cost function itself and own the assignment**, not advise it.
+
+Injection point: `motion_relink_edges` → `assign_pass` in cell 11. One function.
+
+### 35.2 ★ The enabler: a LOCAL REPLAY of the relinker
+
+`assign_pass` consumes only node positions (plus the inert prob), so it can be reimplemented
+locally, run over the node set in a downloaded `submission.csv`, and scored exactly with the real
+metric on 24 volumes. **That turns every model evaluation from ~4 GPU-h into seconds** — the same
+trick as §31.5's `postproc_sim`, applied to the linking stage.
+
+⚠ It is a *testbed*, not a simulator of the shipped run: the relinker executes mid-pipeline on a
+different node set than the final submission's (before short-track filtering, after gap close), so
+absolute numbers will not match the kernel exactly. What it gives faithfully is the **relative**
+comparison between cost functions on an identical node set, which is exactly the question.
+
+**Validation gate (hard):** replaying the *shipped* cost on the shipped nodes must reproduce the
+shipped edges to high agreement. If it does not, we do not understand the stage well enough to
+replace it, and the plan stops here.
+
+### 35.3 Evaluation discipline — the three ways this can lie to us
+
+1. **Contamination (§30).** Every locally-scorable volume is a pilkwang training volume. §30
+   measured a ~0.004 over-prediction for confidence-exploiting changes. Detections are
+   unrealistically good here, so association is *easier* locally than on hidden test. Use
+   `configs/honest_split.json` (169/30, embryo-balanced) and treat absolute gains as inflated.
+2. **Pairwise accuracy ≠ assignment quality (§33).** Widening the gate improved candidate
+   *availability* and cost 0.021 because the assignment got worse. **Every model is scored
+   end-to-end through the Hungarian with the real metric**, never on AUC.
+3. **The ~40:1 asymmetry (§18.3).** 379 swaps against ~15,000 correct links. A model that fixes
+   every swap and corrupts 2% of correct links nets zero. **Track edge FP and per-volume macro
+   adj, not swap count.**
+
+### 35.4 Phases, with go/no-go gates
+
+| phase | work | cost | gate to proceed |
+|---|---|---|---|
+| **0** | Reimplement `assign_pass` locally; replay shipped cost on evalset nodes | free, hours | **reproduces shipped edges** at high agreement |
+| **1** | Wire replay → real metric; confirm baseline scores match §26's 0.8947 | free | baseline reproduces |
+| **2** | Feature set + train a cost model on honest-split TRAIN volumes | free, minutes | — |
+| **3** | Score end-to-end on honest-split TEST volumes, macro adj + edge FP | free | **beats geometric cost on held-out volumes** |
+| **4** | Patch the kernel, run `evalset_learned`, score on 24 volumes | ~4 GPU-h | **transferable adj > +0.005** |
+| **5** | Submit | 1/day | only if phase 4 clears |
+| **5b** | *If phase 3 plateaus:* add learned image features (needs GPU, ~3 h by exp 21's rate) | ~3 GPU-h | phase 3 gate again |
+
+### 35.5 What the model gets that geometry does not
+
+Geometry has been exhausted (§33: five axes). The features it never sees:
+
+* **Competition structure** — how many other sources want this target, and their distances. The
+  Hungarian resolves competition globally but the *cost* is blind to it.
+* **Multi-frame consistency** — the cost is strictly pairwise on one frame pair; a track's history
+  over 3+ frames disambiguates a fast cell from a wrong-but-close one.
+* **Local scale** — §24.1 ranked `parent_over_spacing` **2nd of 14** features for divisions, and
+  §29 found fixed µm thresholds fail across a corpus spanning 150× in coverage. Density-normalised
+  distance is the single most under-used quantity in this pipeline.
+* **Learned appearance** (phase 5b) — §34 found no signal in 4 hand-made scalars, but that test was
+  underpowered (SE 3.3 pts) and hand-designed, so it neither supports nor refutes this.
+
+### 35.6 Honest expectation
+
+The oracle says +0.0954 (§27). Realistic capture is far less: 98% of links are already correct and
+trivially so, and the contested 11.5% of edges carry 56% of the loss (§32.1). **A good outcome is
++0.01..+0.02 transferable adj**; anything above that would be the largest single gain in the
+project's history and should be disbelieved until the board confirms it.
+
+☠ And the standing risk: five independent knob families have now been swept with the shipped value
+winning every time (§33.3). The prior that this configuration is at a well-tuned optimum is strong,
+and a learned cost is the first intervention that is not a knob — which is the reason to try it and
+also the reason it may break the assignment in ways knobs could not.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
