@@ -2656,6 +2656,84 @@ Only ~1.5x separation, and it **misses the second-worst volume entirely** — `6
 gap 0.2217 on a relaxed fraction of just 2.83%, below the median. ☠ Not a usable detector on its
 own. If a per-frame adaptive gate (§32.2) is built, it needs a better trigger than this.
 
+## 33. ☠☠ The gate is PROTECTION, not obstruction — §32.1's causality was backwards (2026-08-05)
+
+`tight9` and `tight12`, both scored on the 24-volume set against `evalset_d4edge`.
+
+| `MOTION_RELINK_TIGHT_UM` | edge_J | adj | div_J | **score** | Δ | transferable adj |
+|---|---|---|---|---|---|---|
+| **6.0 (shipped)** | 0.9039 | 0.8916 | 0.0308 | **0.8947** | — | — |
+| 9.0 (`tight9`) | 0.8805 | 0.8700 | 0.0370 | 0.8737 | **−0.0209** | **−0.0256** |
+| 12.0 (`tight12`) | 0.8121 | 0.7692 | 0.0000 | **0.7692** | **−0.1255** | **−0.0969** |
+
+**Monotonically catastrophic.** Not flat, not marginal — widening the gate destroys the score, and
+the damage accelerates.
+
+### 33.1 The mechanism, measured
+
+| | TIGHT 6 | TIGHT 9 |
+|---|---|---|
+| swaps | 379 | **557 (+47%)** |
+| edge FP | 902 | **1,221 (+35%)** |
+| association-FN | 497 | 645 |
+| detection-FN | 288 | 269 |
+| relaxed-pass edges | 16,651 (3.57%) | 665 (0.14%) |
+
+The intervention did exactly what it was designed to do mechanically — the tight pass absorbed the
+6–9 µm range and the relaxed pass emptied out (at TIGHT 12 it is **0.00%**, the second stage is
+dead). And the result was **47% more swaps.** Admitting the far-but-correct target also admits
+many more far-but-wrong ones, and the Hungarian takes the wrong ones more often than the right.
+
+### 33.2 ⚠ I read §32.1's coincidence backwards
+
+§32.1 found the recall cliff lands exactly on 6.0 µm and 10.0 µm and I read it causally: *the gate
+cuts off good links, so widen it.* The causality runs the other way. **The gate sits at 6.0 because
+that is where the assignment problem stops being solvable by geometry**, and the author tuned it
+there. Past that distance the correct target is not merely far — it is indistinguishable from
+several wrong ones, and a bigger candidate set makes the guess worse, not better.
+
+The observation in §32.1 stands as a fact; only its causal interpretation was wrong. Recall does
+collapse past 6 µm, and edges ≥4 µm do carry 55.9% of association loss. But that loss is **not
+recoverable by admission** — which is the specific thing this experiment was built to find out, and
+it found it out for ~8 GPU-h and zero submissions.
+
+**Method note.** §31.6 caught one bad experiment by reading the control flow before running it. This
+one could not have been caught that way — the mechanism reasoning was sound and the code confirmed
+it. The failure was in the *sign* of an inference from a correlation, which only a run could settle.
+That is the correct use of a run.
+
+### 33.3 ☠ Association is now closed to knobs entirely
+
+Every dimension of the relink cost and its candidate set has been swept and the shipped value wins
+or ties in every one:
+
+| dimension | values tested | best |
+|---|---|---|
+| `MOTION_RELINK_LEARNED_BONUS` | 1, 3, 6, 17 | all within +0.006 (§28) |
+| `DUAL_SEED_EDGE_THRESHOLD` | 0.48, 0.30, 0.15 | shipped, on the board (§30) |
+| `MOTION_RELINK_VELOCITY_WEIGHT` | 0.5, 0.75, 1.0, 1.25 | flips 0/65 (§18.2) |
+| **`MOTION_RELINK_TIGHT_UM`** | **6, 9, 12** | **shipped, by a wide margin** |
+| neighbourhood flow term | — | 1.3% vs 0.5% (§31.1) |
+
+⇒ **The +0.0954 association headroom is real and is reachable by none of them.** §22.4's conclusion
+now holds across ranking *and* admission, which were the only two families of knob available. What
+remains is a better association model, which §12 measured as compute-infeasible (534 GPU-h against
+a ~240 h quota).
+
+This also closes §23.1's argument empirically: the public pipeline is at a **well-tuned local
+optimum**, we have now probed it along five independent axes, and the 0.913–0.914 shelf *is* that
+optimum. The leader's +0.033 is not hiding in this configuration space.
+
+### 33.4 Standing
+
+* Best LB **0.914** (`thr096`/`thr095`), unchanged. Nothing today moved it.
+* ☠ Newly closed on evidence: gate widening (§33), collective motion (§31.1), `MIN_TRACK_LEN`
+  above 6 (§31.5), division FP-trimming capped at +0.0049 (§31.5).
+* Still open, in order of measured size: a new association model (+0.0954, compute-blocked);
+  wide-gate **division recall** via a fitted selector (§26.3, 9/25 reachable — note this is
+  *division* admission, which §33 did NOT test and which failed for a different reason in §16);
+  division-aware assignment (§26.5, 32% of division FNs).
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
