@@ -2568,6 +2568,94 @@ admissible targets. §29 found the oracle gap correlates with density and wide g
 exactly there; under a macro mean, hurting the dense majority to help the fast minority can net
 negative.
 
+## 32. ★★ The recall cliff sits EXACTLY at the relink gates (2026-08-05)
+
+`scripts/local/error_anatomy.py`, 16,361 association-testable GT edges (both endpoints detected,
+so detection failures are excluded and only linking is on trial).
+
+### 32.1 ★★ P(correct link) vs GT displacement — the cliff is the gate
+
+| GT displacement (µm) | edges | % of all | **P(correct)** | lost |
+|---|---|---|---|---|
+| 0–1 | 4,731 | 28.9% | 98.9% | 50 |
+| 1–2 | 4,554 | 27.8% | 98.2% | 82 |
+| 2–3 | 3,607 | 22.0% | 98.5% | 53 |
+| 3–4 | 1,583 | 9.7% | 97.9% | 34 |
+| 4–5 | 868 | 5.3% | 96.4% | 31 |
+| 5–6 | 442 | 2.7% | **91.2%** | 39 |
+| **6–8** | 374 | 2.3% | **76.7%** | 87 |
+| **8–10** | 154 | 0.9% | **51.3%** | 75 |
+| **>10** | 48 | 0.3% | **4.2%** | 46 |
+
+**Read the boundaries.** Recall is a flat 98% up to 4 µm, holds 91% to 6 µm, then falls off a
+cliff — and the cliff edges land on **6.0 µm = `MOTION_RELINK_TIGHT_UM`** and **10.0 µm =
+`MOTION_RELINK_RELAXED_UM`**. Beyond the relaxed gate we get **4.2%** of edges right, which is
+consistent with chance.
+
+**This is the cleanest evidence in the whole project that our association performance is set by
+the GATES, not by the cost function.** It independently confirms §31.6's control-flow reading:
+the tight pass pre-commits at 6 µm, and that is precisely where recall breaks. Four prior
+findings said admissibility was the constraint (§21.1, §24.3, §28, §31.2); this one shows the
+constraint's *location* directly, and it coincides with a configured constant to the µm.
+
+**The prize, bounded:** edges with displacement ≥ 4 µm are only **11.5%** of testable edges but
+carry **55.9%** of all association loss (278 of 497). Recovering just the three post-cliff bins to
+the 91% of the 5–6 µm bin would return ~114 edges ≈ 23% of association loss ≈ **+0.021**;
+recovering them fully would be ~+0.037. That is the realistic band for `tight9`/`tight12`.
+
+⚠ Necessary, not sufficient — §31.6's caveat stands. Admitting the edge lets the Hungarian weigh
+it; it does not guarantee the Hungarian picks it against a 5x-closer wrong option.
+
+### 32.2 Errors are BURSTY in time — median VMR 1.93 against a Poisson 1.0
+
+| volume | swaps | mean/frame | **VMR** | |
+|---|---|---|---|---|
+| 6bba_786893ac | 126 | 1.260 | 1.96 | BURSTY |
+| 6bba_05db0fb1 | 65 | 0.650 | 1.89 | BURSTY |
+| 6bba_d3da753b | 43 | 0.430 | **4.29** | BURSTY |
+| 6bba_debd7bfa | 34 | 0.340 | 2.60 | BURSTY |
+| 6bba_2819ca14 | 23 | 0.230 | 3.64 | BURSTY |
+| 44b6_87bba6c4 | 27 | 0.270 | 0.95 | uniform |
+
+Errors **cluster in time**. Something episodic drives them — a division wave, a fast tissue
+movement phase, an imaging artifact. This matters because it means a **per-FRAME** adaptive gate
+is well-targeted: widen only on the frames that need it, paying the density cost (§29, §31.6)
+only where it buys something, instead of globally.
+
+Note `44b6_87bba6c4` is uniform — its problem is a property of the whole volume (fast throughout,
+§29.2), not an episode. Two different regimes again.
+
+### 32.3 Localisation error IS systematically aligned with motion — but it is second-order
+
+A motion-blur test: project the residual `pred − gt` of each source onto its direction of travel.
+
+| | along motion | perpendicular | n |
+|---|---|---|---|
+| correct links | **+0.469 µm** | 1.382 µm | 14,510 |
+| mis-linked | **−0.866 µm** | **2.546 µm** | 488 |
+
+Overall mean projection **+0.426 µm, z = +38.9** — overwhelmingly systematic, not scatter. §25
+ruled out *quantisation* as a fixable component; it never tested for a motion-aligned one, and
+this is one.
+
+⚠ But do not over-read it. The sign **flips** between correct (+0.47) and mis-linked (−0.87), so a
+single global shift cannot fix both, and the magnitudes (~0.4–0.9 µm) are small against the
+multi-µm gate effect in §32.1. Perpendicular scatter on mis-linked cells is ~1.8x that of correct
+ones, which is ordinary noise, not bias. Filed as real, understood, and **not currently
+actionable** — second-order behind the gates.
+
+### 32.4 ☠ The relaxed-pass fraction is too weak to key an adaptive policy on
+
+Tested as an *inference-time* hardness proxy (needs no GT), from `run_stats`:
+`relaxed / (tight + relaxed)` relinked edges.
+
+    corr(relaxed_frac, oracle gap) = +0.317      corr(relaxed_frac, swap rate) = +0.324
+    top half by relaxed%: mean gap 0.1132        bottom half: 0.0776
+
+Only ~1.5x separation, and it **misses the second-worst volume entirely** — `6bba_786893ac` has
+gap 0.2217 on a relaxed fraction of just 2.83%, below the median. ☠ Not a usable detector on its
+own. If a per-frame adaptive gate (§32.2) is built, it needs a better trigger than this.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
