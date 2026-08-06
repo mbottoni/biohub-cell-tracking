@@ -3041,6 +3041,119 @@ Honest list, so nobody re-derives it:
 * **Image features inside the association model** (§35.4 phase 5b). §34's null used four hand-made
   scalars and was underpowered, so it neither supports nor refutes this.
 
+## 38. ★★ The node-budget multiplier: a +0.0712 oracle nobody has measured (2026-08-06)
+
+### 38.1 ⚠ §11.2's "the node budget is full" was a 4-volume artifact
+
+`adj = edge_J · (1 − 0.1·ratio)`, `ratio = (N_pred − est_n_nodes)/est_n_nodes`, and the multiplier
+is **unclamped above**. §11.2 concluded from the dev 4 (ratios −0.009, −0.436, −0.023, +0.003) that
+`k ≈ 0.97–1.02` and "the node budget is full, not 75% full as §10.5 assumed."
+
+On 24 volumes that is wrong:
+
+    ratio spans  -0.710 .. +0.386   (span 1.096)
+    18/24 volumes UNDER-predict and collect a bonus;  6/24 over-predict
+    44b6_66f9292d scores adj = 1.0132  -- ABOVE 1.0, because the multiplier is uncapped
+    the multiplier is currently worth  +0.0106  of our score
+
+`44b6_66f9292d` predicts **71% fewer nodes than there are cells** and still scores edge_J 0.9461 —
+because edge_J counts only edges touching the ~3.6% of cells that are annotated. **A predicted
+node carrying no scored edge is pure cost in the multiplier and free to delete.**
+
+And `est_n_nodes` is *not needed at inference* to exploit this: any node removal improves the
+ratio whatever the denominator is.
+
+### 38.2 The oracle: +0.0712, and edge_J does not move
+
+Dropping every node that carries no scored edge (uses GT; upper bound on all node-budget rules):
+
+| | edge_J | adj | score | Δ |
+|---|---|---|---|---|
+| baseline | 0.9039 | 0.8916 | 0.8947 | — |
+| **ORACLE** | **0.9031** | **0.9628** | **0.9659** | **+0.0712** |
+
+**edge_J changes by −0.0008.** The entire +0.0712 is the multiplier. This is the second-largest
+oracle in the project after association's +0.0954, and unlike that one it had never been measured.
+
+### 38.3 ☠ But every rule that does not know the annotation fails badly
+
+| rule | Δscore |
+|---|---|
+| shell_xy keep 0.95 | **−0.0194** |
+| shell_all keep 0.95 | −0.0243 |
+| shell_xy keep 0.90 | −0.0855 |
+| random keep 0.95 (control) | **−0.0800** |
+| random keep 0.90 | −0.1665 |
+
+Removing 5% of nodes at random costs 0.08 — because an edge dies if *either* endpoint goes, so a
+5% node cut breaks ~10% of edges. §13's centre-bias (annotated bbox = 71% of volume) is far too
+weak to separate: the outer shell still contains annotated cells.
+
+This also explains `probe_len20` (−0.027 for a 22% node cut) and is the mirror image of
+`probe_pad` (+50% nodes, −0.045) — both are the same trade seen from opposite sides.
+
+⇒ The lever reduces entirely to one question: **is "carries a scored edge" predictable from
+inference-time features?** §13 concluded annotation is ≈ a random 3.6% sample, which would make it
+unpredictable — but that was never tested directly, and the payoff justifies testing it.
+
+⚠ **Framing note.** This is metric-directed optimisation, not tracking quality. It is a different
+kind of thing from the fabricated-fork exploit the project explicitly declined (§SESSION_LOG:
+"target the private board with genuine quality") — pruning genuine low-value detections is the same
+category as `DET_THRESHOLD` tuning. But it optimises the scoring rule rather than the biology, and
+§11.1 already recorded one case where the obvious metric hack lost points on the board. If this
+proves reachable it is a decision to take deliberately.
+
+### 38.4 ☠ And it does not convert: AUC 0.775 → +0.0008
+
+The target *is* predictable (§38.3's open question answered: held-out **AUC 0.7750**, not the coin
+flip §13's "random 3.6% sample" implied). Model-ranked removal, scored end-to-end on held-out
+volumes:
+
+| drop fraction | edge_J | adj | score | Δ |
+|---|---|---|---|---|
+| 0 (base) | 0.8917 | 0.8822 | 0.8872 | — |
+| **5%** | 0.8867 | 0.8827 | 0.8880 | **+0.0008** |
+| 10% | 0.8728 | 0.8763 | 0.8816 | −0.0056 |
+| 20% | 0.8535 | 0.8798 | 0.8857 | −0.0015 |
+| 50% | 0.6573 | 0.6874 | 0.6874 | −0.1999 |
+
+**Best: +0.0008 against a +0.0712 oracle — 1% of it, and far below the 0.005 readable floor.**
+
+The arithmetic of why: the multiplier gain is **linear** in nodes dropped, while the edge_J loss is
+**quadratic** (an edge dies if *either* endpoint goes). At AUC 0.775 the classifier destroys 18.5%
+of scored nodes to drop 50% of all nodes, and quadratic beats linear long before the multiplier
+pays. ☠ Node-budget optimisation is closed.
+
+### 38.5 ★ The pattern across the session: discriminative power does not convert
+
+This is now the **second** time in one session that a model with genuine, out-of-sample
+discriminative power bought nothing:
+
+| lever | model's signal | end-to-end Δ |
+|---|---|---|
+| learned relink cost (§37.3) | **+0.057 AUC** over distance on hard pairs | **−0.0002** |
+| node-budget classifier (§38.4) | **AUC 0.775** (vs 0.5 chance) | **+0.0008** |
+
+Both fail for structurally similar reasons: the metric's error surface is **not** a sum of
+independent per-item decisions. An assignment argmin is robust to large cost perturbations (§36's
+99.7% replay agreement across smoothing and dropped terms is the same fact), and an edge requires
+*both* endpoints. Local accuracy therefore decouples from score.
+
+⇒ **Standing rule for this project: never rank an idea by AUC, accuracy, or any per-item metric.
+Only end-to-end score on held-out volumes counts.** Three oracles are now measured and all three
+are unreachable with the information available:
+
+| oracle | size | status |
+|---|---|---|
+| association (§27) | +0.0954 | unreachable — 7 axes tried (§37) |
+| **node budget (§38)** | **+0.0712** | **unreachable — 1% captured (§38.4)** |
+| division (§23.3) | +0.0875 headroom | ~+0.012 reachable at best (§26.4, §31.5) |
+
+**The oracles measure what a perfect decision would earn. They do not measure whether the
+information to make that decision exists — and on this problem, three times out of three, it does
+not.** That is the real explanation for the 0.913–0.914 shelf, and it is a stronger statement than
+"we ran out of knobs."
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
