@@ -2891,6 +2891,32 @@ winning every time (§33.3). The prior that this configuration is at a well-tune
 and a learned cost is the first intervention that is not a knob — which is the reason to try it and
 also the reason it may break the assignment in ways knobs could not.
 
+## 36. ★ Phase 0 PASSED — the relinker replays locally at 99.7% (2026-08-06)
+
+`scripts/local/relink_replay.py` reimplements `motion_relink_edges` / `assign_pass` (two-stage
+greedy Hungarian, gates 6/10, `cost = motion + 0.05·raw`, velocity weight 0.5, predecessor chaining)
+and replays it over the node set in `evalset_d4edge/submission.csv`.
+
+    TOTAL   shipped 457,727   replay 456,601   matched 456,368   =  99.7%
+
+Every one of the 24 volumes is **≥99.6%**, several at 99.9–100%.
+
+This is markedly better than §35.2 predicted, and the reason matters: the replay runs on
+**post-processed** nodes — `linefit_smooth_output_graph` has moved essentially every coordinate,
+gap-closing added nodes, the short-track filter removed 22,773, and `learned_edge_probs` are
+unavailable so `BONUS·prob` is dropped entirely. Agreement survives all of that because **the
+assignment is distance-dominated and overwhelmingly unambiguous** — the same fact §32.1 measured
+as 98% recall below 4 µm, and the same fact that makes `BONUS` inert (§28). The perturbations do
+not move the argmin.
+
+**Consequence: association experiments now cost ~3 minutes instead of ~4 GPU-h.** This is the
+linking-stage analogue of §31.5's `postproc_sim`, and it is the piece that makes §35 tractable
+at all.
+
+⚠ It varies **edges only**. The real `tight9` run also changed the node set (480,663 vs 477,264)
+because different edges feed different short-track filtering, so the replay isolates the linking
+effect and will not reproduce a kernel run exactly.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
