@@ -2917,6 +2917,33 @@ at all.
 because different edges feed different short-track filtering, so the replay isolates the linking
 effect and will not reproduce a kernel run exactly.
 
+### 36.1 ★★ And it PREDICTS two experiments we actually paid for
+
+Replaying gates 6/9/12 on the shipped nodes and scoring with the real metric, against the
+board-side runs from §33:
+
+| `TIGHT_UM` | replay edge_J | replay adj | replay Δscore | **actual Kaggle Δ** | error |
+|---|---|---|---|---|---|
+| 6.0 | 0.9046 | 0.8930 | +0.0000 | +0.0000 | — |
+| 9.0 | 0.8838 | 0.8698 | **−0.0233** | **−0.0209** | 13% |
+| 12.0 | 0.8240 | 0.7843 | **−0.1087** | **−0.1255** | 13% |
+
+Correct sign, correct ordering, magnitude within **13%** on both, and the baseline reproduces
+0.8930 against the real 0.8947 (−0.0017). The residual is expected and explained: the replay holds
+the node set fixed while the real runs changed it (tight9 produced 480,663 nodes vs 477,264),
+because different edges feed different short-track filtering.
+
+**The testbed predicts real experiments.** Phases 0 and 1 of §35.4 are cleared, and phase 2 may
+proceed.
+
+⚠ **Retrospective, and it stings:** §33's `tight9`/`tight12` cost ~8 GPU-h and a day of waiting.
+This replay answers the same question in **3 minutes** and would have given the same conclusion.
+The instrument was buildable before the experiment, exactly as §17's method note said after the
+last time this happened — and exactly as §23.2 said about `BIOHUB_TEST_DIR`. That is three
+occasions now where the cheap instrument existed and was built only after paying for the expensive
+answer. **Standing rule for this project: before any kernel run, ask whether the question can be
+answered by replaying files already on disk.**
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
