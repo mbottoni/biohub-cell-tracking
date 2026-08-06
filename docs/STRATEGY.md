@@ -3000,7 +3000,36 @@ not prove the information to find it is present in what we can feed a model.
 it says the 0.913–0.914 shelf is not a tuning problem — consistent with §33.3's finding that five
 independent knob families all favour the shipped configuration.
 
-### 37.3 What would still be untested after this
+### 37.3 ★ The model DOES learn — and it still buys nothing. AUC would have lied.
+
+The obvious objection to §37.1 is that the model drowned in easy examples. Tested by retraining on
+contested subsets only, and separately measuring held-out **AUC** on those pairs — which
+distinguishes "the model cannot learn" from "it learned but the assignment does not change":
+
+| trained on | pairs | held-out AUC (model) | AUC (raw distance only) | **lift** | end-to-end Δ |
+|---|---|---|---|---|---|
+| contested (`n_cand ≥ 2`) | 13,048 | 0.9827 | 0.9777 | +0.0050 | **−0.0002** |
+| **hard (`raw ≥ 4 µm`)** | 8,890 | **0.8756** | **0.8190** | **+0.0567** | **−0.0002** |
+
+**On the hard pairs the model beats pure distance by +0.057 AUC — a large, real, out-of-sample
+discriminative gain — and the end-to-end score does not move at all.** Edge FP goes 238 → 236: two
+edges out of 238.
+
+So the first hypothesis is refuted and the second confirmed: **the model learns genuine signal
+beyond distance, and that signal does not convert into a better assignment.** The reason is that
+its probability is still overwhelmingly a function of distance (distance alone already scores 0.819
+AUC), so the argmin of the assignment is essentially unchanged.
+
+⚠ **This is the single most important methodological result of the session.** Had phase 3 been
+gated on AUC — the natural, conventional choice — a **+0.057 lift** would have been declared a
+success and shipped something worth **−0.0002**. §35.3 pre-registered "score end-to-end, never on
+AUC" because §33 had shown availability improving while the score fell; that discipline just caught
+a false positive that would otherwise have cost a submission and a wrong conclusion in the log.
+
+**Conversion rate, for future reference: a +0.057 AUC lift on the hard subset moved ~1% of the
+errors.** Pairwise metrics on this problem are close to meaningless as a proxy for score.
+
+### 37.4 What would still be untested after this
 
 Honest list, so nobody re-derives it:
 
