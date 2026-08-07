@@ -75,6 +75,8 @@ def train_fold(
     resume: str | None = "auto",
     pseudo_dir=None,
     pseudo_weight: float = 0.3,
+    seed: int = 0,
+    iso_mode: str = "stride",
 ) -> float:
     """Train one CV fold. Returns best held-out sel-score (recall x node-ratio penalty, the
     competition-metric-aligned selection); saves best weights to out_dir.
@@ -89,6 +91,12 @@ def train_fold(
     from ctrack.detect.unet3d import UNet3D, masked_bce_loss, masked_offset_loss
 
     use_offset = offset_weight > 0
+
+    # Seeded so two concurrent T4 sessions give genuinely different ensemble members,
+    # and a resumed run re-derives the same augmentation stream family.
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    print(f"seed={seed}  iso_mode={iso_mode}", flush=True)
 
     # raw_root/gt_root are None in cache mode (frames come from cache_dir), so don't Path() them.
     raw_root = Path(raw_root) if raw_root is not None else None
@@ -141,8 +149,9 @@ def train_fold(
 
         train = DetectionFrames(tr, raw_root, gt_root, augment=True, frame_stride=train_stride,
                                 with_offset=use_offset, pseudo_dir=pseudo_dir,
-                                pseudo_weight=pseudo_weight)
-        val = DetectionFrames(va, raw_root, gt_root, augment=False, frame_stride=val_stride)
+                                pseudo_weight=pseudo_weight, iso_mode=iso_mode)
+        val = DetectionFrames(va, raw_root, gt_root, augment=False, frame_stride=val_stride,
+                              iso_mode=iso_mode)
     print(f"frames: {len(train)} train, {len(val)} val", flush=True)
     dl = DataLoader(train, batch_size=batch, shuffle=True, num_workers=num_workers,
                     drop_last=True, pin_memory=is_cuda)
@@ -265,6 +274,7 @@ def train_fold(
             "torch_rng": torch.get_rng_state(),
             "epoch": epoch, "best": best, "since_best": since_best,
             "base": base, "fold": fold, "out_offset": use_offset,
+            "seed": seed, "iso_mode": iso_mode,
         }, tmp)
         tmp.replace(last_path)
 
@@ -358,7 +368,7 @@ def train_fold(
         if sel > best:
             best = sel
             since_best = 0
-            torch.save({"model": model.state_dict(), "base": base, "fold": fold,
+            torch.save({"model": model.state_dict(), "base": base, "fold": fold, "iso_mode": iso_mode,
                         "out_offset": use_offset, "recall": rec, "sel_score": sel,
                         "node_ratio": node_ratio, "epoch": epoch}, ckpt_path)
             tag = "  <- saved (best)"

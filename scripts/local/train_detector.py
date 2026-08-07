@@ -52,6 +52,9 @@ def main() -> None:
                          "noisy-student supervision")
     ap.add_argument("--pseudo-weight", type=float, default=0.3,
                     help="loss-mask weight of pseudo positives (GT positives are 1.0)")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--iso-mode", default="stride", choices=["stride", "mean"],
+                    help="downsampling: stride (public-baseline) or mean (area-average)")
     args = ap.parse_args()
     if not args.cache_dir and not (args.raw and args.gt):
         ap.error("provide --raw and --gt, or --cache-dir")
@@ -68,6 +71,7 @@ def main() -> None:
         resume=None if args.resume == "none" else args.resume,
         early_stop_patience=args.patience,
         pseudo_dir=args.pseudo_dir, pseudo_weight=args.pseudo_weight,
+        seed=args.seed, iso_mode=args.iso_mode,
     )
 
 

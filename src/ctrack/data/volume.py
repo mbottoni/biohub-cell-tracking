@@ -87,14 +87,28 @@ class Volume:
         return np.clip((arr.astype(np.float32) - low) / (high - low), 0.0, 1.0)
 
 
-def to_isotropic(arr: np.ndarray, subsample: tuple[int, int, int] = ISOTROPIC_SUBSAMPLE) -> np.ndarray:
-    """Strided subsample of a `(Z, Y, X)` array to (near-)isotropic voxels.
+def to_isotropic(
+    arr: np.ndarray,
+    subsample: tuple[int, int, int] = ISOTROPIC_SUBSAMPLE,
+    mode: str = "stride",
+) -> np.ndarray:
+    """Subsample a `(Z, Y, X)` array to (near-)isotropic voxels.
 
-    Plain striding, matching the public baselines. It is lossy -- for a detector that must
-    localize small nuclei, area-averaging may be better; worth an A/B once the pipeline runs.
+    mode="stride": plain striding, matching the public baselines — keeps 1/16 of the
+    xy photons and aliases small nuclei.
+    mode="mean": area-average over each (sz, sy, sx) block — same output grid, ~16x
+    the photon count per output voxel. The A/B this docstring has promised since
+    July; a model trained under one mode must be INFERRED under the same mode.
     """
     sz, sy, sx = subsample
-    return arr[::sz, ::sy, ::sx]
+    if mode == "stride":
+        return arr[::sz, ::sy, ::sx]
+    if mode == "mean":
+        z, y, x = arr.shape
+        zc, yc, xc = z - z % sz, y - y % sy, x - x % sx
+        a = arr[:zc, :yc, :xc].astype(np.float32)
+        return a.reshape(zc // sz, sz, yc // sy, sy, xc // sx, sx).mean(axis=(1, 3, 5))
+    raise ValueError(f"unknown to_isotropic mode {mode!r}")
 
 
 def isotropic_scale(

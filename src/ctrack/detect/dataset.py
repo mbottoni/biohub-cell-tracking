@@ -38,6 +38,7 @@ class DetectionFrames(Dataset):
         with_offset: bool = False,
         pseudo_dir: str | Path | None = None,
         pseudo_weight: float = 0.3,
+        iso_mode: str = "stride",
     ):
         self.raw_root = Path(raw_root)
         self.gt_root = Path(gt_root)
@@ -46,6 +47,7 @@ class DetectionFrames(Dataset):
         self.augment = augment
         self.with_offset = with_offset
         self.pseudo_weight = pseudo_weight
+        self.iso_mode = iso_mode
         # Teacher detections (dump_teacher_peaks.py): {ds}.npz with coords (N,4) [t,z,y,x] in
         # full-resolution voxels. Merged into build_frame_target as reduced-weight positives.
         self._pseudo: dict[tuple[str, int], np.ndarray] = {}
@@ -119,13 +121,13 @@ class DetectionFrames(Dataset):
         __getitem__ does for training targets.
         """
         ds, t = self.index[i]
-        return to_isotropic(self._volume(ds).normalized_frame(t), self.subsample)
+        return to_isotropic(self._volume(ds).normalized_frame(t), self.subsample, mode=self.iso_mode)
 
     def __getitem__(self, i: int):
         import torch
 
         ds, t = self.index[i]
-        frame_iso = to_isotropic(self._volume(ds).normalized_frame(t), self.subsample)
+        frame_iso = to_isotropic(self._volume(ds).normalized_frame(t), self.subsample, mode=self.iso_mode)
         centres = self._centres[(ds, t)]
 
         heatmap, mask = build_frame_target(
