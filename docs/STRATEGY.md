@@ -3909,6 +3909,10 @@ exactly on the shelf. Current final-2 picks: **`pub162_port` (0.915)** + the bet
 `pub162_thr096` (scoring) / `thr096` (0.914). The +0.002 over d4edge lives in the
 detection/fusion/gap stack, not the association mechanisms row 34 proved inert.
 
+**Update (night): `pub162_thr096` also 0.915 (row 41)** — the threshold lever is dead on the
+new base, harmlessly. **Final-2 = the two confirmed 0.915s** until the detector programme
+(row 40, §45.2 route 1) produces something that clears its gates.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
