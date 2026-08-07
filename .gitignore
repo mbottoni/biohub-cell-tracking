@@ -52,3 +52,4 @@ kaggle_assets/ctrack_src/ctrack/
 # kernel outputs: submission.csv + vendored repo copies are large and re-downloadable
 submissions/*/tracking_repo/
 data/locres/
+data/teacher_peaks/
