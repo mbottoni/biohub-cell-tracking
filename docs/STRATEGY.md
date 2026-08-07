@@ -3796,6 +3796,78 @@ prerequisite.
 | ☠ | all coordinate post-processing | §40.4, §42 |
 | ☠ | node budget, relink knobs, learned cost | §38.4, §33.3, §37 |
 
+## 44. ★ Board census + competitive intel: the field moved, and the 0.915 line is readable (2026-08-07)
+
+### 44.1 Where we actually stand (full leaderboard downloaded, 2,091 teams)
+
+    leader                 0.949
+    top 5                  0.938+
+    top 10 (gold zone)     ~0.932+
+    top 20                 0.922+
+    ██ 104 teams at exactly 0.915  <-- the public-notebook shelf
+    35 teams at 0.914      <-- us, rank ~166
+
+Two readings, both load-bearing:
+
+* **We are BELOW the public shelf.** 104 teams sit at exactly 0.915 by forking the current public
+  line; our best genuine config is 0.914. Whatever the 0.915 line does that we don't is worth
+  ≥+0.001 and is free to read.
+* **The real prize bar is probably below 0.949.** The division metric exploit (§1) is known to be
+  worth up to ~+0.08 on `div_J` and its own author excludes it from final-2. Some of the
+  0.938–0.949 band is likely exploit-inflated on the public board and will not survive private
+  final-2 picks. The honest bar to plan against is the ~0.932 gold shelf, not 0.949.
+
+### 44.2 The 0.915 public line, decomposed (yusuketogashi "Biohub 159B/162", pulled 2026-08-07)
+
+Same `pilkwang` support pack, same `unet_transformer` method, same dual-seed near-even detection
+blend. The deltas against our `d4edge`/`edgethr30` line:
+
+| component | ours | theirs |
+|---|---|---|
+| density-adaptive gap closing | **already ON** (`BIOHUB_GAP_DENSITY_ADAPTIVE=1`, verified in `evalset_d4edge`) | ON — **not a diff** |
+| association evidence | transformer edge prob + motion relink | **public 22-feature local ranker at 85%** (`pilkwang/biohub-local-association-ranker-unet300-v1`) + "JS-TTA reliability" prob at 15% |
+| multi-frame term | none (cost is strictly pairwise, §35.5) | **"three-frame forward acceleration lookahead"** (Biohub 162, targeting 0.916) |
+| `MOTION_RELINK_LEARNED_BONUS` | 1.0 | 1.0 |
+| gap close | max_gap 1, 6.0 µm | **max_gap 2, 5.8 µm** |
+
+The ranker's 22 features are §35.5's list almost verbatim: `source/target_density_7um`,
+`candidate_rank`, `candidate_count`, `velocity_um`, per-axis displacements, node degrees, `t_norm`.
+⚠ Our §37 measured a same-family learned cost at −0.0002 out of sample — so the ranker's marginal
+value is NOT established by their score; the whole-config delta over us is only +0.001. But every
+one of their mechanisms is testable in the §36 replay in minutes, for free, before any kernel run.
+
+### 44.3 Literature anchors for the two live internal levers (recorded so the plan has citations)
+
+* **Detector fine-tune for localisation + movement vectors** — this dataset is the linajea setting
+  (sparse point annotations on light-sheet embryo volumes). Malin-Mayor et al., *Nature Biotech*
+  2023: train cell-indicator maxima AND per-cell **movement vectors** (offset to the same nucleus in
+  the adjacent frame) from sparse annotations; link on predicted-parent position, not raw distance.
+  That is precisely the cue §40 says we lack: it routes around localisation error instead of asking
+  the linker to overcome it. Our owned pipeline already has an offset-head implementation
+  (`detect/unet3d.py`). Sub-voxel training-side readout (CenterNet-style offset branch; subpixel
+  heatmap regression, Bulat et al. 2021; soft-argmax/integral regression) is the standard fix for
+  argmax quantisation — trained on the FINE grid it can move z by whole fine-voxels toward truth,
+  which §42.3's integer-writer argument does NOT cap (the snap oracle used integer GT coords).
+* **Division selector** — TGMM (Amat et al. 2014) and CTC-winning pipelines all use a fitted
+  division classifier over geometric+appearance features, precision-first. Supports §43.4 lever 1.
+* **Dense pseudo-labels** — ELEPHANT (Sugawara et al., eLife 2022) and noisy-student self-training:
+  sparse annotation → confident predictions → retrain. §37.1's root cause (supervision exists for
+  3.6% of cells) is exactly what this attacks, and §37.4 lists it as never attempted.
+
+### 44.4 The plan, ranked by EV against the ~0.932 gold bar
+
+| # | lever | ceiling | cost | first gate (all local, free) |
+|---|---|---|---|---|
+| 1 | **port + replay-test the 0.915 line's deltas** (22-feature ranker, acceleration lookahead, max_gap 2) | +0.001..+0.004 | free (replay) then 1 kernel run | replay Δadj > 0 on 18 thick volumes |
+| 2 | **detector fine-tune: offset/movement-vector head + sub-voxel target** (linajea §44.3) | ≤+0.0259 (§40.2) + motion cue for relink | ~194 min/attempt (exp 21 scale) | **RMS −30% on matched nodes (§40.5)**; movement-vector arm: swap flips in replay |
+| 3 | **division selector refit on the §43 second-child pool** | +0.0123 | free pool, minutes/fit | held-out div_J ↑ with edge FP flat |
+| 4 | **dense pseudo-labels** for edge/ranker/selector retraining (ELEPHANT) | unlocks 2 and 3 | M1-scale first | pseudo-label purity ≥95% vs GT on held-out annotated cells |
+| 5 | cross-family detector ensemble (tophat UNet à la xiaoleilian) | unknown; attacks §41.1's shared bias | high (training) | only if 2 lands and quota remains |
+
+Honest arithmetic: 1+2+3 all landing ≈ 0.914 + 0.002 + 0.010 + 0.006 ≈ **0.932** — the gold shelf,
+if the exploit-inflated band above it thins out at private rerun. Winning outright still requires
+the detector bet (2, then 5) to land at the top of its range.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
