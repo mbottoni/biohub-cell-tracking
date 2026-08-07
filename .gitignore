@@ -48,3 +48,6 @@ kernel/kernel-metadata.json.bak
 # Kaggle build artifacts
 kaggle_assets/wheels/wheels/
 kaggle_assets/ctrack_src/ctrack/
+
+# kernel outputs: submission.csv + vendored repo copies are large and re-downloadable
+submissions/*/tracking_repo/

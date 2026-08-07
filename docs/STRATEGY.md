@@ -3607,6 +3607,111 @@ a per-node quantity with thousands of samples on 4 volumes; §23.2's warning abo
 *score* composition, not per-node residuals. Only if RMS surprises us does the 24-volume score run
 become worth 4 GPU-h.
 
+## 42. ☠ `locref` — the run BROKE, and the lever is capped structurally anyway (2026-08-06)
+
+Two separate conclusions, and they must not be conflated. **The run is not a valid test of the
+lever** — it had an unintended side effect that destroyed 45% of the graph. **The lever is dead
+regardless**, on an argument that needs no run at all and that I should have made before spending
+one.
+
+### 42.1 The patch applied correctly and was not a no-op
+
+    STRATEGY 41.2 sub-voxel readout applied (4/4 edits matched)
+    downsample=(1, 4, 4) | locref=parabolic
+    [41.2] locref peaks=100,629 mean|delta|=0.2301 voxel/axis
+
+☑ `downsample = (1,4,4)` **confirmed** — §41.4's assumed isotropic 1.625 µm detection lattice was
+right, so that unknown is closed. ☑ Mean offset 0.230 voxel/axis against 0.25 for a uniform
+distribution over ±0.5, so the estimator produced well-spread, non-degenerate offsets. The
+silent-no-op guard did its job: this patch demonstrably ran.
+
+### 42.2 ☠ And it destroyed 45% of the graph
+
+| | `d4edge` | `locref` | Δ |
+|---|---|---|---|
+| raw_nodes | 124,085 | **73,635** | **−40%** |
+| raw_edges | 116,343 | **63,793** | **−45%** |
+| nodes | 120,276 | 66,731 | −45% |
+
+Per-volume the loss is wildly uneven (ratio 0.80 / **0.39** / 0.93 / 0.55), which rules out anything
+uniform like a threshold shift.
+
+**`raw_nodes` is the ILP's output**, and the peak counter shows detection still produced ≥100,629
+peaks — so ~30% of *detected* nodes were dropped by the solver, against ~0% for `d4edge`.
+
+**Diagnosis (leading hypothesis, not isolated):** the refined coordinates were fed into
+`predict_edges` — `p_coords_src * ds_arr_t` — and the node transformer was trained on **integer**
+downsampled coordinates. Fractional inputs are out of distribution for its positional encoding, edge
+probabilities fell, and the ILP then found it cheaper not to select nodes at all. ⚠ I have not
+isolated this against alternatives (changed `edge_dist`, solver numerics); the magnitude and the
+node/edge co-collapse are what point at it.
+
+**The design error is mine and it is instructive: I refined the coordinates everywhere, when the
+refinement was only ever wanted in the OUTPUT.** The fix is one edit — round before
+`predict_edges`, keep sub-voxel only at the end. I am not spending a run on it, because of §42.3.
+
+### 42.3 ★ The submission format is integer-voxel, which caps the lever below the gate
+
+Cell 11's writer, verified in the built notebook:
+
+    "z": max(0, int(round(float(node["z"])))),
+    "y": max(0, int(round(float(node["y"])))),
+    "x": max(0, int(round(float(node["x"])))),
+
+**Coordinates are rounded to integers on the FINE voxel grid, and GT coordinates are integers on
+that same grid** (verified directly: `all_integer=True` on both a 52-node and a 1,229-node GT
+graph). So sub-voxel precision cannot be *expressed* in a submission at all.
+
+What survives is only the change of *lattice*:
+
+| axis | downsample | detection lattice | after refinement + rounding |
+|---|---|---|---|
+| z | 1 | 1.625 µm | **1.625 µm — refinement entirely destroyed** |
+| y, x | 4 | 1.625 µm (4 fine voxels) | 0.40625 µm (1 fine voxel) |
+
+    quantisation RMS  0.813 um  ->  0.498 um
+    total RMS         sqrt(2.186^2 - 0.813^2 + 0.498^2) = 2.089 um   = a 4.4% reduction
+
+§40.5's convexity table prices a 4.4% reduction at **well under +0.005** — below the readable floor
+and far below the 30% gate.
+
+⚠ **And the worst axis is the uncorrectable one.** §25 measured per-axis residual scatter z **1.707**
+µm against y 0.943 / x 1.039. z carries the most error and sits at `downsample = 1`, so rounding
+returns it to exactly the lattice it started on.
+
+☑ This also retroactively explains §25: its 0.498 µm quantisation figure was measured on
+*submission* coordinates, which is precisely the post-rounding value derived above. §25 and §40.9
+now reconcile.
+
+### 42.4 §41.4's pre-registration was CONFIRMED — and for a better reason than it gave
+
+Predicted **5.9%** total RMS reduction and a FAIL. Actual structural ceiling: **4.4%** and a FAIL.
+The prediction was right, slightly optimistic, and the true mechanism (an integer submission format
+with z uncorrectable) is stronger than the one predicted (parabola only removes 59% of
+quantisation).
+
+⇒ ☠ **The cheap localisation programme is closed.** All three routes are gone: two were already
+shipped (§41), and the third cannot express its gain in the output format. §40.2's **+0.0259 remains
+real and remains the largest identified cause of the association loss** — the snap oracle reached it
+using *integer* GT coordinates, so it is expressible — but the 2.186 µm gap between our integers and
+GT's integers is **genuine detector error, not quantisation**, and only a better detector removes it.
+
+### 42.5 Standing plan after this
+
+| # | lever | status |
+|---|---|---|
+| 1 | **divisions: wide gates + fitted selector** | §26.3's untried combination; needs `divdump`; +0.014..+0.028 |
+| 2 | **division-aware assignment** | free — the replay owns `assign_pass`; §24.6 says the 1-1 Hungarian structurally cannot emit a division |
+| 3 | detector fine-tune for localisation | the only route to §40.2's +0.0259; exp 21 scale (~194 min), not 534 GPU-h |
+| ☠ | all coordinate post-processing | §40.4 raw-image CoM, §42 sub-voxel readout |
+
+**Method note, and it is the fourth of its kind.** §36 established "before any kernel run, ask
+whether replaying files on disk answers it". The integer-writer fact was in cell 11 the whole time
+and would have killed this lever for free. §41 got this right for levers 1 and 2 by reading the
+config first, and I then failed to apply the same discipline one section later. **Extend the rule:
+before building a lever, trace its output all the way to the submission writer and confirm the gain
+can be expressed there.**
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
