@@ -3041,7 +3041,14 @@ Honest list, so nobody re-derives it:
 * **Image features inside the association model** (§35.4 phase 5b). §34's null used four hand-made
   scalars and was underpowered, so it neither supports nor refutes this.
 
-## 38. ★★ The node-budget multiplier: a +0.0712 oracle nobody has measured (2026-08-06)
+## 38. ⚠ The node-budget multiplier — SEE §39 BEFORE TRUSTING ANY OF THIS (2026-08-06)
+
+> **⚠ SUBSTANTIALLY UNDERMINED by §39, same day.** Every number below assumes the multiplier is
+> **unclamped above**, i.e. that under-predicting nodes *pays a bonus*. That property comes from our
+> own reimplementation, `docs/metric.md` explicitly flags the reference as a **community**
+> reimplementation rather than the official Kaggle scorer, and **every LB probe we have ever run
+> tested only the penalty side.** §39 shows a capped multiplier predicts the known LB values better,
+> and that under a cap the +0.0712 oracle becomes **−0.0070**. Read §39 first.
 
 ### 38.1 ⚠ §11.2's "the node budget is full" was a 4-volume artifact
 
@@ -3153,6 +3160,83 @@ are unreachable with the information available:
 information to make that decision exists — and on this problem, three times out of three, it does
 not.** That is the real explanation for the 0.913–0.914 shelf, and it is a stronger statement than
 "we ran out of knobs."
+
+## 39. ⚠ Critique of §38 — the whole lever rests on an unverified property of the scorer
+
+Self-review of §38 found four problems. The first is disqualifying.
+
+### 39.1 ★ The multiplier may be CAPPED at 1.0 in the real scorer, and then the lever INVERTS
+
+§38 rests entirely on `adj = edge_J·(1 − 0.1·ratio)` being unclamped above, so that
+under-prediction earns a bonus. Two facts should have been checked first:
+
+* `docs/metric.md` states plainly that our reference is a **community reimplementation, not the
+  official Kaggle scorer**, and that "one link remains unconfirmed".
+* **Every LB probe we have run tested the PENALTY side only.** `probe_pad` added 50% nodes
+  (ratio → +0.5, multiplier → 0.95) and scored 0.868 against a predicted 0.913 × 0.95 = **0.867** —
+  an excellent match that confirms the penalty side and says *nothing* about the bonus side.
+
+Scoring with and without a cap at 1.0, against known LB values:
+
+| config | volumes | unclamped | **capped** | actual LB | closer |
+|---|---|---|---|---|---|
+| `d4edge` | dev 4 | 0.9216 | **0.9112** | **0.913** | **capped** (0.0018 vs 0.0086) |
+| `edgethr30` | dev 4 | 0.9356 | **0.9265** | **0.913** | **capped** (0.0135 vs 0.0226) |
+| `d4edge` | eval 24 | 0.8947 | 0.8821 | — | cap removes **0.0126** |
+
+And the consequence for §38, on the same 8 held-out volumes:
+
+    baseline                 0.8872
+    ORACLE, unclamped        0.9636   = +0.0763
+    ORACLE, capped           0.8803   = -0.0070      <-- the lever becomes NEGATIVE
+
+⚠ **Not proof.** Contamination inflates local scores independently, so *any* downward correction
+would fit the LB better — the cap and contamination are confounded, and two points cannot separate
+them. But that is the point: **§38's headline was contingent on an unverified scorer property, and
+I presented it with two stars as "an oracle nobody has measured" without checking.** The correct
+framing is that the bonus side of the multiplier is **unverified**, and the lever is worth
++0.0712 or −0.0070 depending on a fact we do not have.
+
+**Cheapest resolution:** one submission of a config that differs *only* in node count on the bonus
+side. Do not build anything on the bonus side until then.
+
+### 39.2 The oracle and the conversion test used different volume sets
+
+§38.4 compared "+0.0008 captured" against "+0.0712 oracle" — but the oracle was computed on all 24
+volumes and the conversion on the 8 held-out ones. Recomputed on the same 8, the oracle is
+**+0.0763**, so the capture fraction is 1.0% rather than 1.1%. The conclusion is unchanged, but the
+comparison as published was invalid.
+
+### 39.3 The +0.0008 is not a number, it is noise
+
+**3 of the 8 held-out volumes are thin** (`44b6_0113de3b` 50 GT edges, `44b6_0b24845f` 49,
+`6bba_0e7c0d07` 198). §19.2 established that a *single edge* on a 49-edge volume moves the macro
+mean by **+0.0096**. So +0.0008 is roughly one twelfth of one edge — far below the resolution of
+this instrument. The sweep is also non-monotone (10% → −0.0056 but 20% → −0.0015), which is the
+same noise showing through. I reported "+0.0008, below the readable floor" without doing the
+thin-volume decomposition that §19.2/§32 made mandatory.
+
+### 39.4 Two claims in the recommendation were wrong
+
+* **"Better detections is the only lever sized to matter."** §27's own oracle says detection-limited
+  loss is `1 − 0.9764 = 0.0236` macro. The gap to the leader is **0.033**. So perfect detection with
+  the current linker **cannot close the gap** — the opposite of what I asserted.
+* **"Detection is the one stage never varied."** `DET_THRESHOLD` was swept (`thr096`, `thr095`),
+  plus `harmonic` and `orfuse` fusion. What was never successfully done is retraining the detector
+  *weights*. The narrower claim is true; the one I made is not.
+
+### 39.5 And the unifying theory was over-generalised
+
+§38.5 proposed that all three oracles are unreachable because "the information does not exist".
+Reachability was tested for **two**, not three, and the failure modes differ in kind: the node
+budget fails because annotation is arbitrary from the model's viewpoint (genuinely no information),
+whereas association may fail because the right information was never fed in — §34's appearance test
+was underpowered by its own admission. One law over two data points with different mechanisms is
+rhetoric, not evidence.
+
+**What survives §39:** the node-budget *observation* (ratio spans 1.096, 18/24 volumes on the bonus
+side under our scorer, `adj > 1` occurs) is real and worth knowing. Everything downstream of it is
+contingent on §39.1.
 
 ## 8. Operational notes
 
