@@ -3415,6 +3415,25 @@ prior: two independently-seeded 400-epoch models make *independent* localisation
 precisely the component averaging removes — and row 19b showed blending their edge *logits* is
 flat, so their disagreement has never been harvested where it actually lives.
 
+★ **Pre-registration for lever 1, derivable before spending anything.** If two seeds' localisation
+errors are of equal variance and **fully independent**, averaging the matched pair gives
+`RMS → σ/√2`, a **29.3% reduction** — landing almost exactly on §40.5's 30% gate. So the experiment
+is sharply falsifiable in advance:
+
+* errors independent ⇒ ~29% reduction ⇒ **+0.003 .. +0.014**, marginally clears the gate;
+* errors correlated (same architecture, same data, differing only in seed — plausible) ⇒ **well
+  under 29%** ⇒ fails the gate outright and lever 1 dies for free.
+
+The measurement that decides it needs no score at all: dump both seeds' pre-fusion detections once,
+match them, and compare per-seed residual against averaged residual. **If that ratio is not ≤0.71,
+stop.** Same shape as §32.4's trigger test — establish the mechanism is strong enough *before*
+building on it.
+
+⚠ Note the honest tension: this prior says lever 1 is a **coin flip**, not a favourite. It leads the
+ranking because it is the cheapest test of the highest-ceiling lever, not because it is likely to
+work. Lever 2 (TTA over 8 flip views) has more headroom in principle but the views share a model and
+input, so their correlation is higher still and the same gate applies.
+
 **Item 4 is the best-validated unexecuted lever.** §26.3 pre-registered "wide gates + fitted
 selector" as the untried combination and it was never run; §16 lost 0.006 doing wide gates + *hand*
 ranking, which is the arm we already know fails.
