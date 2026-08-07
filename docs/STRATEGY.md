@@ -3904,6 +3904,11 @@ Every lever family is now measured-dead except two, both expensive and speculati
 confirms, `pub162_port` (expected ~0.915) with `pub162_thr096` (queued) as its one-change
 improvement candidate. Reserve final-2 for the two highest CONFIRMED genuine scores.
 
+**Update (same day, evening): `pub162_port` CONFIRMED at LB 0.915** (row 38) — new best,
+exactly on the shelf. Current final-2 picks: **`pub162_port` (0.915)** + the better of
+`pub162_thr096` (scoring) / `thr096` (0.914). The +0.002 over d4edge lives in the
+detection/fusion/gap stack, not the association mechanisms row 34 proved inert.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
