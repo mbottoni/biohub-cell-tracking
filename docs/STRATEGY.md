@@ -3438,6 +3438,43 @@ input, so their correlation is higher still and the same gate applies.
 selector" as the untried combination and it was never run; §16 lost 0.006 doing wide gates + *hand*
 ranking, which is the arm we already know fails.
 
+### 40.9 Implementation reconnaissance — where the patch goes, and one lever re-priced
+
+Read before building anything, so the next session does not re-derive it.
+
+**The injection point is one function.** `tracking_repo/scripts/predict_unet_transformer.py`,
+`_detect_cells_pooled` (line ~254):
+
+    pooled   = F.max_pool3d(logits, pool_kernel, stride=1, padding=pad)
+    is_peak  = (logits == pooled) & (torch.sigmoid(logits) > det_threshold)
+    peak_idx = torch.nonzero(is_peak[0, 0])
+    coords   = peak_idx.float().cpu().numpy()          # <-- integer voxel argmax
+    ... .astype(np.int16)                              # <-- and then cast to int16
+
+Coordinates are the **integer argmax of the detection heatmap**, and `logits` is in scope — so
+heatmap CoM (lever 3) is a ~10-line change right here. The D4 TTA machinery already exists in the
+same file (`_xy_tta_names` / `_apply_xy_tta` / `_invert_xy_tta`, the `SHARED_POINT_TTA_HELPERS`
+block), so lever 2 reuses it rather than writing it.
+
+⚠ **Lever 3 re-priced DOWN, and §25 was right in substance after all.** Measured the actual
+coordinate grid in `evalset_d4edge/submission.csv`: z, y and x are all **integers on the fine grid**
+(y/x take every residue mod 4, so they are *not* on the ×4 downsampled lattice). §25's quantisation
+figure of **0.498 µm RMS** is therefore correct, not the 0.813 µm it would have been on an isotropic
+1.625 µm lattice. De-quantising perfectly moves RMS 2.186 → 2.129, a **2.6% reduction** — which
+§40.5's convexity table prices at **well under +0.001**, an order of magnitude below the gate.
+
+⇒ **Lever 3 cannot clear the gate on quantisation alone.** Its only path is the *systematic*
+component: §25 measured a bias worth 39.6% of median error whose per-volume z offset varies
+(−0.07 / −0.91 / −1.52 / −0.03 µm), which is why §25 correctly rejected a *global* shift. A per-cell
+heatmap CoM is the one estimator that could track a spatially varying bias a global shift cannot.
+That is the whole remaining case for lever 3, and it is speculative — **demote it below levers 1
+and 2.**
+
+⚠ **Runtime risk on lever 2.** Detection D4 TTA is 8× the detector forward pass. `evalset_d4edge`
+was ~4 h for 24 volumes; 8× on the detection half plausibly exceeds the **12 h session cap**. Screen
+on **8 volumes with `flip4`**, not 24 with `d4` — the readout is matched-node RMS, which needs
+sample size in *nodes*, not volumes, and 8 volumes carry thousands.
+
 ### 40.8 Honest expectation, and what this does not solve
 
 Local numbers are contaminated (§30): every scorable volume is a pilkwang training volume, and
