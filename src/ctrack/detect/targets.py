@@ -54,37 +54,67 @@ def build_frame_target(
     pos_radius_um: float = 4.0,
     bg_percentile: float = 40.0,
     subsample: tuple[int, int, int] = ISOTROPIC_SUBSAMPLE,
+    pseudo_centres_full_vox: np.ndarray | None = None,
+    pseudo_weight: float = 0.3,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Heatmap + trusted-loss mask for one frame.
 
     `gt_centres_full_vox` are (M,3) GT centres in full-resolution voxels; `frame_iso` is the
     normalized isotropic frame the detector sees. Returns (heatmap, loss_mask), both frame_iso
     shape.
+
+    `pseudo_centres_full_vox` (N,3), if given, are teacher detections (noisy-student /
+    ELEPHANT-style dense supervision, purity 99.90% on the verifiable subset — experiments row
+    36). They splat into the heatmap like GT but their positive region enters the loss mask at
+    `pseudo_weight` (< the GT's 1.0), and any pseudo point within `pos_radius_um` of a GT centre
+    is dropped — GT is authoritative where both exist. The former "ambiguous middle" (bright,
+    unlabeled) stays unsupervised: it is exactly where the teacher missed.
     """
     spacing = isotropic_scale(subsample=subsample)  # isotropic, so scalar-ish
     iso_vox = spacing[0]
     sigma_vox = sigma_um / iso_vox
+    shape_arr = np.array(frame_iso.shape)
+    rad_it = max(1, int(round(pos_radius_um / iso_vox)))
 
     centres_iso = gt_centres_full_vox / np.array(subsample)
-    heatmap = gaussian_heatmap(centres_iso, frame_iso.shape, sigma_vox)
 
-    # Positive region: within pos_radius of any GT centre.
-    pos = np.zeros(frame_iso.shape, dtype=bool)
-    idx = np.round(centres_iso).astype(int)
-    inb = np.all((idx >= 0) & (idx < np.array(frame_iso.shape)), axis=1)
-    for z, y, x in idx[inb]:
-        pos[z, y, x] = True
-    if pos.any():
-        pos = ndimage.binary_dilation(pos, iterations=max(1, int(round(pos_radius_um / iso_vox))))
+    pseudo_iso = np.zeros((0, 3))
+    if pseudo_centres_full_vox is not None and len(pseudo_centres_full_vox):
+        pseudo_iso = pseudo_centres_full_vox / np.array(subsample)
+        if len(centres_iso):
+            # drop pseudo points that duplicate a GT annotation
+            d = np.linalg.norm(
+                (pseudo_iso[:, None, :] - centres_iso[None, :, :]) * spacing, axis=2)
+            pseudo_iso = pseudo_iso[d.min(axis=1) > pos_radius_um]
+
+    all_centres = np.concatenate([centres_iso, pseudo_iso]) if len(pseudo_iso) \
+        else centres_iso
+    heatmap = gaussian_heatmap(all_centres, frame_iso.shape, sigma_vox)
+
+    def _region(pts_iso: np.ndarray) -> np.ndarray:
+        reg = np.zeros(frame_iso.shape, dtype=bool)
+        if len(pts_iso) == 0:
+            return reg
+        idx = np.round(pts_iso).astype(int)
+        inb = np.all((idx >= 0) & (idx < shape_arr), axis=1)
+        for z, y, x in idx[inb]:
+            reg[z, y, x] = True
+        if reg.any():
+            reg = ndimage.binary_dilation(reg, iterations=rad_it)
+        return reg
+
+    pos = _region(centres_iso)
+    pos_pseudo = _region(pseudo_iso) & ~pos
 
     # Confident background: dark voxels (at/below a low intensity percentile) that are NOT
     # positive. `<=` so the intensity floor (often the modal value after normalization) counts
     # as background rather than being excluded on a strict inequality.
     dark = frame_iso <= np.percentile(frame_iso, bg_percentile)
-    confident_bg = dark & ~pos
+    confident_bg = dark & ~pos & ~pos_pseudo
 
-    # Ambiguous middle (bright, unlabeled) is left unsupervised.
+    # Ambiguous middle (bright, unlabeled by GT or teacher) is left unsupervised.
     loss_mask = (pos | confident_bg).astype(np.float32)
+    loss_mask[pos_pseudo] = pseudo_weight
     return heatmap, loss_mask
 
 

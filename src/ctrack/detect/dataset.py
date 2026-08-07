@@ -36,6 +36,8 @@ class DetectionFrames(Dataset):
         augment: bool = False,
         frame_stride: int = 1,
         with_offset: bool = False,
+        pseudo_dir: str | Path | None = None,
+        pseudo_weight: float = 0.3,
     ):
         self.raw_root = Path(raw_root)
         self.gt_root = Path(gt_root)
@@ -43,6 +45,23 @@ class DetectionFrames(Dataset):
         self.sigma_um = sigma_um
         self.augment = augment
         self.with_offset = with_offset
+        self.pseudo_weight = pseudo_weight
+        # Teacher detections (dump_teacher_peaks.py): {ds}.npz with coords (N,4) [t,z,y,x] in
+        # full-resolution voxels. Merged into build_frame_target as reduced-weight positives.
+        self._pseudo: dict[tuple[str, int], np.ndarray] = {}
+        if pseudo_dir is not None:
+            n_pts = 0
+            for ds in datasets:
+                p = Path(pseudo_dir) / f"{ds}.npz"
+                if not p.exists():
+                    continue
+                coords = np.load(p)["coords"].astype(np.float64)
+                for frame in np.unique(coords[:, 0]).astype(int):
+                    pts = coords[coords[:, 0] == frame, 1:4]
+                    self._pseudo[(ds, int(frame))] = pts
+                    n_pts += len(pts)
+            print(f"pseudo-labels: {n_pts:,} teacher points over "
+                  f"{len(self._pseudo):,} frames (weight {pseudo_weight})", flush=True)
         # Volumes have up to ~100 annotated frames; adjacent frames are near-identical, so a
         # stride cuts epoch time with little information loss. Keep 1 for validation.
         self._vol_cache: dict[str, object] = {}
@@ -62,6 +81,13 @@ class DetectionFrames(Dataset):
             parent_of = {int(tg): int(sc) for sc, tg in gt.graph.edges.astype(np.int64)} \
                 if len(gt.graph.edges) else {}
             frames = np.unique(t)[::frame_stride]
+            # Pseudo-labels make GT-empty frames informative too (the teacher covers every
+            # frame); without them a frame with no labels is all-ambiguous and stays excluded.
+            pseudo_frames = sorted({f for (d, f) in self._pseudo if d == ds})
+            if pseudo_frames:
+                extra = [f for f in pseudo_frames[::frame_stride] if f not in set(frames)]
+                frames = np.concatenate([frames, np.array(extra, dtype=frames.dtype)]) \
+                    if extra else frames
             for frame in frames:
                 sel = t == frame
                 self._centres[(ds, int(frame))] = zyx[sel]
@@ -103,7 +129,9 @@ class DetectionFrames(Dataset):
         centres = self._centres[(ds, t)]
 
         heatmap, mask = build_frame_target(
-            centres, frame_iso, sigma_um=self.sigma_um, subsample=self.subsample
+            centres, frame_iso, sigma_um=self.sigma_um, subsample=self.subsample,
+            pseudo_centres_full_vox=self._pseudo.get((ds, t)),
+            pseudo_weight=self.pseudo_weight,
         )
 
         if not self.with_offset:

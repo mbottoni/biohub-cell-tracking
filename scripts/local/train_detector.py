@@ -42,6 +42,16 @@ def main() -> None:
     ap.add_argument("--num-workers", type=int, default=4)
     ap.add_argument("--calibrate", action="store_true",
                     help="time a few steps, print the per-epoch/total ETA, and exit (no training)")
+    ap.add_argument("--resume", default="auto",
+                    help="'auto' (default) resumes from checkpoint_last_fold<k>.pt in --out if "
+                         "present; a path resumes from that file; 'none' starts fresh")
+    ap.add_argument("--patience", type=int, default=8,
+                    help="early-stop after this many epochs without sel-score improvement")
+    ap.add_argument("--pseudo-dir",
+                    help="dir of {ds}.npz teacher peaks (dump_teacher_peaks.py) for dense "
+                         "noisy-student supervision")
+    ap.add_argument("--pseudo-weight", type=float, default=0.3,
+                    help="loss-mask weight of pseudo positives (GT positives are 1.0)")
     args = ap.parse_args()
     if not args.cache_dir and not (args.raw and args.gt):
         ap.error("provide --raw and --gt, or --cache-dir")
@@ -55,6 +65,9 @@ def main() -> None:
         train_stride=args.train_stride, val_stride=args.val_stride, limit=args.limit,
         out_dir=args.out, log_every=args.log_every, max_minutes=args.max_minutes,
         num_workers=args.num_workers, calibrate_only=args.calibrate,
+        resume=None if args.resume == "none" else args.resume,
+        early_stop_patience=args.patience,
+        pseudo_dir=args.pseudo_dir, pseudo_weight=args.pseudo_weight,
     )
 
 

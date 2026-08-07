@@ -72,6 +72,9 @@ def train_fold(
     calibrate_only: bool = False,
     early_stop_patience: int | None = None,
     on_best=None,
+    resume: str | None = "auto",
+    pseudo_dir=None,
+    pseudo_weight: float = 0.3,
 ) -> float:
     """Train one CV fold. Returns best held-out sel-score (recall x node-ratio penalty, the
     competition-metric-aligned selection); saves best weights to out_dir.
@@ -137,7 +140,8 @@ def train_fold(
         from ctrack.detect.dataset import DetectionFrames
 
         train = DetectionFrames(tr, raw_root, gt_root, augment=True, frame_stride=train_stride,
-                                with_offset=use_offset)
+                                with_offset=use_offset, pseudo_dir=pseudo_dir,
+                                pseudo_weight=pseudo_weight)
         val = DetectionFrames(va, raw_root, gt_root, augment=False, frame_stride=val_stride)
     print(f"frames: {len(train)} train, {len(val)} val", flush=True)
     dl = DataLoader(train, batch_size=batch, shuffle=True, num_workers=num_workers,
@@ -223,9 +227,50 @@ def train_fold(
     print(f"selection metric: {sel_desc}  ({len(est_by_ds)}/{len(va)} val vols have est counts)",
           flush=True)
 
+    # ---- resumable checkpointing -------------------------------------------------------
+    # `checkpoint_last.pt` carries everything a killed session needs to continue exactly:
+    # model/optimizer/scheduler/scaler state, epoch counter, best sel + patience counter,
+    # and the torch RNG. Written ATOMICALLY (tmp -> rename) after every epoch, because a
+    # Kaggle session can die mid-write at the 12 h wall. resume="auto" picks it up if
+    # present; a fresh run just starts at epoch 0.
+    last_path = out_dir / f"checkpoint_last_fold{fold}.pt"
+    start_epoch, best, since_best = 0, -1.0, 0
+    if resume:
+        rp = last_path if resume == "auto" else Path(resume)
+        if rp.exists():
+            ck = torch.load(rp, map_location=device, weights_only=False)
+            missing, unexpected = model.load_state_dict(ck["model"], strict=False)
+            assert not missing and not unexpected, \
+                f"resume mismatch: missing={len(missing)} unexpected={len(unexpected)}"
+            opt.load_state_dict(ck["opt"])
+            sched.load_state_dict(ck["sched"])
+            if is_cuda and ck.get("scaler"):
+                scaler.load_state_dict(ck["scaler"])
+            torch.set_rng_state(ck["torch_rng"].cpu())
+            start_epoch = int(ck["epoch"]) + 1
+            best = float(ck["best"])
+            since_best = int(ck["since_best"])
+            print(f"RESUMED from {rp.name}: epoch {start_epoch} (best sel {best:.3f}, "
+                  f"{since_best} epochs since best, {len(ck['model'])} tensors matched)",
+                  flush=True)
+        elif resume != "auto":
+            raise FileNotFoundError(f"--resume {rp} does not exist")
+
+    def save_last(epoch: int) -> None:
+        tmp = last_path.with_suffix(".tmp")
+        torch.save({
+            "model": model.state_dict(), "opt": opt.state_dict(),
+            "sched": sched.state_dict(),
+            "scaler": scaler.state_dict() if is_cuda else None,
+            "torch_rng": torch.get_rng_state(),
+            "epoch": epoch, "best": best, "since_best": since_best,
+            "base": base, "fold": fold, "out_offset": use_offset,
+        }, tmp)
+        tmp.replace(last_path)
+
     run_t0 = time.time()
-    best, est_epoch_s, since_best = -1.0, None, 0
-    for epoch in range(epochs):
+    est_epoch_s = None
+    for epoch in range(start_epoch, epochs):
         # ---- budget guard: stop before starting an epoch we can't finish in time ----
         if max_minutes and est_epoch_s is not None:
             elapsed_min = (time.time() - run_t0) / 60
@@ -330,6 +375,8 @@ def train_fold(
               f"node_ratio {node_ratio:+.2f} (pred {sum_pred:.0f}/tgt {sum_target:.0f})  "
               f"lr {sched.get_last_lr()[0]:.2e}  train {train_s:.0f}s val {val_s:.0f}s  "
               f"total {run_min:.1f}min  ~{remaining*(train_s+val_s)/60:.0f}min left{tag}", flush=True)
+
+        save_last(epoch)
 
         if early_stop_patience and since_best >= early_stop_patience:
             print(f"EARLY STOP: no sel-score improvement in {early_stop_patience} epochs "
