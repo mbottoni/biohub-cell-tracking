@@ -3456,24 +3456,25 @@ heatmap CoM (lever 3) is a ~10-line change right here. The D4 TTA machinery alre
 same file (`_xy_tta_names` / `_apply_xy_tta` / `_invert_xy_tta`, the `SHARED_POINT_TTA_HELPERS`
 block), so lever 2 reuses it rather than writing it.
 
-⚠ **Lever 3 re-priced DOWN, and §25 was right in substance after all.** Measured the actual
-coordinate grid in `evalset_d4edge/submission.csv`: z, y and x are all **integers on the fine grid**
-(y/x take every residue mod 4, so they are *not* on the ×4 downsampled lattice). §25's quantisation
-figure of **0.498 µm RMS** is therefore correct, not the 0.813 µm it would have been on an isotropic
-1.625 µm lattice. De-quantising perfectly moves RMS 2.186 → 2.129, a **2.6% reduction** — which
-§40.5's convexity table prices at **well under +0.001**, an order of magnitude below the gate.
+⚠ **The detection lattice is NOT readable from `submission.csv` — my first attempt at this was
+wrong and is left here as the correction.** I checked the coordinate grid in
+`evalset_d4edge/submission.csv`, found z/y/x integral on the *fine* grid with every residue mod 4
+present, and concluded §25's 0.498 µm quantisation figure was confirmed. **That inference is
+invalid.** The submission's coordinates are **post-`linefit_smooth_output_graph`**, which §36
+established moves essentially every coordinate, and post-gap-closing, which inserts midpoints. Their
+lattice therefore says nothing about the detector's.
 
-⇒ **Lever 3 cannot clear the gate on quantisation alone.** Its only path is the *systematic*
-component: §25 measured a bias worth 39.6% of median error whose per-volume z offset varies
-(−0.07 / −0.91 / −1.52 / −0.03 µm), which is why §25 correctly rejected a *global* shift. A per-cell
-heatmap CoM is the one estimator that could track a spatially varying bias a global shift cannot.
-That is the whole remaining case for lever 3, and it is speculative — **demote it below levers 1
-and 2.**
+The real path is `predict_video` lines 783-788: `_detect_cells_pooled` returns int16 in
+**downsampled** space, coords are then scaled by `ds_arr` and **cast to int16 a second time**. If
+`downsample = (1,4,4)` the detector lattice is isotropic **1.625 µm**, giving quantisation RMS
+`sqrt(3·1.625²/12)` = **0.813 µm** — 13.8% of variance, not 5.1%. `downsample` is read from the
+checkpoint config and is not in the run log, so **we do not know it locally**; the run below prints
+it.
 
-⚠ **Runtime risk on lever 2.** Detection D4 TTA is 8× the detector forward pass. `evalset_d4edge`
-was ~4 h for 24 volumes; 8× on the detection half plausibly exceeds the **12 h session cap**. Screen
-on **8 volumes with `flip4`**, not 24 with `d4` — the readout is matched-node RMS, which needs
-sample size in *nodes*, not volumes, and 8 volumes carry thousands.
+⚠ And it matters more than it looks, because the **relinker runs BEFORE the smoothing**. The
+coordinates the assignment actually sees are the raw doubly-quantised ones, not the 2.186 µm
+smoothed ones we measured. **True localisation error at link time is worse than measured, and the
+quantisation share of it is larger** — both of which price lever 3 UP, not down.
 
 ### 40.8 Honest expectation, and what this does not solve
 
@@ -3497,6 +3498,68 @@ retrained — and which §40.2 now gives a *mechanistic* reason to pursue rather
 scratch**. Fine-tuning an existing detector for localisation (soft-argmax or an offset-regression
 head) is the scale of exp 21's edge-head run — **194 min**, not 534 h. That is the phase-2 bet, and
 it should be taken only after levers 1–3 have measured how much of the residual is reducible at all.
+
+## 41. ☠☠ Levers 1 and 2 are ALREADY SHIPPED — read the config before building (2026-08-06)
+
+**§40.7 ranked detector-seed averaging first and detector TTA second. Both are already in the
+running configuration.** Found by reading `kernels/evalset_d4edge/` and its run log before writing
+any code — the run whose coordinates produced §40.2's 2.186 µm residual.
+
+From the shipped config and confirmed in the log of that exact run:
+
+    Merged edge-TTA + dual-seed patch applied | det=d4 edge=d4 identity_weight=0.125
+    Secondary model: ... | edge weight=0.150 | detection weight=0.475 | link mode=low_margin_consensus
+
+* **`det=d4`** — the primary detector's heatmap is averaged over **8 D4 views** (`_xy_tta_names`
+  → `det_logits[f] / len(det_tta_names)`). ☠ **Lever 2 is dead: already applied.**
+* **`detection weight = 0.475`** — the secondary seed's heatmap is *itself* D4-averaged (its own
+  flip/rot/transpose block, `/ _secondary_nv`) and then blended into the primary at **near-even
+  weight** after mean/scale alignment. ☠ **Lever 1 is dead: already applied**, and at a far better
+  operating point than the naive coordinate averaging §40.7 proposed.
+
+**The shipped detection heatmap is an average over 2 seeds × 8 views = 16 forward passes.** The
+2.186 µm residual is what survives *after* 16-way averaging.
+
+### 41.1 What this does to §40's programme
+
+The §40.7 pre-registration asked whether seed averaging clears a 30% RMS reduction. **It has already
+been taken and the 2.186 µm is the post-averaging number** — so the reducible *variance* component
+is largely spent. What remains is bias shared across seeds and views, plus genuine ambiguity, and
+neither yields to more averaging.
+
+⇒ Two of the three cheap localisation levers die **for free, before any GPU**. This is the fourth
+time in the log that the cheap check existed before the expensive answer (§17, §23.2, §36) — except
+this time it was made first. **Standing rule, extended: before building any lever, grep the shipped
+config and the run log for it. "Never trust a name" (§CLAUDE.md) generalises to "never trust that an
+idea is new".**
+
+### 41.2 ★ But lever 3 is PROMOTED, and for a better reason than §40.7 gave it
+
+Sub-voxel refinement on the heatmap was ranked third and provisionally demoted. It is now the **only
+surviving cheap localisation lever**, and the 16-way averaging is precisely what makes it credible:
+
+* Averaging 16 views produces a **smooth heatmap whose shape encodes where those 16 views collectively
+  think the cell is**. Taking `torch.nonzero(logits == maxpool(logits))` — an **integer argmax** —
+  throws that distribution away and keeps only its mode, on a lattice.
+* So the ensemble information we already paid 16 forward passes for **is present in the heatmap and
+  discarded at readout**. A centroid/parabolic estimator recovers it at **zero additional inference
+  cost**.
+* And §40.9's correction says the quantisation being discarded is up to **0.813 µm** on a
+  doubly-quantised path, against a 2.186 µm total — a larger share than §25's 5.1%.
+
+This is a materially stronger hypothesis than "CoM might help", and it is falsifiable by the same
+§40.5 gate. ⚠ It remains true that §40.4 measured raw-**intensity** CoM as harmful; that is a
+different signal from the trained heatmap and does not transfer.
+
+### 41.3 The revised ordering
+
+| # | lever | status |
+|---|---|---|
+| ☠ | detector-seed coordinate averaging | **already shipped** (detection weight 0.475) |
+| ☠ | detector D4 TTA | **already shipped** (`det=d4`) |
+| **1** | **heatmap sub-voxel readout** (`evalset_locref`) | the only cheap localisation lever left |
+| 2 | divisions: wide gates + fitted selector | §26.3's untried combination, needs `divdump` |
+| 3 | detector fine-tune for localisation | expensive branch, exp 21 scale (~194 min) |
 
 ## 8. Operational notes
 
