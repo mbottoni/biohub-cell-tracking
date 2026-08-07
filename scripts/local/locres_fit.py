@@ -159,12 +159,86 @@ def main() -> None:
         with torch.no_grad():
             return net(torch.from_numpy((X - mu) / sd).float()).numpy()
 
-    r1r, r0 = evaluate("mlp", mlp_predict(Xtr), mlp_predict(Xte),
-                       Ytr, Yte, te_vols, mlp_predict)
+    evaluate("mlp", mlp_predict(Xtr), mlp_predict(Xte),
+             Ytr, Yte, te_vols, mlp_predict)
+
+    # ---- arm 4: small 3D CNN over the 7x7x7 logit patch + point features.
+    # The flattened MLP has no spatial prior; the z-profile of the heatmap is
+    # the natural signal for a z error, and convolution encodes that.
+    P = 7
+    n_patch = P ** 3
+    n_point = Ztr.shape[1] - n_patch
+
+    class PatchNet(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.conv = nn.Sequential(
+                nn.Conv3d(1, 16, 3, padding=1), nn.ReLU(),
+                nn.Conv3d(16, 32, 3, padding=1), nn.ReLU(),
+                nn.AdaptiveAvgPool3d(1))
+            self.fc = nn.Sequential(
+                nn.Linear(32 + n_point, 64), nn.ReLU(), nn.Linear(64, 3))
+
+        def forward(self, x):
+            pt, pa = x[:, :n_point], x[:, n_point:]
+            h = self.conv(pa.reshape(-1, 1, P, P, P)).flatten(1)
+            return self.fc(torch.cat([pt, h], dim=1))
+
+    # NOTE: dump layout is [32 unet feats, patch(343), peak_logit] -> reorder so
+    # point features (unet + peak logit) come first, patch last.
+    def reorder(Z):
+        return np.concatenate([Z[:, :32], Z[:, -1:], Z[:, 32:32 + n_patch]], axis=1)
+
+    torch.manual_seed(0)
+    cnn = PatchNet()
+    opt = torch.optim.AdamW(cnn.parameters(), lr=1e-3, weight_decay=1e-4)
+    Xt2 = torch.from_numpy(reorder(Ztr)).float()
+    best, best_state, patience = np.inf, None, 0
+    for epoch in range(120):
+        cnn.train()
+        for i in range(0, len(tr_idx), 2048):
+            idx = tr_idx[i:i + 2048]
+            opt.zero_grad()
+            loss = nn.functional.huber_loss(cnn(Xt2[idx]), Yt[idx], delta=1.0)
+            loss.backward()
+            opt.step()
+        cnn.eval()
+        with torch.no_grad():
+            vl = float(nn.functional.huber_loss(cnn(Xt2[val_idx]), Yt[val_idx],
+                                                delta=1.0))
+        if vl < best - 1e-5:
+            best, patience = vl, 0
+            best_state = {k: v.clone() for k, v in cnn.state_dict().items()}
+        else:
+            patience += 1
+            if patience >= 8:
+                break
+    cnn.load_state_dict(best_state)
+    cnn.eval()
+
+    def cnn_predict(X):
+        Z = reorder((X - mu) / sd)
+        out = []
+        with torch.no_grad():
+            for i in range(0, len(Z), 8192):
+                out.append(cnn(torch.from_numpy(Z[i:i + 8192]).float()).numpy())
+        return np.concatenate(out)
+
+    n_point_stated = n_point  # 33 = 32 unet + 1 peak logit
+    r1r, r0 = evaluate("cnn", cnn_predict(Xtr), cnn_predict(Xte),
+                       Ytr, Yte, te_vols, cnn_predict)
+
+    # Per-axis decomposition for the best arm (which axis is predictable?)
+    for name, fn in (("mlp", mlp_predict), ("cnn", cnn_predict)):
+        left = Yte - fn(Xte)
+        pre = np.sqrt(np.mean(Yte ** 2, axis=0))
+        post = np.sqrt(np.mean(left ** 2, axis=0))
+        print(f"  per-axis RMS ({name}):  z {pre[0]:.3f}->{post[0]:.3f}  "
+              f"y {pre[1]:.3f}->{post[1]:.3f}  x {pre[2]:.3f}->{post[2]:.3f}")
 
     print("\n==== 40.5 GATE ====")
     red = (r0 - r1r) / r0
-    print(f"post-rounding held-out reduction: {red:+.1%}  "
+    print(f"post-rounding held-out reduction (cnn): {red:+.1%}  "
           f"({'PASS >= 30%' if red >= 0.30 else 'FAIL < 30%'})")
 
 
