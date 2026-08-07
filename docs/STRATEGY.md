@@ -3561,6 +3561,52 @@ different signal from the trained heatmap and does not transfer.
 | 2 | divisions: wide gates + fitted selector | §26.3's untried combination, needs `divdump` |
 | 3 | detector fine-tune for localisation | expensive branch, exp 21 scale (~194 min) |
 
+### 41.4 ⚠ PRE-REGISTERED before running `locref` — the arithmetic predicts it FAILS
+
+Written before the kernel is pushed, because the numbers are available beforehand and this project
+has repeatedly published a result whose prediction was only constructed afterwards.
+
+`scripts/local/test_locref.py` smoke, on synthetic heatmaps:
+
+| arm | argmax error | parabolic | reduction |
+|---|---|---|---|
+| exact paraboloid (correctness check only) | 0.4335 vox | 0.0000 | +100% |
+| **gaussian logit + noise (the honest arm)** | ~0.42 vox | ~0.17 | **+59%** |
+
+⚠ The paraboloid arm is **exact by construction** — parabolic interpolation inverts a parabola —
+so it validates the implementation and says nothing about real heatmaps. The realistic arm removes
+**59% of the QUANTISATION error**, which is not the same as 59% of the total.
+
+**The pricing, stated in advance.** With `downsample = (1,4,4)` the detection lattice is isotropic
+1.625 µm, so quantisation RMS is `sqrt(3·1.625²/12)` = **0.813 µm** against a measured total of
+**2.186 µm**. Removing 59% of the quantisation component gives
+
+    new RMS = sqrt(2.186² - 0.813² + (0.41·0.813)²) = 2.056 um      = a 5.9% total reduction
+
+and §40.5's convexity table prices a 5.9% reduction at **well under +0.005** — **below the
+pre-registered 30% gate and below the readable floor.**
+
+⇒ **PREDICTION: `locref` fails the §40.5 gate.** Recorded now so the run cannot be reinterpreted
+afterwards.
+
+**Why run it anyway.** Three unknowns that only the detector can resolve, all answered by the same
+run at zero submissions:
+
+1. **`downsample` is read from the checkpoint config and we do not know it** — `[1,4,4]` is only the
+   library default. The run prints it. If the lattice is coarser, quantisation's share is larger and
+   the pricing above is too pessimistic.
+2. **The relinker runs BEFORE `linefit_smooth_output_graph`**, so the coordinates the assignment
+   actually consumes are the raw doubly-quantised ones, not the 2.186 µm smoothed ones we measured.
+   The true error at link time is unmeasured and larger.
+3. **The parabola may capture more than quantisation.** If the 16-way-averaged peak is systematically
+   offset from the true centre in a way the peak's *shape* encodes, the estimator tracks it. That is
+   speculative and is the only route by which the prediction is wrong.
+
+**Run it on the dev 4 first (~21 min), not the evalset 24 (~4 h).** The readout is matched-node RMS,
+a per-node quantity with thousands of samples on 4 volumes; §23.2's warning about the dev 4 is about
+*score* composition, not per-node residuals. Only if RMS surprises us does the 24-volume score run
+become worth 4 GPU-h.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
