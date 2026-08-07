@@ -3712,6 +3712,90 @@ config first, and I then failed to apply the same discipline one section later. 
 before building a lever, trace its output all the way to the submission writer and confirm the gain
 can be expressed there.**
 
+## 43. ★ Division-aware assignment: the mechanism is CONFIRMED, the precision is not (2026-08-06)
+
+Free, in the replay, zero GPU. §24.6 established that `motion_relink_edges` is a strict 1-1 matching
+and therefore *structurally* cannot emit a division; §26.3 measured that **8/25 (32%)** of division
+FNs are "FN-consumed" — the daughter was detected but the matching gave her to a different parent —
+and said no gate or selector bolted onto the existing assignment can reach them. §34.3 priced the
+fix at **+0.0123** and filed it as "requires rewriting the assignment". §36's replay means we own
+`assign_pass`, so it cost minutes.
+
+**Formulation.** Each source is duplicated: row `i` is its ordinary link, row `i+S` a second child at
+`cost + DIV_PENALTY`. The Hungarian then solves a degree-constrained matching where a source may take
+two targets.
+
+| div penalty | forks | edge_J | adj | div_J | score | Δ | edge FP | dTP | dFP | dFN |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **inf (acceptance)** | **0** | **0.9046** | **0.8930** | 0.0000 | 0.8930 | — | 876 | 0 | 0 | 25 |
+| 8.0 µm | 12,956 | 0.8934 | 0.8788 | 0.0249 | 0.8813 | **−0.0117** | 1,165 | **8** | 296 | 17 |
+| 6.0 µm | 12,958 | 0.8934 | 0.8788 | 0.0249 | 0.8813 | −0.0117 | 1,165 | 8 | 296 | 17 |
+| 4.0 µm | 12,972 | 0.8934 | 0.8788 | 0.0249 | 0.8813 | −0.0117 | 1,165 | 8 | 296 | 17 |
+| 2.0 µm | 13,026 | 0.8933 | 0.8787 | 0.0248 | 0.8812 | −0.0119 | 1,166 | 8 | 297 | 17 |
+| 1.0 µm | 13,091 | 0.8933 | 0.8785 | 0.0248 | 0.8810 | −0.0120 | 1,167 | 8 | 298 | 17 |
+
+☑ **Acceptance test passed**: the infinite-penalty arm emits **0 forks** and reproduces the replay
+baseline exactly. ⚠ The first version failed it — it filtered eligibility as
+`s in un_s or n_child[s] == 1` in *both* arms, so the relaxed pass handed a second child to an
+already-matched source at ordinary cost and the inf arm emitted 13,007 forks. Caught by the
+acceptance test, which is why it is there.
+
+### 43.1 ★★ §26.3's pre-registered 8/25 fired exactly
+
+**Division FN goes 25 → 17, i.e. dTP 0 → 8 — precisely the 8/25 FN-consumed bucket §26.3
+predicted.** A division-aware assignment recovers exactly the divisions the 1-1 constraint was
+destroying, and nothing else. That is the cleanest mechanism confirmation in the division programme
+and it validates §24.6's structural reading.
+
+It also gets **4× the division recall of the shipped post-hoc scavenge** (dTP 8 vs §26.2's 2).
+
+### 43.2 ☠ And it is destroyed by precision, exactly as §16 was
+
+**12,956 forks to obtain 8 true ones** — a 0.06% hit rate — driving division FP to 296 and edge FP
+876 → 1,165 (**+33%**). Net **−0.0117**.
+
+The penalty is almost inert from 8 µm down to 1 µm, and the reason is structural: with the source
+rows duplicated, `linear_sum_assignment` matches every target it can, so **every orphan inside the
+gate gets adopted by somebody**. Genuine track births are adopted along with real daughters. The
+penalty only decides *which* source adopts, not *whether*.
+
+This is §16's `divgeom` failure in a new costume — there it was 13,495 coincidental candidates from
+widened gates, here 12,956 from a relaxed degree constraint — and it is the fourth appearance of
+§21.1's pattern: **admissibility was never the binding constraint; precision is.**
+
+### 43.3 ★ But it prices the combined lever precisely, and confirms §34.3
+
+The two halves are now measured separately and they compose arithmetically:
+
+    division-aware assignment  ->  dTP 8, dFP 296   div_J 8/(8+296+17)  = 0.0249
+    shipped post-hoc scavenge  ->  dTP 2, dFP  40   div_J 2/(2+40+23)   = 0.0308
+    assignment RECALL + scavenge PRECISION -> 8/(8+40+17) = 0.123  => contributes 0.0123
+
+**That +0.0123 is exactly §34.3's independent estimate for this lever**, derived by a completely
+different route. Two independent derivations agreeing is the strongest support the division
+programme has had.
+
+⇒ **Division-aware assignment is not a standalone lever; it is the RECALL half of one.** It must be
+paired with a precision selector that keeps ~8 of 12,956 candidates. That is §26.3's "wide gates +
+fitted selector" — except the pool is now known to be the *assignment's* second-child candidates,
+not a geometric gate's, and §24.1's fitted GBM (AP 0.0889 → 0.2827) is the natural ranker.
+
+⚠ **The base rate is brutal and must be stated:** ~8 real in 12,956 candidates is **0.06%**. §24.1's
+selector was fitted on a pool of 47 candidates/volume with a ~2% base rate. Extrapolating its AP to
+a pool 30× sparser is exactly the error §24.2 flagged. **The selector must be refitted on this pool**,
+which the replay can now generate for free — no `divdump` kernel needed, which retires that
+prerequisite.
+
+### 43.4 Standing plan
+
+| # | lever | status |
+|---|---|---|
+| **1** | **fitted selector over the assignment's second-child candidates** | free to generate the pool (§43.3); ceiling +0.0123; base rate 0.06% is the risk |
+| 2 | detector fine-tune for localisation | the only route to §40.2's +0.0259; exp 21 scale |
+| ☠ | division-aware assignment alone | −0.0117 (§43) |
+| ☠ | all coordinate post-processing | §40.4, §42 |
+| ☠ | node budget, relink knobs, learned cost | §38.4, §33.3, §37 |
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
