@@ -3868,6 +3868,42 @@ Honest arithmetic: 1+2+3 all landing ≈ 0.914 + 0.002 + 0.010 + 0.006 ≈ **0.9
 if the exploit-inflated band above it thins out at private rerun. Winning outright still requires
 the detector bet (2, then 5) to land at the top of its range.
 
+## 45. The §44.4 plan executed end-to-end in one day — and what its four kills mean (2026-08-07)
+
+All five items of §44.4 were run to a verdict in a single session, at a cost of one kernel run,
+one submission, and ~3 MPS-hours. Rows 34–37 in `experiments.md` hold the numbers.
+
+| item | verdict | evidence |
+|---|---|---|
+| 1. port 0.915-line deltas | **mechanisms inert; port submitted** | replay: ranker +0.0000, lookahead +0.0001 (row 34); `pub162_port` local dev-4 **0.9261 vs d4edge 0.9216**, submitted, LB pending |
+| 3. division selector | ☠ **dead** | oracle +0.032 but no realisable arm clears the floor; 0/8 true forks in any top-5 (row 35) |
+| 2. detector fine-tune | ☠ **dead at the §40.5 screen** | residual ~90% unpredictable: −8.7% vs −30% required (row 37), zero GPU spent |
+| 4. pseudo-labels | gate passes (99.90%), **no consumer** | row 36; every model that would train on them died in §37/row 35/row 37 |
+| 5. cross-family ensemble | closed | conditional on item 2, which failed |
+
+### 45.1 The annotation-noise ceiling — why the association oracle was never reachable
+
+Row 37's screen supplies the missing explanation for the whole §27–§43 arc. The +0.0954
+association oracle and the +0.0259 snap oracle both define "error" as distance from **human point
+annotations**. A human clicking the centre of a 3–8 µm nucleus carries 1–2 µm of click noise, and
+**no model can predict another annotator's noise** — yet the oracles count it as recoverable error.
+The predictable fraction of our 2.0 µm residual measures at ~10%; the rest is jointly detector
+ambiguity and GT noise, indistinguishable and equally unreachable. This is §38.5's "the information
+does not exist" made quantitative, and it now covers association, localisation, node budget AND
+divisions.
+
+### 45.2 Standing: the 0.913–0.915 shelf is the information ceiling of this pipeline
+
+Every lever family is now measured-dead except two, both expensive and speculative:
+1. **Detection recall via a differently-trained detector** (§27 caps it at +0.0236 with the current
+   linker; a new detector family also shifts the linker's operating point — unbounded but unpriced).
+   ~50–100 GPU-h against a ~225 GPU-h remaining budget. The only route with a ceiling above +0.01.
+2. **Exploit-adjacent metric play** — explicitly declined (§1).
+
+**Final-2 guidance as of today:** best genuine configs are `thr096` (0.914) and, if the LB
+confirms, `pub162_port` (expected ~0.915) with `pub162_thr096` (queued) as its one-change
+improvement candidate. Reserve final-2 for the two highest CONFIRMED genuine scores.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
