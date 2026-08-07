@@ -3238,6 +3238,210 @@ rhetoric, not evidence.
 side under our scorer, `adj > 1` occurs) is real and worth knowing. Everything downstream of it is
 contingent on §39.1.
 
+## 40. ★★ LOCALISATION is the hidden half of the association loss — and a revised plan (2026-08-06)
+
+**Supersedes the standing read of §37.2, §38.5 and §39.5** that "the +0.0954 association headroom is
+unreachable because the information does not exist". It is partly reachable, and the information is
+present; it is being destroyed upstream of the linker. §33.3's "association is closed to knobs" and
+§37's "a learned cost buys nothing" both stand — the correction is that the linker was never the
+place to look.
+
+### 40.1 ★ Why seven association levers in a row failed
+
+`link_ceiling.py` defines the oracle as *GT edges with both endpoints matched*, and `match_nodes`
+matches within **7 µm**. So a node localised 3 µm from truth still counts as "detected", and every
+error its bad coordinate causes is booked as **association loss**. §27's decomposition — association
+80–85% of remaining loss, detection only 0.0236 — is arithmetically correct and **structurally
+misleading**: coordinate error is invisible in it and reappears as the linker's fault.
+
+That is why BONUS (§28), edge threshold (§30), velocity weight (§18.2), TIGHT_UM (§33), a
+neighbourhood flow term (§31.1), hand-made appearance descriptors (§34) and a learned cost (§37) all
+returned null. **Each asked the linker to overcome an error it cannot see.** §31.3 had the number in
+hand a day earlier and it was read as a curiosity: over the 379 swaps the predicted source→correct-
+successor distance is **9.37 µm** while the GT displacement of those same edges is **4.82 µm**. The
+missing ~4.5 µm is our own coordinate error, and it is exactly what pushes correct successors past
+`MOTION_RELINK_TIGHT_UM` = 6.0.
+
+### 40.2 ★★ The causal measurement: perfect localisation is worth +0.0259 transferable
+
+`scripts/local/localisation_doseresponse.py`, on the 24 evalset volumes through the §36 replay.
+Perturbed coordinates drive the **linking decision only**; scoring always uses the **original**
+positions, so node recall, node matching and the node-budget ratio are held byte-fixed and the only
+thing that can move is which edges the assignment picks.
+
+| arm | RMS change | edge_J | adj | Δ |
+|---|---|---|---|---|
+| replay baseline | — | 0.9046 | 0.8930 | — |
+| noise ×0.25 | +0.552 µm | 0.9045 | 0.8929 | −0.0002 |
+| noise ×0.5 | +1.106 µm | 0.9041 | 0.8918 | −0.0013 |
+| noise ×1.0 | +2.207 µm | 0.8844 | 0.8685 | −0.0245 |
+| **snap λ=0.5** | −0.251 µm | 0.9110 | 0.9010 | **+0.0080** |
+| **snap λ=1.0** | −0.501 µm | **0.9274** | **0.9236** | **+0.0305** |
+
+`snap` shrinks matched nodes toward their GT position by λ; `noise` adds anisotropic Gaussian error
+to **every** node with §25's measured per-axis scatter (z 1.707 / y 0.943 / x 1.039 µm).
+
+**Snap λ=1 moves edge_J 0.9046 → 0.9274 against the §27 oracle of 0.9764 — it captures 31.8% of the
+association headroom.** Every previous attempt captured 0–1%.
+
+☑ **Thin-volume decomposition done before publishing** (§19.2/§39.3 make this mandatory;
+`snap_decompose.py`):
+
+    headline macro adj delta (all 24)            +0.0305
+    TRANSFERABLE (mean over 18 thick volumes)    +0.0259
+    improved 19/24, worsened 2/24 (both -0.002, noise)
+    edge FP  876 -> 633   (-27.7%)
+
+It survives. The gain is broad, not one edge on a thin volume, and the FP collapse rules out a
+matching artifact. Three volumes moved exactly 0.0000 — verified as real, not a bug: their edge sets
+*do* change (15 and 209 edges) but only between **unannotated** cells, which the metric cannot see.
+
+☑ **Placebo control.** The obvious objection is that *any* large displacement of annotated nodes
+might decouple them from unannotated distractors and help for a reason unrelated to accuracy. Moving
+each matched node **the same distance** but in a **random direction**, three seeds:
+
+| arm | RMS moved | adj | Δ |
+|---|---|---|---|
+| snap λ=1 (toward truth) | 0.501 µm | 0.9236 | **+0.0305** |
+| placebo (random direction) | 0.501 µm | 0.8786 / 0.8804 / 0.8799 | **−0.0140** |
+
+A **0.045 spread at identical displacement magnitude**, attributable purely to direction. The gain
+is accuracy, not perturbation.
+
+⚠ **Direction of the bound, and it is the opposite of what it looks like.** Snapping corrects only
+matched (≈annotated) nodes, so a correct target becomes exact while unannotated distractors stay
+noisy — which reads like an unfair advantage. It is not: a real detector improvement sharpens
+distractors *too*, and distractor noise can only ever move a wrong target **closer** to the source by
+chance, manufacturing false competition. Removing it helps. So uniform perfect localisation is
+**≥** snap-matched-only, and **+0.0259 is a lower bound on the ceiling, not an upper one.**
+
+### 40.3 ★ It explains §26.6's collapsed volumes, which §29 could not
+
+`localisation_vs_gap.py` measures per-volume mean residual on matched nodes (independent of the
+linker — `match_nodes` uses position only).
+
+    corr(residual, adj)               -0.648  (24 vols)   -0.523  (18 thick)
+    corr(residual, association gap)   +0.623  (24 vols)   +0.371  (18 thick)
+
+**The two worst volumes by residual are exactly §26.6's two collapsed volumes** — `44b6_87bba6c4`
+3.137 µm and `6bba_786893ac` 2.697 µm against a corpus mean ~2.0 µm — and snapping recovers
+**+0.0854** and **+0.0877** of their adj. This beats every predictor in §29.1 (annotation density
+−0.577, disp_p90 +0.460), and unlike those it comes with a causal intervention rather than a
+correlation.
+
+⚠ Residual is partly a proxy for density, which §29 already flagged; the correlation alone would not
+settle causation. The snap intervention is what does.
+
+### 40.4 ☠ Post-hoc image refinement is DEAD — and §25 was struck for the wrong reason
+
+Predicted coordinates are pure integer voxels and the pipeline never refines them, so centre-of-mass
+refinement on the raw image looked open. §25 had struck "sub-voxel refinement" off on the grounds
+that *quantisation* is only 5.1% of the error variance — true, but a narrower claim than it was used
+for, since CoM re-estimates the centroid rather than merely undoing rounding.
+
+Tested properly (`localisation_refine.py`, 6 volumes, 4 configurations). **All four make it worse:**
+
+| window (vox) | peak frac | RMS 2.186 µm → | macro adj Δ |
+|---|---|---|---|
+| ±2,8,8 | 0.5 | 2.504 (−14.5%) | −0.0018 |
+| ±1,4,4 | 0.5 | 2.316 (−5.9%) | −0.0028 |
+| ±1,3,3 | 0.7 | 2.422 (−10.8%) | −0.0039 |
+| ±2,6,6 | 0.8 | 2.909 (−33.0%) | −0.0053 |
+
+**The detector's argmax is already a better centroid estimate than a raw-intensity centroid.** At
+3–8 µm cell diameters and ~11.7 µm spacing, neighbouring nuclei pull the CoM; only the sparsest
+volume (`44b6_0113de3b`, 49 matched nodes) improved, by 51%.
+
+⇒ Localisation must be improved **inside the detector**, or not at all. This does **not** rule out
+CoM on the detection **heatmap**, which is trained to peak at cell centres where raw intensity peaks
+at bright chromatin — an untested and materially different signal.
+
+### 40.5 ⚠ The response is CONVEX — this is the go/no-go criterion
+
+λ=0.5 buys +0.0080 but λ=1.0 buys +0.0305. Fitting the noise arms gives loss ∝ RMS^~1.7. So:
+
+| RMS reduction | expected Δ (local instrument) |
+|---|---|
+| 10% | +0.001 .. +0.005 |
+| 20% | +0.002 .. +0.010 |
+| 30% | +0.003 .. +0.014 |
+| 50% | **+0.008 .. +0.021** |
+
+**A small localisation improvement buys nothing measurable.** This is the same robustness that made
+BONUS inert (§28) and the learned cost null (§37) — the assignment argmin does not move for small
+perturbations, which is also why §36's replay agreed at 99.7% across smoothing and dropped terms.
+
+⇒ **PRE-REGISTERED GATE: no localisation intervention proceeds to a submission unless it first
+reduces matched-node RMS by ≥30% on the evalset.** That screen is free, local, and needs only
+coordinates plus GT. It is the cheapest go/no-go in the project and it must be run before any GPU.
+
+### 40.6 ⚠ The §39.1 cap question — two tests now disagree, and it no longer matters
+
+§39.1 said `probe_pad` "confirms the penalty side and says nothing about the bonus side". That is
+wrong: the baseline's own multiplier appears in the ratio of the two scores, so the delta *is*
+informative. Using the evalset-24 node-ratio distribution as the proxy for the hidden set:
+
+| hypothesis | predicted `probe_pad` LB | actual | miss |
+|---|---|---|---|
+| **uncapped** | 0.8731 | **0.868** | **0.005** |
+| capped | 0.8800 | 0.868 | 0.012 |
+
+**The delta test favours UNCAPPED; §39.1's level test favoured CAPPED.** They disagree, and each has
+its own confound — the level test by contamination (which inflates local edge_J), the delta test by
+the hidden set's unknown node-ratio distribution. Neither settles it.
+
+☠ **And it is not worth settling.** §38.4 already showed node-budget optimisation captures 1% of its
+oracle *under the favourable hypothesis*; under the cap it is negative. The lever is dead either
+way. A discriminating probe would need a ≥30% pad for only 0.005 of separation — **do not spend a
+submission on this.** Recorded so nobody re-derives it.
+
+### 40.7 The revised plan, ranked by (validated ceiling × demonstrated reachability)
+
+Everything below is screened locally, free, before any GPU. Standing rule from §36 applies: *before
+any kernel run, ask whether replaying files on disk answers it.*
+
+| # | lever | ceiling | evidence | cost | gate |
+|---|---|---|---|---|---|
+| **1** | **detector-seed coordinate averaging** | ≤+0.026 | §40.2 causal; row 17 measured two 400ep seeds disagreeing 12%/volume | free screen, then 1 kernel run, 0 subs | RMS −30% (§40.5) |
+| **2** | **detector TTA (D4 on the heatmap)** | ≤+0.026 | §40.2; averaging reduces peak jitter. §11 did TTA on the *edge* head, never the detector | 1 kernel run, 0 subs | RMS −30% |
+| **3** | **heatmap sub-voxel CoM** | ≤+0.026 | §40.4 rules out *raw-intensity* CoM only | 1 kernel run, 0 subs | RMS −30% |
+| **4** | **divisions: wide gates + FITTED selector** | +0.014..+0.028 | §26.3 9/25 FNs reachable at 12 µm; §24.1 fitted selector beats hand ranking 2.4× | `divdump` run, 0 subs | held-out div_J ↑ |
+| **5** | **division-aware assignment** | +0.0123 | §24.6 the 1-1 Hungarian structurally cannot emit a division; 32% of div FNs are "FN-consumed" | free — replay owns `assign_pass` | end-to-end adj ↑ |
+| ☠ | node budget, relink knobs, learned cost, post-hoc CoM | — | §38.4, §33.3, §37, §40.4 | — | closed |
+
+**Why 1 and 2 lead.** Both attack the largest validated cause of the largest validated oracle, both
+need **zero training**, and both use assets already in the kernel. Seed averaging is the strongest
+prior: two independently-seeded 400-epoch models make *independent* localisation errors, which is
+precisely the component averaging removes — and row 19b showed blending their edge *logits* is
+flat, so their disagreement has never been harvested where it actually lives.
+
+**Item 4 is the best-validated unexecuted lever.** §26.3 pre-registered "wide gates + fitted
+selector" as the untried combination and it was never run; §16 lost 0.006 doing wide gates + *hand*
+ranking, which is the arm we already know fails.
+
+### 40.8 Honest expectation, and what this does not solve
+
+Local numbers are contaminated (§30): every scorable volume is a pilkwang training volume, and
+confidence-exploiting changes over-predicted by ~0.004 there. Localisation is less
+confidence-exploiting than `edgethr30` was — the mechanism is structural, not a threshold on
+memorised confidence — but **halve the local delta before believing it.**
+
+    levers 1-3, if RMS falls 30-50%:   +0.005 .. +0.013 on the board
+    lever 4, FP-controlled:            +0.005 .. +0.010 on the board
+    gap to the leader (0.949 vs 0.914): 0.035
+
+⇒ **Both succeeding still leaves us short.** That is the honest arithmetic and it should be stated
+before any of it is run. Closing 0.035 on the current node set is not supported by any oracle we
+have measured; §27's detection ceiling is 0.9764, so even a perfect linker on today's detections
+leaves 0.0236, and the localisation lever is a *fraction* of that plus a fraction of association.
+**The remainder has to come from a better detector**, which §39.4 correctly noted has never been
+retrained — and which §40.2 now gives a *mechanistic* reason to pursue rather than a hunch.
+
+⚠ §35.0's correction applies to a new target: exp 20's 534 GPU-h is for the **TemporalUNet from
+scratch**. Fine-tuning an existing detector for localisation (soft-argmax or an offset-regression
+head) is the scale of exp 21's edge-head run — **194 min**, not 534 h. That is the phase-2 bet, and
+it should be taken only after levers 1–3 have measured how much of the residual is reducible at all.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
