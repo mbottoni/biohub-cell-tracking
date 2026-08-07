@@ -59,7 +59,8 @@ RAW = Path("/Volumes/extSSD/kaggle/biohub/raw/train")
 GT_ROOT = Path("/Volumes/extSSD/kaggle/biohub/gt/train")
 OUT = REPO / "data" / "locres"
 DET_THRESHOLD = 0.96875           # the shipped operating point
-PATCH = (1, 2, 2)                 # half-extents of the logit patch (ds voxels)
+PATCH = (3, 3, 3)                 # half-extents of the logit patch (ds voxels);
+                                  # z +-3 covers +-4.9 um, the scale of the z scatter
 
 
 def pick_device() -> torch.device:
