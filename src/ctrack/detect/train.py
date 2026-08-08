@@ -333,10 +333,17 @@ def train_fold(
         # sel_score mirrors the competition's adj term: recall x (1 - 0.1*|total_node_ratio|).
         # This stops "best" from selecting the saturated, over-detecting checkpoint that maximises
         # bare recall by firing everywhere.
+        # THRESHOLD-SWEPT selection (row 42's lesson): a fixed 0.5 threshold conflates
+        # CALIBRATION with quality — the s0 run early-stopped at epoch 0 because peak
+        # counts at 0.5 exploded while recall climbed to 99%. The pipeline runs its
+        # detector at a tuned threshold, so selection must too: sel = max over a
+        # threshold grid of recall x exp(-0.1|ratio|), and the chosen threshold is
+        # reported so integration starts from the right operating point.
+        VAL_THRS = sorted({val_threshold, 0.5, 0.9, 0.98, 0.995})
         val_t0 = time.time()
         model.eval()
-        matched = total = 0
-        sum_pred = sum_target = 0.0
+        agg = {thr: [0, 0, 0.0] for thr in VAL_THRS}   # matched, total, n_peaks
+        sum_target = 0.0
         with torch.no_grad():
             for j in range(len(val)):
                 ds, t = val.index[j]
@@ -344,22 +351,28 @@ def train_fold(
                 xx = torch.from_numpy(np.ascontiguousarray(frame))[None, None].float().to(device)
                 hm = torch.sigmoid(model(xx))[0, 0].cpu().numpy()
                 centres = val._centres[(ds, t)] / np.array(ISOTROPIC_SUBSAMPLE)
-                a, b, n_peaks = peak_recall(hm, centres, spacing, nms_vox, threshold=val_threshold)
-                matched += a
-                total += b
-                if ds in est_by_ds:  # only frames whose volume has an estimated true count
-                    sum_pred += n_peaks
+                counted = ds in est_by_ds
+                if counted:
                     sum_target += est_by_ds[ds] / T_FRAMES
-        rec = matched / max(1, total)
-        if node_sel and sum_target > 0:
-            node_ratio = (sum_pred - sum_target) / sum_target
-            # Smooth, always-positive penalty (not the competition's hard max(0, 1-0.1r), which
-            # clamps every over-detecting epoch to 0 and destroys ranking / trips early-stop).
-            # exp keeps sel strictly monotonic in over-detection so selection always has a gradient.
-            pen = float(np.exp(-0.1 * abs(node_ratio)))
-            sel = rec * pen
-        else:
-            node_ratio, sel = float("nan"), rec
+                for thr in VAL_THRS:
+                    a, b, n_peaks = peak_recall(hm, centres, spacing, nms_vox, threshold=thr)
+                    agg[thr][0] += a
+                    agg[thr][1] += b
+                    if counted:
+                        agg[thr][2] += n_peaks
+        sel, rec, node_ratio, sel_thr, sum_pred = -1.0, 0.0, float("nan"), VAL_THRS[0], 0.0
+        for thr in VAL_THRS:
+            m_, t_, p_ = agg[thr]
+            r_ = m_ / max(1, t_)
+            if node_sel and sum_target > 0:
+                nr_ = (p_ - sum_target) / sum_target
+                # Smooth, always-positive penalty (not the competition's hard clamp, which
+                # zeroes every over-detecting epoch and destroys ranking / trips early-stop).
+                s_ = r_ * float(np.exp(-0.1 * abs(nr_)))
+            else:
+                nr_, s_ = float("nan"), r_
+            if s_ > sel:
+                sel, rec, node_ratio, sel_thr, sum_pred = s_, r_, nr_, thr, p_
         val_s = time.time() - val_t0
         run_min = (time.time() - run_t0) / 60
         remaining = epochs - epoch - 1
