@@ -3913,6 +3913,47 @@ detection/fusion/gap stack, not the association mechanisms row 34 proved inert.
 new base, harmlessly. **Final-2 = the two confirmed 0.915s** until the detector programme
 (row 40, §45.2 route 1) produces something that clears its gates.
 
+## 47. ⚠ The exploit was PATCHED and the board RESCORED — §44.1/§45.2's band thesis is WRONG (2026-08-08)
+
+Discussion-forum sweep (thread 727154 + the official royerlab/kaggle-cell-tracking-competition
+repo, now cloned locally). Three load-bearing corrections and one asset:
+
+### 47.1 ⚠ WRONG in §44.1/§45.2: "the 0.92–0.949 band is mostly exploit-inflated"
+
+The organizers **patched the division-jaccard exploit and RESCORED every submission**
+("submissions that did not actively exploit this were not affected"). The current
+0.916–0.949 band is **genuine engineering**. Consequences:
+* The honest bar is the leader's **0.949**, not a "gold shelf ~0.932 after review attrition."
+  No attrition is coming — review-risk reasoning about the band above us is dead.
+* The +0.034 gap is real headroom someone found — most plausibly their own trained
+  detector/pipeline, which independently re-motivates route 1 at larger scale.
+* Retroactive coherence: §11's "the hack is negative" LB reads and probe_pad's clean
+  penalty-side fit were all measured on the POST-patch scorer without us knowing.
+
+### 47.2 §39.1 SETTLED: the node-ratio multiplier is UNCAPPED above
+
+Official code: `J_adj = max(0, J · (1 − α·total_node_ratio))` — clamped at 0 below, **no upper
+cap**. §40.6's delta test had it right; §39.1's level test was the confounded one. The
+node-budget lever stays dead regardless (§38.4: 1% capture), but the scorer property is
+no longer unknown.
+
+### 47.3 Row 35's division kill is STRONGER than we knew
+
+Official division matching works on parent→divider→children→**grandchildren** windows (±1
+timepoint), and **unmatched forks can still be FALSE POSITIVES via child/grandchild
+cross-component evidence** — our reimplementation excluded unmatched forks entirely. The
+12,639 "div-invisible" forks in row 35's pool were likely FP-eligible officially, making
+every keep-forks arm MORE negative than we measured. The kill stands, harder.
+
+### 47.4 ★ Asset: the OFFICIAL scorer is public — vendor it
+
+`github.com/royerlab/kaggle-cell-tracking-competition` (cloned to scratchpad) carries the
+exact metrics + division logic + tests. Every "community reimplementation, one link
+unconfirmed" caveat (§17, §26, §39, docs/metric.md) can now be retired by scoring locally
+with the official code. **Next instrument upgrade: wire the official scorer into
+score_submission.py / the evalset scoring path** — do this before reading blend3's verdict
+if time permits, else immediately after.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
