@@ -1,0 +1,20 @@
+{
+  "id": "maruanbottoni/biohub-dettrain-s1mean",
+  "title": "biohub-dettrain-s1mean",
+  "code_file": "dettrain_s1mean.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": false,
+  "machine_shape": "NvidiaTeslaT4",
+  "competition_sources": [
+    "biohub-cell-tracking-during-development"
+  ],
+  "dataset_sources": [
+    "maruanbottoni/ctrack-src",
+    "maruanbottoni/biohub-teacher-peaks",
+    "pilkwang/biohub-tracking-support-pack-50ep-v1"
+  ],
+  "kernel_sources": []
+}
