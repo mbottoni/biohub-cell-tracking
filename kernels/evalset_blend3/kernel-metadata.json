@@ -1,0 +1,21 @@
+{
+ "id": "maruanbottoni/biohub-evalset-blend3",
+ "title": "Biohub evalset blend3",
+ "code_file": "evalset_blend3.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": true,
+ "enable_gpu": true,
+ "machine_shape": "NvidiaTeslaT4",
+ "enable_internet": false,
+ "competition_sources": [
+  "biohub-cell-tracking-during-development"
+ ],
+ "dataset_sources": [
+  "maruanbottoni/biohub-student-unet",
+  "maruanbottoni/ctrack-src",
+  "pilkwang/biohub-deepcenter-unet3d-center-prior-v1",
+  "pilkwang/biohub-temporal-unet3d-seed314159-v1",
+  "pilkwang/biohub-tracking-support-pack-50ep-v1"
+ ]
+}
