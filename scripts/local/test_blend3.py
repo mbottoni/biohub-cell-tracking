@@ -114,7 +114,8 @@ if __name__ == "__main__":
     main()
 
 
-def rescue_smoke(ckpt_path: str, vol: str = VOL, frame: int = FRAME) -> None:
+def rescue_smoke(ckpt_path: str, vol: str = VOL, frame: int = FRAME,
+                 iso_mode: str = "stride") -> None:
     """Calibrate the RESCUE margin: peaks(max(primary, aligned_student - m*sigma)).
 
     Row 48 killed averaging (vetoes real cells). Rescue-only fusion can only ADD
@@ -148,10 +149,12 @@ def rescue_smoke(ckpt_path: str, vol: str = VOL, frame: int = FRAME) -> None:
         _, det_logits = model.encode(imgs)
     primary = det_logits[0]
 
-    sq_lo, sq_hi = float(ds.quantiles["0.01"]), float(ds.quantiles["0.999"])
-    raw_frame = np.asarray(zarr_arr[frame])
-    strided = raw_frame[::downsample[0], ::downsample[1], ::downsample[2]]
-    x = np.clip((strided.astype(np.float32) - sq_lo) / (sq_hi - sq_lo), 0.0, 1.0)
+    # Student input via ctrack's own functions -- exact training recipe for BOTH
+    # modes (mean mode: normalize at FULL res, clip, THEN area-average; clipping
+    # does not commute with pooling, so replicating by hand risks a silent shift).
+    from ctrack.data.volume import open_volume, to_isotropic
+    _vol = open_volume(RAW / f"{vol}.zarr")
+    x = to_isotropic(_vol.normalized_frame(frame), tuple(downsample), mode=iso_mode)
     ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     stu = UNet3D(base=ck.get("base", 32))
     stu.load_state_dict(ck["model"] if "model" in ck else ck)
@@ -166,7 +169,7 @@ def rescue_smoke(ckpt_path: str, vol: str = VOL, frame: int = FRAME) -> None:
     voxel_size = tuple(s * d for s, d in zip(ds.scale, downsample))
     pool_k = pool_kernel_from_um(cfg.pool_kernel_um, voxel_size)
     n_base = len(_detect_cells_pooled(primary[0], frame, cfg.det_threshold, pool_k))
-    print(f"rescue smoke on {vol} f{frame}: base peaks {n_base}")
+    print(f"rescue smoke on {vol} f{frame} iso={iso_mode}: base peaks {n_base}")
     for m in (0.0, 0.5, 1.0, 1.5, 2.0, 3.0):
         fused = torch.maximum(primary, aligned - m * ps)
         n = len(_detect_cells_pooled(fused[0], frame, cfg.det_threshold, pool_k))
