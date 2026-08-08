@@ -52,7 +52,7 @@ def main() -> None:
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
     # ---- pipeline primary logits (identity view only -- alignment stats don't need TTA)
-    ds = open_dataset(RAW / f"{VOL}.zarr", normalize=False, load_image=False,
+    ds = open_dataset(RAW / f"{vol}.zarr", normalize=False, load_image=False,
                       downsample=(1, 4, 4))
     zarr_arr = zarr.open_group(str(ds.zarr_path), mode="r")["0"]
     q_low, q_high = float(ds.quantiles["0.001"]), float(ds.quantiles["0.999"])
@@ -61,7 +61,7 @@ def main() -> None:
         SUPPORT / "weights" / "unet_transformer" / "split_0" / "edge_predictor_best.pth",
         device)
     imgs = torch.stack([_load_frame(zarr_arr, t, target_shape, downsample)
-                        for t in (FRAME, FRAME + 1)])
+                        for t in (frame, frame + 1)])
     imgs = ((imgs - q_low) / (q_high - q_low + 1e-6)).clamp(0.0).unsqueeze(0).to(device)
     with torch.no_grad():
         _, det_logits = model.encode(imgs)
@@ -112,3 +112,62 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def rescue_smoke(ckpt_path: str, vol: str = VOL, frame: int = FRAME) -> None:
+    """Calibrate the RESCUE margin: peaks(max(primary, aligned_student - m*sigma)).
+
+    Row 48 killed averaging (vetoes real cells). Rescue-only fusion can only ADD
+    peaks; the margin m controls how confident the student must be to poke
+    through. Target: +1-3% peak addition (the det-FN pool is ~0.25% of nodes,
+    but peaks here are pre-ILP so a few x that is tolerable).
+    """
+    import numpy as np
+    import torch
+    from predict_unet_transformer import (
+        PredictConfig, _detect_cells_pooled, _load_frame, load_model,
+        pool_kernel_from_um,
+    )
+    from biohub_tracking.io import open_dataset
+    from ctrack.detect.unet3d import UNet3D
+    import zarr
+
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    ds = open_dataset(RAW / f"{vol}.zarr", normalize=False, load_image=False,
+                      downsample=(1, 4, 4))
+    zarr_arr = zarr.open_group(str(ds.zarr_path), mode="r")["0"]
+    q_low, q_high = float(ds.quantiles["0.001"]), float(ds.quantiles["0.999"])
+    target_shape = list(ds.image_shape[1:])
+    model, W, downsample = load_model(
+        SUPPORT / "weights" / "unet_transformer" / "split_0" / "edge_predictor_best.pth",
+        device)
+    imgs = torch.stack([_load_frame(zarr_arr, t, target_shape, downsample)
+                        for t in (frame, frame + 1)])
+    imgs = ((imgs - q_low) / (q_high - q_low + 1e-6)).clamp(0.0).unsqueeze(0).to(device)
+    with torch.no_grad():
+        _, det_logits = model.encode(imgs)
+    primary = det_logits[0]
+
+    sq_lo, sq_hi = float(ds.quantiles["0.01"]), float(ds.quantiles["0.999"])
+    raw_frame = np.asarray(zarr_arr[frame])
+    strided = raw_frame[::downsample[0], ::downsample[1], ::downsample[2]]
+    x = np.clip((strided.astype(np.float32) - sq_lo) / (sq_hi - sq_lo), 0.0, 1.0)
+    ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    stu = UNet3D(base=ck.get("base", 32))
+    stu.load_state_dict(ck["model"] if "model" in ck else ck)
+    stu.to(device).eval()
+    with torch.no_grad():
+        s_logits = stu(torch.from_numpy(np.ascontiguousarray(x))[None, None].float().to(device))
+    pm, ps = primary.mean(), primary.float().std().clamp_min(1e-4)
+    sm, ss = s_logits.mean(), s_logits.float().std().clamp_min(1e-4)
+    aligned = (s_logits - sm) * (ps / ss).clamp(0.5, 2.0) + pm
+
+    cfg = PredictConfig(det_threshold=0.96875)
+    voxel_size = tuple(s * d for s, d in zip(ds.scale, downsample))
+    pool_k = pool_kernel_from_um(cfg.pool_kernel_um, voxel_size)
+    n_base = len(_detect_cells_pooled(primary[0], frame, cfg.det_threshold, pool_k))
+    print(f"rescue smoke on {vol} f{frame}: base peaks {n_base}")
+    for m in (0.0, 0.5, 1.0, 1.5, 2.0, 3.0):
+        fused = torch.maximum(primary, aligned - m * ps)
+        n = len(_detect_cells_pooled(fused[0], frame, cfg.det_threshold, pool_k))
+        print(f"  margin {m:.1f}*sigma: peaks {n}  ({(n-n_base)/max(1,n_base):+.1%})")
