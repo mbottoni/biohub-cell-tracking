@@ -146,14 +146,22 @@ def main() -> None:
     args = ap.parse_args()
 
     nb = json.loads(BASE.read_text())
-    # Insert our patch cell immediately after the d4edge merged-patch cell (9),
-    # before the driver runs.
+    # HARD LESSON (first run, byte-identical output): cell 9 contains BOTH the
+    # d4edge patch AND the shard driver -- a separate cell inserted "after" it
+    # executes after prediction has already finished (t=4019s vs shards at
+    # t=266s in the run log). The only correct place is INSIDE cell 9, after
+    # its own patch application and before the driver. `def list_test_stems()`
+    # is the unique boundary between the two.
     cell_src = PATCH_CELL_TMPL.format(
         weight=args.weight, helper_anchor=HELPER_ANCHOR, blend_anchor=BLEND_ANCHOR,
         helper_block=HELPER_BLOCK, blend_block=BLEND_BLOCK)
-    nb["cells"].insert(10, {"cell_type": "code", "metadata": {},
-                            "execution_count": None, "outputs": [],
-                            "source": cell_src.splitlines(keepends=True)})
+    c9 = "".join(nb["cells"][9]["source"])
+    driver_anchor = "\ndef list_test_stems()"
+    assert c9.count(driver_anchor) == 1, f"driver anchor x{c9.count(driver_anchor)}"
+    assert c9.find("patch applied") < c9.find(driver_anchor)
+    c9 = c9.replace(driver_anchor, "\n\n" + cell_src + "\n" + driver_anchor, 1)
+    compile(c9, "cell9.py", "exec")
+    nb["cells"][9]["source"] = c9.splitlines(keepends=True)
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "evalset_blend3.ipynb").write_text(json.dumps(nb))
 
