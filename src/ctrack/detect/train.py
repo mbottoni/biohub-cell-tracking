@@ -396,7 +396,8 @@ def train_fold(
         else:
             since_best += 1
         print(f"EPOCH {epoch:2d}/{epochs-1}  loss {tot/max(1,steps_per_epoch):.4f}  "
-              f"sel {sel:.3f}  recall {rec:.3f} ({matched}/{total})  "
+              f"sel {sel:.3f}@thr{sel_thr:g}  recall {rec:.3f} "
+              f"({agg[sel_thr][0]}/{agg[sel_thr][1]})  "
               f"node_ratio {node_ratio:+.2f} (pred {sum_pred:.0f}/tgt {sum_target:.0f})  "
               f"lr {sched.get_last_lr()[0]:.2e}  train {train_s:.0f}s val {val_s:.0f}s  "
               f"total {run_min:.1f}min  ~{remaining*(train_s+val_s)/60:.0f}min left{tag}", flush=True)
