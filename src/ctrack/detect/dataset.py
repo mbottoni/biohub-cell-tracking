@@ -39,6 +39,7 @@ class DetectionFrames(Dataset):
         pseudo_dir: str | Path | None = None,
         pseudo_weight: float = 0.3,
         iso_mode: str = "stride",
+        ambiguous_weight: float = 0.0,
     ):
         self.raw_root = Path(raw_root)
         self.gt_root = Path(gt_root)
@@ -48,6 +49,7 @@ class DetectionFrames(Dataset):
         self.with_offset = with_offset
         self.pseudo_weight = pseudo_weight
         self.iso_mode = iso_mode
+        self.ambiguous_weight = ambiguous_weight
         # Teacher detections (dump_teacher_peaks.py): {ds}.npz with coords (N,4) [t,z,y,x] in
         # full-resolution voxels. Merged into build_frame_target as reduced-weight positives.
         self._pseudo: dict[tuple[str, int], np.ndarray] = {}
@@ -134,6 +136,7 @@ class DetectionFrames(Dataset):
             centres, frame_iso, sigma_um=self.sigma_um, subsample=self.subsample,
             pseudo_centres_full_vox=self._pseudo.get((ds, t)),
             pseudo_weight=self.pseudo_weight,
+            ambiguous_weight=self.ambiguous_weight,
         )
 
         if not self.with_offset:

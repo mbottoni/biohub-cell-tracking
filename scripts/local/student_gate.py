@@ -61,12 +61,16 @@ def main() -> None:
     ap.add_argument("models_dir")
     ap.add_argument("--ckpt", nargs="*", default=["unet_fold0.pt", "checkpoint_last_fold0.pt"])
     ap.add_argument("--iso-mode", default="stride")
+    ap.add_argument("--thresholds", type=float, nargs="*", default=None)
     args = ap.parse_args()
 
+    global THRESHOLDS
     import torch
     from scipy import ndimage
     from ctrack.detect.unet3d import UNet3D
 
+    if args.thresholds:
+        THRESHOLDS = args.thresholds
     all_ds = sorted(p.name.replace(".geff", "") for p in find_geff_stores(GT_ROOT))
     _, golden = hold_out_golden(all_ds, n=8, seed=0)
     print(f"golden-8: {golden}")

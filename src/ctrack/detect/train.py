@@ -77,6 +77,7 @@ def train_fold(
     pseudo_weight: float = 0.3,
     seed: int = 0,
     iso_mode: str = "stride",
+    ambiguous_weight: float = 0.0,
 ) -> float:
     """Train one CV fold. Returns best held-out sel-score (recall x node-ratio penalty, the
     competition-metric-aligned selection); saves best weights to out_dir.
@@ -149,7 +150,8 @@ def train_fold(
 
         train = DetectionFrames(tr, raw_root, gt_root, augment=True, frame_stride=train_stride,
                                 with_offset=use_offset, pseudo_dir=pseudo_dir,
-                                pseudo_weight=pseudo_weight, iso_mode=iso_mode)
+                                pseudo_weight=pseudo_weight, iso_mode=iso_mode,
+                                ambiguous_weight=ambiguous_weight)
         val = DetectionFrames(va, raw_root, gt_root, augment=False, frame_stride=val_stride,
                               iso_mode=iso_mode)
     print(f"frames: {len(train)} train, {len(val)} val", flush=True)

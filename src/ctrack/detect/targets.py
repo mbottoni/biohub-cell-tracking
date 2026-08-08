@@ -56,6 +56,7 @@ def build_frame_target(
     subsample: tuple[int, int, int] = ISOTROPIC_SUBSAMPLE,
     pseudo_centres_full_vox: np.ndarray | None = None,
     pseudo_weight: float = 0.3,
+    ambiguous_weight: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Heatmap + trusted-loss mask for one frame.
 
@@ -112,9 +113,17 @@ def build_frame_target(
     dark = frame_iso <= np.percentile(frame_iso, bg_percentile)
     confident_bg = dark & ~pos & ~pos_pseudo
 
-    # Ambiguous middle (bright, unlabeled by GT or teacher) is left unsupervised.
+    # Ambiguous middle (bright, unlabeled by GT or teacher): unsupervised by default.
+    # Row 42/43's lesson: with dense pseudo-labels the region is mostly teacher-missed
+    # noise, and leaving it free let the student fire 4-5x over target at every
+    # recall-preserving threshold. `ambiguous_weight` > 0 applies weak background
+    # pressure there (target is already 0); keep it well under pseudo_weight so a
+    # genuinely missed cell is cheap to fire on relative to a pseudo positive.
     loss_mask = (pos | confident_bg).astype(np.float32)
     loss_mask[pos_pseudo] = pseudo_weight
+    if ambiguous_weight > 0:
+        ambiguous = ~(pos | pos_pseudo | confident_bg)
+        loss_mask[ambiguous] = ambiguous_weight
     return heatmap, loss_mask
 
 
