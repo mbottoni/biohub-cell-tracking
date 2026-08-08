@@ -28,10 +28,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 
 VARIANTS = {
-    # name -> (seed, iso_mode, epochs, limit, max_minutes, train_stride, val_stride)
-    "smoke": (0, "stride", 2, 20, 55, 4, 10),
-    "s0": (0, "stride", 60, None, 640, 2, 6),
-    "s1mean": (1, "mean", 60, None, 640, 2, 6),
+    # name -> (seed, iso_mode, epochs, limit, max_minutes, train_stride, val_stride, ambiguous_w)
+    "smoke": (0, "stride", 2, 20, 55, 4, 10, 0.0),
+    "s0": (0, "stride", 60, None, 640, 2, 6, 0.0),
+    "s1mean": (1, "mean", 60, None, 640, 2, 6, 0.0),
+    # round 2 (row 43): weak background pressure on the ambiguous region + the
+    # threshold-swept sel selection shipped in the same ctrack-src version.
+    "s0v2": (0, "stride", 60, None, 640, 2, 6, 0.05),
 }
 
 DEPS_CELL = r'''# ------------------------------------------------- offline deps (zarr v3 stack)
@@ -129,6 +132,7 @@ best = train_fold(
     pseudo_weight=0.3,
     seed={seed},
     iso_mode="{iso_mode}",
+    ambiguous_weight={ambiguous_w},
 )
 print("BEST SEL:", best, flush=True)
 '''
@@ -140,12 +144,13 @@ def main() -> None:
     ap.add_argument("--resume-from", help="kernel slug whose output holds checkpoint_last")
     args = ap.parse_args()
 
-    seed, iso_mode, epochs, limit, max_minutes, tr_stride, va_stride = VARIANTS[args.variant]
+    seed, iso_mode, epochs, limit, max_minutes, tr_stride, va_stride, ambiguous_w = VARIANTS[args.variant]
     name = f"dettrain-{args.variant}"
     out_dir = REPO / "kernels" / name.replace("-", "_")
     train_cell = TRAIN_CELL_TMPL.format(
         name=name, epochs=epochs, limit=limit, max_minutes=max_minutes,
-        train_stride=tr_stride, val_stride=va_stride, seed=seed, iso_mode=iso_mode)
+        train_stride=tr_stride, val_stride=va_stride, seed=seed, iso_mode=iso_mode,
+        ambiguous_w=ambiguous_w)
 
     nb = {
         "cells": [
