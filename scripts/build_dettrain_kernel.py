@@ -35,6 +35,7 @@ VARIANTS = {
     # round 2 (row 43): weak background pressure on the ambiguous region + the
     # threshold-swept sel selection shipped in the same ctrack-src version.
     "s0v2": (0, "stride", 60, None, 640, 2, 6, 0.05),
+    "s1v2": (1, "mean", 60, None, 640, 2, 6, 0.05),
 }
 
 DEPS_CELL = r'''# ------------------------------------------------- offline deps (zarr v3 stack)
