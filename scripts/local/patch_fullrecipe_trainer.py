@@ -30,6 +30,8 @@ PATCH_ARGS = '''    parser.add_argument("--resume", type=str, default="auto",
                              "present; 'none' starts fresh")
     parser.add_argument("--max-minutes", type=float, default=None,
                         help="stop before starting an epoch that would exceed this budget")
+    parser.add_argument("--patience", type=int, default=10,
+                        help="early-stop after this many epochs without a new best (0 = off)")
     parser.add_argument("--single-gpu", dest="data_parallel", action="store_false",'''
 
 ANCHOR_SIG = '''    max_iters: int | None = None,
@@ -37,12 +39,14 @@ ANCHOR_SIG = '''    max_iters: int | None = None,
 PATCH_SIG = '''    max_iters: int | None = None,
     resume: str = "auto",
     max_minutes: float | None = None,
+    patience: int = 10,
     debug_video: Path | None = None,'''
 
 ANCHOR_CALL = '''            max_iters=args.max_iters,'''
 PATCH_CALL = '''            max_iters=args.max_iters,
             resume=args.resume,
-            max_minutes=args.max_minutes,'''
+            max_minutes=args.max_minutes,
+            patience=args.patience,'''
 
 ANCHOR_LOOP = '''    best_score = 0.0
     save_path = output_dir / "edge_predictor_best.pth"
@@ -68,11 +72,13 @@ PATCH_LOOP = '''    best_score = 0.0
         optimizer.load_state_dict(_ck["optimizer_state_dict"])
         start_epoch = int(_ck["epoch"]) + 1
         best_score = float(_ck.get("best_score", 0.0))
+        since_best = int(_ck.get("since_best", 0))
         print(f"RESUMED from {last_path.name}: epoch {start_epoch} "
               f"(best {best_score:.4f}, {len(_ck['model_state_dict'])} tensors)", flush=True)
     elif resume == "auto":
         print("fresh run (no checkpoint_last.pth)", flush=True)
 
+    since_best = locals().get("since_best", 0)
     _run_t0 = time.monotonic()
     _est_epoch_s = None
     pbar = tqdm(range(start_epoch, n_epochs), desc="Training", disable=False)
@@ -92,14 +98,24 @@ ANCHOR_SAVE = '''        marker = "*" if is_best else " "'''
 PATCH_SAVE = '''        # ---- atomic resumable checkpoint, every epoch ----
         _est_epoch_s = train_time + test_time
         _tmp = last_path.with_suffix(".tmp")
+        since_best = 0 if is_best else since_best + 1
         torch.save({
             "epoch": epoch,
             "best_score": best_score,
+            "since_best": since_best,
             "model_state_dict": {k.replace("unet.module.", "unet.", 1): v
                                  for k, v in model.state_dict().items()},
             "optimizer_state_dict": optimizer.state_dict(),
         }, _tmp)
         _tmp.replace(last_path)
+
+        if patience and since_best >= patience:
+            print(f"EARLY STOP: no new best in {patience} epochs "
+                  f"(best {best_score:.4f}). Stopping at epoch {epoch}.", flush=True)
+            _print_final = True
+            marker = "*" if is_best else " "
+            print(f"  Epoch {epoch:3d}/{n_epochs} | (early-stop epoch)", flush=True)
+            break
 
         marker = "*" if is_best else " "'''
 
