@@ -3954,6 +3954,40 @@ with the official code. **Next instrument upgrade: wire the official scorer into
 score_submission.py / the evalset scoring path** — do this before reading blend3's verdict
 if time permits, else immediately after.
 
+## 48. The detector campaign, concluded — and the one decision that remains (2026-08-09)
+
+Rows 40–50 hold the numbers. Two days, ~30 GPU-h, zero submissions wasted.
+
+### 48.1 What was built and proven
+* A complete own-detector training stack: dense pseudo-labels (99.90% purity), resumable
+  atomic checkpoints, threshold-swept sel selection, ambiguous-region count control. Both
+  students hit **sel 0.97, teacher-parity recall (0.98–0.99) on volumes they never saw**,
+  with bounded counts — the round-1→round-2 loop fixed a real failure in one iteration.
+* The official scorer, vendored and calibrated (+0.017 level correction, row 46).
+* The blend-integration kernel with verified patch mechanics (and the cell-9 lesson, row 47).
+
+### 48.2 ☠ Why it cannot move the score: the distillation ceiling
+A student trained on teacher pseudo-labels is structurally a **candidate-subset of its
+teacher**: averaging vetoes real cells (−0.0116, row 48); rescue fusion finds **zero unique
+peaks** across 2 students × 2 input modes × all margins (rows 49–50). Even 16× photon
+averaging and the GT-only strong positives (including the 288 det-FNs) do not produce a
+single confident peak outside the teacher's neighbourhoods. Teacher-parity is reachable;
+teacher-exceedance is not, by this route.
+
+### 48.3 The honest position (with §47's corrected board)
+* Confirmed genuine: **0.915 × 2** (final-2). The bar is a genuine **0.949**.
+* Every cheap and mid-priced lever is now measured-dead across association, divisions,
+  localisation, node budget, consensus filtering, and detection distillation.
+* **The one route left with ceiling above +0.01: a detector/pipeline NOT distilled from the
+  public one** — the full pilkwang recipe (TemporalUNet + transformer edge head, end-to-end
+  on GT) or a stronger variant, at its true cost: ~130–500 GPU-h. That is Vast.ai territory
+  (~$50–200 on 4090s, days of wall-clock), not T4-quota territory. It is what the 0.93+
+  teams most plausibly paid for.
+
+⇒ **Decision for the operator:** fund the full-recipe training run (rented compute), or
+hold the two 0.915s as the final answer. Everything needed to execute the first option —
+data plumbing, trainers, evaluation instruments, integration path — exists and is tested.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
