@@ -14,6 +14,14 @@ N=0
 
 log() { echo "[orch $(date +%H:%M)] $*"; }
 
+age_of() {  # newest file date in a dataset -> age in minutes (9999 on parse failure)
+  local NOWE D E
+  NOWE=$(date -u +%s)
+  D=$(${REPO}/.venv/bin/kaggle datasets files "$1" 2>/dev/null | awk 'NR>2 {print $(NF-1), $NF}' | sort | tail -1)
+  E=$(date -j -u -f "%Y-%m-%d %H:%M:%S" "${D%%.*}" +%s 2>/dev/null || echo 0)
+  if [ "$E" -eq 0 ] || [ "$E" -gt "$NOWE" ]; then echo 9999; else echo $(( (NOWE - E) / 60 )); fi
+}
+
 while true; do
   N=$((N+1))
   SNAME="w3auto$N"
@@ -30,6 +38,19 @@ print(ck['epoch'])" 2>/dev/null)
     log "TARGET REACHED at epoch $EPOCH — orchestrator done"
     exit 0
   fi
+
+  # ---- adopt guard: a session this loop no longer knows about may still be
+  # training (row 55: `colab sessions` drops live runtimes). If the store shows
+  # a fresh life signal, wait for it to go stale before provisioning — never
+  # run two trainers against one ckpt store.
+  while true; do
+    LIFE=$(age_of maruanbottoni/biohub-w3-ckpt)
+    B=$(age_of maruanbottoni/biohub-w3-beacon)
+    [ "$B" -lt "$LIFE" ] && LIFE=$B
+    [ "$LIFE" -gt 45 ] && break
+    log "life signal ${LIFE}min old — an unlisted session is alive, adopting (waiting)"
+    sleep 600
+  done
 
   # ---- provision: A100 preferred, L4 fallback
   GPU=A100
@@ -64,14 +85,6 @@ print(ck['epoch'])" 2>/dev/null)
   # staleness. Never `colab stop` an unreachable session; it may be training.
   while true; do
     sleep 600
-    NOWE=$(date -u +%s)
-    age_of() {  # newest file date in a dataset -> age in minutes (9999 on parse failure)
-      local D
-      D=$(${REPO}/.venv/bin/kaggle datasets files "$1" 2>/dev/null | awk 'NR>2 {print $(NF-1), $NF}' | sort | tail -1)
-      local E
-      E=$(date -j -u -f "%Y-%m-%d %H:%M:%S" "${D%%.*}" +%s 2>/dev/null || echo 0)
-      if [ "$E" -eq 0 ] || [ "$E" -gt "$NOWE" ]; then echo 9999; else echo $(( (NOWE - E) / 60 )); fi
-    }
     AGEMIN=$(age_of maruanbottoni/biohub-w3-ckpt)
     BEACONMIN=$(age_of maruanbottoni/biohub-w3-beacon)
     FE=1
