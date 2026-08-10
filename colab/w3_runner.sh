@@ -38,7 +38,7 @@ if [ ! -d /content/data/train ]; then
   # leave room for 2-3 banked epochs.
   rm -f /content/data/w3subset.zip*
   kaggle datasets download maruanbottoni/biohub-w3-subset -p /content/data
-  ( cd /content/data && unzip -qo w3subset.zip && rm -f w3subset.zip biohub-w3-subset.zip )
+  ( cd /content/data && unzip -qo "$(ls *.zip | head -1)" && rm -f *.zip )
 fi
 ls /content/data/train | grep -c ".zarr$"
 
