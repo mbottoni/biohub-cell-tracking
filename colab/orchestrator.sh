@@ -42,7 +42,12 @@ print(ck['epoch'])" 2>/dev/null)
     fi
   fi
   BATCH=$([ "$GPU" = "A100" ] && echo 8 || echo 4)
-  log "session $SNAME up ($GPU)"
+  # Tier-aware patience: L4's first ckpt push lands ~70 min after session start
+  # (staging + loading + 32-min epoch + eval); A100 ~35 min. The 40/50 defaults
+  # executed a healthy L4 five minutes before epoch 12 banked.
+  STALE_MIN=$([ "$GPU" = "A100" ] && echo 40 || echo 60)
+  GRACE_MIN=$([ "$GPU" = "A100" ] && echo 50 || echo 90)
+  log "session $SNAME up ($GPU, stale>${STALE_MIN}m grace ${GRACE_MIN}m)"
 
   # ---- payload + launch
   $CB upload "$REPO/colab/w3_runner.sh" /content/w3_runner.sh -s "$SNAME" >/dev/null 2>&1
@@ -57,7 +62,6 @@ print(ck['epoch'])" 2>/dev/null)
   # runtime died -- sessions train on for hours after the tunnel 404s, and the
   # live pusher keeps banking. The only honest death signal is checkpoint-store
   # staleness. Never `colab stop` an unreachable session; it may be training.
-  STALE_MIN=40
   while true; do
     sleep 600
     NOWE=$(date -u +%s)
@@ -84,7 +88,7 @@ print(ck['epoch'])" 2>/dev/null)
     SESSMIN=$(( ($(date -u +%s) - SESSION_START) / 60 ))
     LIFE=$AGEMIN
     [ "$BEACONMIN" -lt "$LIFE" ] && LIFE=$BEACONMIN
-    if [ "$LIFE" -gt "$STALE_MIN" ] && [ "$SESSMIN" -gt 50 ]; then
+    if [ "$LIFE" -gt "$STALE_MIN" ] && [ "$SESSMIN" -gt "$GRACE_MIN" ]; then
       log "$SNAME: no life signal for ${LIFE}min (ckpt ${AGEMIN} / beacon ${BEACONMIN}) — respawning"
       $CB stop -s "$SNAME" >/dev/null 2>&1
       break
