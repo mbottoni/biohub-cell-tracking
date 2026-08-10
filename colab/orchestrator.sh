@@ -52,32 +52,32 @@ print(ck['epoch'])" 2>/dev/null)
     | $CB exec -s "$SNAME" --env "KT=$TOKEN" --timeout 10 >/dev/null 2>&1
   log "runner launched on $SNAME (batch $BATCH)"
 
-  # ---- poll until dead or done
-  MISS=0
+  # ---- poll until STORE-STALE or done. Row 55: ssh dying does NOT mean the
+  # runtime died -- sessions train on for hours after the tunnel 404s, and the
+  # live pusher keeps banking. The only honest death signal is checkpoint-store
+  # staleness. Never `colab stop` an unreachable session; it may be training.
+  STALE_MIN=40
   while true; do
-    sleep 360
-    OUT=$(echo 'echo "$(cat /content/PHASE 2>/dev/null)|$(grep -cE "Epoch +[0-9]+/" /content/train.log 2>/dev/null)"; grep -E "EARLY STOP" /content/train.log 2>/dev/null | tail -1; test -f /content/DONE && echo DONE' \
+    sleep 600
+    FDATE=$(${REPO}/.venv/bin/kaggle datasets files maruanbottoni/biohub-w3-ckpt 2>/dev/null | grep checkpoint_last | awk '{print $(NF-1), $NF}')
+    NOWE=$(date -u +%s)
+    FE=$(date -j -u -f "%Y-%m-%d %H:%M:%S" "${FDATE%%.*}" +%s 2>/dev/null || echo 0)
+    AGEMIN=$(( (NOWE - FE) / 60 ))
+    OUT=$(echo 'grep -cE "Epoch +[0-9]+/" /content/train.log 2>/dev/null; grep -E "EARLY STOP" /content/train.log 2>/dev/null | tail -1; test -f /content/DONE && echo DONE' \
       | timeout 200 $CB ssh -s "$SNAME" --identity $KEY 2>/dev/null)
-    if [ -z "$OUT" ]; then
-      MISS=$((MISS+1))
-      if [ $MISS -ge 2 ]; then
-        log "$SNAME dead (phase/epochs at last contact: $LASTSTATE)"
-        break
-      fi
-    else
-      MISS=0
-      LASTSTATE=$(echo "$OUT" | head -1)
-      log "$SNAME alive: $LASTSTATE"
-      if echo "$OUT" | grep -q "EARLY STOP"; then
-        log "EARLY STOP reached — waiting for final push then finishing"
-        sleep 300
-        $CB stop -s "$SNAME" >/dev/null 2>&1
-        log "ORCHESTRATOR DONE (early stop)"
-        exit 0
-      fi
-      echo "$OUT" | grep -q "^DONE" && { $CB stop -s "$SNAME" >/dev/null 2>&1; log "runner DONE"; break; }
+    log "$SNAME: store-age ${AGEMIN}min | ssh: ${OUT:-(unreachable — may still be training)}"
+    if echo "$OUT" | grep -qE "EARLY STOP|^DONE"; then
+      log "trainer finished on $SNAME — waiting for final push"
+      sleep 300
+      $CB stop -s "$SNAME" >/dev/null 2>&1
+      log "ORCHESTRATOR DONE"
+      exit 0
+    fi
+    if [ "$AGEMIN" -gt "$STALE_MIN" ] && [ "$FE" -ne 0 ]; then
+      log "$SNAME: store stale ${AGEMIN}min — presuming real death, spawning replacement"
+      $CB stop -s "$SNAME" >/dev/null 2>&1
+      break
     fi
   done
-  $CB stop -s "$SNAME" >/dev/null 2>&1
   sleep 30
 done
