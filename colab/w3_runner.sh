@@ -48,7 +48,28 @@ if [ ! -d /content/data/train ]; then
   kaggle datasets download maruanbottoni/biohub-w3-subset -p /content/data
   ( cd /content/data && unzip -qo "$(ls *.zip | head -1)" && rm -f *.zip )
 fi
+# Patch dataset: volumes the packed subset is missing. TWO packs in a row lost
+# 6bba_fc83837d (a selection volume) somewhere between VM-side verify and the
+# published dataset; this one is zipped and uploaded from the local raw copy.
+mkdir -p /content/patchds
+kaggle datasets download maruanbottoni/biohub-w3-patch -p /content/patchds
+( cd /content/patchds && unzip -qo "$(ls *.zip | head -1)" -d /content/data && rm -f *.zip )
 ls /content/data/train | grep -c ".zarr$"
+# Verify EVERY split volume is on disk before spending GPU time: the missing
+# volume crashed >5 sessions at test-load, each discovered only via the beacon.
+if ! python - << 'EOF'
+import json, os, sys
+sp = json.load(open('/content/w3_probe_splits.json'))[0]
+names = [v[:-5] if v.endswith('.zarr') else v for k in ('train', 'test') for v in sp[k]]
+missing = [n for n in names
+           if not os.path.isdir(f'/content/data/train/{n}.zarr')
+           or not os.path.isdir(f'/content/data/train/{n}.geff')]
+if missing:
+    print(f'FATAL: {len(missing)} split volumes missing from staged data: {missing}')
+    sys.exit(1)
+print(f'verified all {len(names)} split volumes staged')
+EOF
+then phase "data-FATAL-missing-volumes"; sleep 20; exit 1; fi
 
 phase repo
 if [ ! -d /content/repo ]; then
