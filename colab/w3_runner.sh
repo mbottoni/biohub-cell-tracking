@@ -33,12 +33,12 @@ kaggle competitions list -s biohub | head -2
 phase data
 if [ ! -d /content/data/train ]; then
   mkdir -p /content/data
-  # A killed prior attempt can leave a corrupt/partial zip that the CLI would
-  # resume onto or skip in favour of -- start clean every time train/ is absent.
-  rm -f /content/data/biohub-cell-tracking-during-development.zip*
-  kaggle competitions download -c biohub-cell-tracking-during-development -p /content/data
-  ( cd /content/data && unzip -qo biohub-cell-tracking-during-development.zip \
-      && rm biohub-cell-tracking-during-development.zip )
+  # Row 54: pre-packed 60-volume subset (~7 min total staging) instead of the
+  # 81 GB competition zip -- CLI runtimes die at ~60-90 min, so staging must
+  # leave room for 2-3 banked epochs.
+  rm -f /content/data/w3subset.zip*
+  kaggle datasets download maruanbottoni/biohub-w3-subset -p /content/data
+  ( cd /content/data && unzip -qo w3subset.zip && rm -f w3subset.zip biohub-w3-subset.zip )
 fi
 ls /content/data/train | grep -c ".zarr$"
 
