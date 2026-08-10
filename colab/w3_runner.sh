@@ -117,6 +117,11 @@ phase train
   done
 ) &
 PUSHER_PID=$!
+# A crashed trainer must not leave the pusher beaconing: today's session
+# crash-looped while its orphaned pusher kept the beacon fresh for 40+ min,
+# reading as "alive" to the orchestrator. Kill it and ship one honest
+# final beacon on ANY exit path.
+trap 'kill $PUSHER_PID 2>/dev/null || true; phase "runner-exit"; sleep 20' EXIT
 cd /content/repo
 PYTHONPATH=src python scripts/train_unet_transformer.py \
   --data-dir /content/data/train \
