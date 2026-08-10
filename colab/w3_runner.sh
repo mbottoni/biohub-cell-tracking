@@ -17,7 +17,15 @@ flock -n 9 || { echo "another runner instance holds the lock -- exiting"; exit 0
 MAX_MINUTES="${MAX_MINUTES:-150}"
 BATCH="${BATCH:-8}"
 
-phase() { echo "$1" > /content/PHASE; echo "== $1 =="; }
+phase() {
+  echo "$1" > /content/PHASE; echo "== $1 =="
+  # Out-of-band beacon: ssh/kernel channels die within minutes on these
+  # runtimes; the only always-working reporting path is the Kaggle API outward.
+  ( B=/content/beacon_staging; rm -rf "$B" && mkdir -p "$B"
+    echo "$(hostname) $1 $(date -u +%H:%M:%S)" > "$B/beacon.txt"
+    printf '{"id": "maruanbottoni/biohub-w3-beacon", "title": "biohub-w3-beacon", "licenses": [{"name": "CC0-1.0"}]}' > "$B/dataset-metadata.json"
+    kaggle datasets version -p "$B" -m "$1 $(date -u +%H:%M)" >/dev/null 2>&1 || true ) &
+}
 
 phase deps
 pip -q install -U kaggle >/dev/null

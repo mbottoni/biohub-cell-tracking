@@ -60,13 +60,20 @@ print(ck['epoch'])" 2>/dev/null)
   STALE_MIN=40
   while true; do
     sleep 600
-    FDATE=$(${REPO}/.venv/bin/kaggle datasets files maruanbottoni/biohub-w3-ckpt 2>/dev/null | grep checkpoint_last | awk '{print $(NF-1), $NF}')
     NOWE=$(date -u +%s)
-    FE=$(date -j -u -f "%Y-%m-%d %H:%M:%S" "${FDATE%%.*}" +%s 2>/dev/null || echo 0)
-    AGEMIN=$(( (NOWE - FE) / 60 ))
+    age_of() {  # newest file date in a dataset -> age in minutes (9999 on parse failure)
+      local D
+      D=$(${REPO}/.venv/bin/kaggle datasets files "$1" 2>/dev/null | awk 'NR>2 {print $(NF-1), $NF}' | sort | tail -1)
+      local E
+      E=$(date -j -u -f "%Y-%m-%d %H:%M:%S" "${D%%.*}" +%s 2>/dev/null || echo 0)
+      if [ "$E" -eq 0 ] || [ "$E" -gt "$NOWE" ]; then echo 9999; else echo $(( (NOWE - E) / 60 )); fi
+    }
+    AGEMIN=$(age_of maruanbottoni/biohub-w3-ckpt)
+    BEACONMIN=$(age_of maruanbottoni/biohub-w3-beacon)
+    FE=1
     OUT=$(echo 'grep -cE "Epoch +[0-9]+/" /content/train.log 2>/dev/null; grep -E "EARLY STOP" /content/train.log 2>/dev/null | tail -1; test -f /content/DONE && echo DONE' \
       | timeout 200 $CB ssh -s "$SNAME" --identity $KEY 2>/dev/null)
-    log "$SNAME: store-age ${AGEMIN}min | ssh: ${OUT:-(unreachable — may still be training)}"
+    log "$SNAME: ckpt-age ${AGEMIN}min beacon-age ${BEACONMIN}min | ssh: ${OUT:-(unreachable)}"
     if echo "$OUT" | grep -qE "EARLY STOP|^DONE"; then
       log "trainer finished on $SNAME — waiting for final push"
       sleep 300
@@ -75,8 +82,10 @@ print(ck['epoch'])" 2>/dev/null)
       exit 0
     fi
     SESSMIN=$(( ($(date -u +%s) - SESSION_START) / 60 ))
-    if [ "$AGEMIN" -gt "$STALE_MIN" ] && [ "$FE" -ne 0 ] && [ "$SESSMIN" -gt 50 ]; then
-      log "$SNAME: store stale ${AGEMIN}min — presuming real death, spawning replacement"
+    LIFE=$AGEMIN
+    [ "$BEACONMIN" -lt "$LIFE" ] && LIFE=$BEACONMIN
+    if [ "$LIFE" -gt "$STALE_MIN" ] && [ "$SESSMIN" -gt 50 ]; then
+      log "$SNAME: no life signal for ${LIFE}min (ckpt ${AGEMIN} / beacon ${BEACONMIN}) — respawning"
       $CB stop -s "$SNAME" >/dev/null 2>&1
       break
     fi
