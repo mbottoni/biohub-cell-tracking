@@ -74,6 +74,12 @@ phase train
   LASTMD5=""
   while true; do
     sleep 300
+    # Remote log pipe: ssh dies within minutes, so ship the train.log tail out
+    # through the beacon dataset every cycle -- the only always-working channel.
+    ( B=/content/beacon_staging; rm -rf "$B" && mkdir -p "$B"
+      { echo "$(hostname) train-tail $(date -u +%H:%M:%S)"; tail -40 /content/train.log 2>/dev/null | tr -d "\r"; } > "$B/beacon.txt"
+      printf '{"id": "maruanbottoni/biohub-w3-beacon", "title": "biohub-w3-beacon", "licenses": [{"name": "CC0-1.0"}]}' > "$B/dataset-metadata.json"
+      kaggle datasets version -p "$B" -m "train-tail $(date -u +%H:%M)" >/dev/null 2>&1 || true )
     CK=/content/repo/weights/w3probe/split_0/checkpoint_last.pth
     if [ -f "$CK" ]; then
       MD5=$(md5sum "$CK" | cut -d' ' -f1)
