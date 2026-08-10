@@ -14,10 +14,13 @@ what we execute next).
 
 ## Stage 0 — finish the window-3 probe + matched w2 control (~35u remaining)
 
-**Status: running.** Orchestrator relaunched 2026-08-10 evening; verified 60-volume subset
-(re-packed with per-volume verify after the silent `6bba_fc83837d` omission) staged as
-`biohub-w3-subset`. Checkpoint store `biohub-w3-ckpt` holds epoch 11, best sel **0.8881**
-(from 0.8643 at epoch 0), target epoch 28.
+**Status: running** (training confirmed on-GPU 2026-08-10 18:39, ~12 min/epoch on A100).
+⚠ The re-packed subset LOST `6bba_fc83837d` a second time — the loss is in the
+zip→upload→ingest path, not extraction (row 58b). Data now stages as `biohub-w3-subset`
+(59 vols) + `biohub-w3-patch` (the missing volume, zipped from the local raw copy), and the
+runner FATALs to the beacon unless all 60 split volumes verify on disk before training.
+Checkpoint store `biohub-w3-ckpt` holds epoch 11, best sel **0.8881** (from 0.8643 at
+epoch 0), target epoch 28.
 
 1. Train w3 to epoch 28 (or patience-10 early stop). Orchestrator handles session deaths;
    checkpoints bank every epoch.
