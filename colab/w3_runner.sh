@@ -10,6 +10,10 @@
 #   /content/DONE           written after the checkpoint upload succeeds
 set -euo pipefail
 cd /content
+# Single-instance lock: a doubled launch once raced the data phase and deleted
+# the in-flight download (rm of "stale" zips from instance B killed A's file).
+exec 9>/content/runner.lock
+flock -n 9 || { echo "another runner instance holds the lock -- exiting"; exit 0; }
 MAX_MINUTES="${MAX_MINUTES:-150}"
 BATCH="${BATCH:-8}"
 
