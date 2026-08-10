@@ -23,8 +23,20 @@ while read -r V; do
   PATTERNS="$PATTERNS train/$V.zarr/* train/$V.geff/*"
 done < /content/w3_subset_volumes.txt
 cd /content/subset
-unzip -q /content/biohub-cell-tracking-during-development.zip $PATTERNS
-ls train | grep -c zarr
+unzip -q /content/biohub-cell-tracking-during-development.zip $PATTERNS || true
+# VERIFY every volume landed; retry individually (the bulk pattern list silently
+# skipped 6bba_fc83837d on the first pack -- a selection volume, which crashed
+# every training session at test-load).
+while read -r V; do
+  for EXT in zarr geff; do
+    if [ ! -d "train/$V.$EXT" ]; then
+      echo "retrying missing train/$V.$EXT"
+      unzip -q /content/biohub-cell-tracking-during-development.zip "train/$V.$EXT/*"
+    fi
+    [ -d "train/$V.$EXT" ] || { echo "FATAL: train/$V.$EXT unextractable"; exit 1; }
+  done
+done < /content/w3_subset_volumes.txt
+echo "verified $(ls train | grep -c '.zarr$') zarr / $(ls train | grep -c '.geff$') geff"
 
 phase zip
 cd /content/subset
@@ -36,6 +48,6 @@ ST=/content/subset_staging
 mkdir -p "$ST"
 mv /content/w3subset.zip "$ST/"
 printf '{"id": "maruanbottoni/biohub-w3-subset", "title": "biohub-w3-subset", "licenses": [{"name": "CC0-1.0"}]}' > "$ST/dataset-metadata.json"
-kaggle datasets create -p "$ST" --dir-mode skip
+kaggle datasets version -p "$ST" -m "re-pack with per-volume verification" || kaggle datasets create -p "$ST" --dir-mode skip
 echo done > /content/DONE
 phase done
