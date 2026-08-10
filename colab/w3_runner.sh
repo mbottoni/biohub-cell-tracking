@@ -87,6 +87,7 @@ phase train
         PU=/content/w3ckpt_push
         rm -rf "$PU" && mkdir -p "$PU"
         cp "$CK" "$PU/" && cp /content/repo/weights/w3probe/split_0/edge_predictor_best.pth "$PU/" 2>/dev/null || true
+        grep -E "Epoch +[0-9]+/" /content/train.log 2>/dev/null | tr -d "\r" > "$PU/epoch_history.txt" || true
         cp /content/repo/weights/w3probe/split_0/config.json "$PU/" 2>/dev/null || true
         printf '{"id": "maruanbottoni/biohub-w3-ckpt", "title": "biohub-w3-ckpt", "licenses": [{"name": "CC0-1.0"}]}' > "$PU/dataset-metadata.json"
         kaggle datasets version -p "$PU" -m "live push $(date -u +%H:%M)" >/dev/null 2>&1 && LASTMD5="$MD5" && echo "[ckpt-push] uploaded $(date -u +%H:%M)" >> /content/push.log
@@ -111,6 +112,7 @@ cp "$OUT/checkpoint_last.pth" "$ST/" 2>/dev/null || true
 cp "$OUT/edge_predictor_best.pth" "$ST/" 2>/dev/null || true
 cp "$OUT/config.json" "$ST/" 2>/dev/null || true
 tail -50 /content/train.log > "$ST/last_session_log.txt"
+grep -E "Epoch +[0-9]+/" /content/train.log 2>/dev/null | tr -d "\r" > "$ST/epoch_history.txt" || true
 cat > "$ST/dataset-metadata.json" << 'EOF'
 {"id": "maruanbottoni/biohub-w3-ckpt", "title": "biohub-w3-ckpt",
  "licenses": [{"name": "CC0-1.0"}]}
