@@ -51,6 +51,7 @@ print(ck['epoch'])" 2>/dev/null)
   printf 'import subprocess, os\nenv = dict(os.environ)\nenv["KAGGLE_API_TOKEN"] = os.environ["KT"]\nenv["MAX_MINUTES"] = "100000"\nenv["BATCH"] = "%s"\nwith open("/content/runner.log", "a") as f:\n    subprocess.run(["bash", "/content/w3_runner.sh"], env=env, stdout=f, stderr=subprocess.STDOUT)\nprint("runner finished")\n' "$BATCH" \
     | $CB exec -s "$SNAME" --env "KT=$TOKEN" --timeout 10 >/dev/null 2>&1
   log "runner launched on $SNAME (batch $BATCH)"
+  SESSION_START=$(date -u +%s)
 
   # ---- poll until STORE-STALE or done. Row 55: ssh dying does NOT mean the
   # runtime died -- sessions train on for hours after the tunnel 404s, and the
@@ -73,7 +74,8 @@ print(ck['epoch'])" 2>/dev/null)
       log "ORCHESTRATOR DONE"
       exit 0
     fi
-    if [ "$AGEMIN" -gt "$STALE_MIN" ] && [ "$FE" -ne 0 ]; then
+    SESSMIN=$(( ($(date -u +%s) - SESSION_START) / 60 ))
+    if [ "$AGEMIN" -gt "$STALE_MIN" ] && [ "$FE" -ne 0 ] && [ "$SESSMIN" -gt 50 ]; then
       log "$SNAME: store stale ${AGEMIN}min — presuming real death, spawning replacement"
       $CB stop -s "$SNAME" >/dev/null 2>&1
       break
