@@ -23,7 +23,7 @@ from pathlib import Path
 
 S = Path("/private/tmp/claude-501/-Users-maruanottoni-home-kaggle-biohub-cell-tracking/746fd85d-a0d8-47d3-b5cf-be4bb88f1e9a/scratchpad")
 OLD = Path("/private/tmp/claude-501/-Users-maruanottoni-home-kaggle-biohub-cell-tracking/5c5c110c-b819-4168-a812-26fe17d15065/scratchpad")
-CELLS = S / "nbcells"
+CELLS = Path(os.environ.get("BIOHUB_CELLS_DIR", str(S / "nbcells")))
 MIRROR = S / "kaggle_input"
 
 variant = sys.argv[1]
@@ -112,6 +112,45 @@ print("[local] device+cache patches applied (1 match each)", flush=True)
 start_time = time.time()'''
 
 
+def transform10(src: str) -> str:
+    """Cell 10 freezes every knob at the pub162 baseline and raises on drift.
+    A variant IS one intended drift: rewrite the guard's expected value for the
+    overridden key(s) so the guard still catches any OTHER unintended change."""
+    import re
+    for k, v in overrides.items():
+        short = k[len("BIOHUB_"):] if k.startswith("BIOHUB_") else k
+        pat = re.compile(r'("(?:%s|%s)":\s*)([^,\n]+)(,?)' % (re.escape(short), re.escape(k)))
+        def repl(m, _v=v):
+            try:
+                val = repr(float(_v))
+            except ValueError:
+                val = repr(_v)
+            return m.group(1) + val + m.group(3)
+        src, n = pat.subn(repl, src)
+        print(f"[guard] {k}: {n} expected-value rewrite(s)", flush=True)
+    return src
+
+
+CLAMP_OLD = "    effective_gap_max = min(GAP_CLOSE_MAX_GAP, 1)"
+CLAMP_NEW = "    effective_gap_max = max(1, int(GAP_CLOSE_MAX_GAP))  # UNCLAMPED (replay experiment)"
+
+
+def transform15(src: str) -> str:
+    """Optionally lift the hardcoded 1-frame cap on gap closing.
+
+    The shipped line is `min(GAP_CLOSE_MAX_GAP, 1)`, so BIOHUB_GAP_CLOSE_MAX_GAP
+    is inert for every value >= 1 and only t->t+2 holes are ever bridged. With
+    BIOHUB_UNCLAMP_GAP=1 the env var is honoured, letting the pass bridge
+    t->t+3 (gap 2) and beyond -- the detection-FN recovery lever of 13/22.
+    """
+    if os.environ.get("BIOHUB_UNCLAMP_GAP", "0") == "0":
+        return src
+    n = src.count(CLAMP_OLD)
+    assert n == 1, f"[local] gap clamp patch expected 1 match, found {n}"
+    print("[local] gap-close clamp LIFTED (1 match)", flush=True)
+    return src.replace(CLAMP_OLD, CLAMP_NEW)
+
+
 def transform13(src: str) -> str:
     n = src.count(FAILFAST_OLD)
     assert n == 1, f"fail-fast block match count {n}"
@@ -148,8 +187,8 @@ run_cell(8)
 # runs with cwd=REPO_DIR, so the secondary-weights path must be absolutized.
 os.environ["BIOHUB_SECONDARY_WEIGHTS"] = str(Path(os.environ["BIOHUB_SECONDARY_WEIGHTS"]).resolve())
 print(f"[local] BIOHUB_SECONDARY_WEIGHTS -> {os.environ['BIOHUB_SECONDARY_WEIGHTS']}", flush=True)
-run_cell(10)
+run_cell(10, transform=transform10)
 run_cell(11)
 run_cell(13, transform=transform13)
-run_cell(15)
+run_cell(15, transform=transform15)
 print(f"\n[local] DONE variant={variant} -> {RUN / 'submission.csv'}", flush=True)
