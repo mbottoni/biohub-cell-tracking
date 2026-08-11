@@ -3988,6 +3988,43 @@ teacher-exceedance is not, by this route.
 hold the two 0.915s as the final answer. Everything needed to execute the first option —
 data plumbing, trainers, evaluation instruments, integration path — exists and is tested.
 
+## 50. ☠ The Colab probe program CONCLUDES: window size is not the lever (2026-08-11)
+
+Rows 51–61 are the full arc. The question the program bought (§49, PLAN v3: "buy the
+decision tree, not the win"): *does window-3 temporal context beat window-2 under identical
+conditions, and is the full-recipe retrain worth funding?*
+
+### 50.1 The matched read
+48 train / 12 selection volumes (golden-8 quarantined), same patched trainer, A100 batch 8:
+
+| arm | best sel | at epoch | s/epoch | stopped |
+|---|---|---|---|---|
+| w3 probe | 0.8976 | e26 | ~712 | manually @ e31 (plateau) |
+| w2 control | 0.8955 | e15 | ~444 | early-stop @ e25 (patience 10) |
+
+Δ = +0.0021 for 1.6× per-epoch cost — inside the w3 plateau's own oscillation band
+(0.882–0.898 across e18–31). **Window-3 is dead.** If anything the control indicts it:
+w2 reached its best 11 epochs sooner.
+
+### 50.2 What this does to §48.3's "one route left"
+The full-recipe route survives, but re-priced and re-shaped:
+* **Train it at w2 if ever funded** — the window axis buys nothing and w3 costs 1.6×.
+* Honest scale price from measured epochs: 199 vols ≈ 4× our 48 → ~30 min/A100-epoch;
+  the public model's 400 epochs ≈ ~200 A100-hours. That is the real cost of chasing the
+  0.93+ teams' detector, now measured rather than guessed (§48.3 said 130–500 GPU-h).
+* The contamination calibration is now exact: public w2 scores 0.9574 on volumes it
+  trained on (row 57) vs 0.8955 honest matched — **+0.062 inflation**. Any plan that
+  benchmarks against public-model scores on train volumes is off by about that much.
+
+### 50.3 Machinery banked (reusable, tested end-to-end)
+Perpetual orchestrator (store-staleness life detection, adopt guard), parameterized
+runner (WINDOW/METHOD/CKPT_DS), beacon channel, subset+patch staging with pre-train
+verify gate, resumable patched trainer. A future funded run is an env-var change.
+
+⇒ Standing position: **two 0.915s on the LB, all cheap levers measured-dead (§48.3),
+window axis dead (this section), full-recipe-at-scale priced at ~200 A100-h and
+unfunded.** The submission-side work continues on the quota-free local replay (row 60).
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
