@@ -16,6 +16,12 @@ exec 9>/content/runner.lock
 flock -n 9 || { echo "another runner instance holds the lock -- exiting"; exit 0; }
 MAX_MINUTES="${MAX_MINUTES:-150}"
 BATCH="${BATCH:-8}"
+# Row 56 control: same runner drives the w2 identical-conditions control.
+# Defaults reproduce the w3 probe exactly; the orchestrator overrides these
+# (WINDOW=2 METHOD=w2ctl CKPT_DS=biohub-w2ctl-ckpt) for the control run.
+WINDOW="${WINDOW:-3}"
+METHOD="${METHOD:-w3probe}"
+CKPT_DS="${CKPT_DS:-biohub-w3-ckpt}"
 
 phase() {
   echo "$1" > /content/PHASE; echo "== $1 =="
@@ -79,10 +85,10 @@ fi
 python /content/patcher.py /content/repo/scripts/train_unet_transformer.py
 
 phase ckpt-pull
-OUT=/content/repo/weights/w3probe/split_0
+OUT=/content/repo/weights/${METHOD}/split_0
 mkdir -p "$OUT"
 rm -rf /content/ckpt
-if kaggle datasets download maruanbottoni/biohub-w3-ckpt -p /content/ckpt --unzip; then
+if kaggle datasets download "maruanbottoni/${CKPT_DS}" -p /content/ckpt --unzip; then
   find /content/ckpt -name 'checkpoint_last.pth' -exec cp {} "$OUT/" \;
   find /content/ckpt -name 'edge_predictor_best.pth' -exec cp {} "$OUT/" \;
   ls -la "$OUT" || true
@@ -101,16 +107,16 @@ phase train
       { echo "$(hostname) train-tail $(date -u +%H:%M:%S)"; tail -40 /content/train.log 2>/dev/null | tr -d "\r"; } > "$B/beacon.txt"
       printf '{"id": "maruanbottoni/biohub-w3-beacon", "title": "biohub-w3-beacon", "licenses": [{"name": "CC0-1.0"}]}' > "$B/dataset-metadata.json"
       kaggle datasets version -p "$B" -m "train-tail $(date -u +%H:%M)" >/dev/null 2>&1 || true )
-    CK=/content/repo/weights/w3probe/split_0/checkpoint_last.pth
+    CK="$OUT/checkpoint_last.pth"
     if [ -f "$CK" ]; then
       MD5=$(md5sum "$CK" | cut -d' ' -f1)
       if [ "$MD5" != "$LASTMD5" ]; then
         PU=/content/w3ckpt_push
         rm -rf "$PU" && mkdir -p "$PU"
-        cp "$CK" "$PU/" && cp /content/repo/weights/w3probe/split_0/edge_predictor_best.pth "$PU/" 2>/dev/null || true
+        cp "$CK" "$PU/" && cp "$OUT/edge_predictor_best.pth" "$PU/" 2>/dev/null || true
         grep -E "Epoch +[0-9]+/" /content/train.log 2>/dev/null | tr -d "\r" > "$PU/epoch_history.txt" || true
-        cp /content/repo/weights/w3probe/split_0/config.json "$PU/" 2>/dev/null || true
-        printf '{"id": "maruanbottoni/biohub-w3-ckpt", "title": "biohub-w3-ckpt", "licenses": [{"name": "CC0-1.0"}]}' > "$PU/dataset-metadata.json"
+        cp "$OUT/config.json" "$PU/" 2>/dev/null || true
+        printf '{"id": "maruanbottoni/%s", "title": "%s", "licenses": [{"name": "CC0-1.0"}]}' "$CKPT_DS" "$CKPT_DS" > "$PU/dataset-metadata.json"
         kaggle datasets version -p "$PU" -m "live push $(date -u +%H:%M)" >/dev/null 2>&1 && LASTMD5="$MD5" && echo "[ckpt-push] uploaded $(date -u +%H:%M)" >> /content/push.log
       fi
     fi
@@ -126,7 +132,7 @@ cd /content/repo
 PYTHONPATH=src python scripts/train_unet_transformer.py \
   --data-dir /content/data/train \
   --splits /content/w3_probe_splits.json --split 0 \
-  --method w3probe --window-size 3 \
+  --method "$METHOD" --window-size "$WINDOW" \
   --epochs 60 --batch-size "$BATCH" --num-workers 4 --single-gpu \
   --max-minutes "$MAX_MINUTES" --patience 10 2>&1 | tee -a /content/train.log
 
@@ -139,14 +145,11 @@ cp "$OUT/edge_predictor_best.pth" "$ST/" 2>/dev/null || true
 cp "$OUT/config.json" "$ST/" 2>/dev/null || true
 tail -50 /content/train.log > "$ST/last_session_log.txt"
 grep -E "Epoch +[0-9]+/" /content/train.log 2>/dev/null | tr -d "\r" > "$ST/epoch_history.txt" || true
-cat > "$ST/dataset-metadata.json" << 'EOF'
-{"id": "maruanbottoni/biohub-w3-ckpt", "title": "biohub-w3-ckpt",
- "licenses": [{"name": "CC0-1.0"}]}
-EOF
+printf '{"id": "maruanbottoni/%s", "title": "%s", "licenses": [{"name": "CC0-1.0"}]}' "$CKPT_DS" "$CKPT_DS" > "$ST/dataset-metadata.json"
 MSG=$(python - << 'EOF'
 import torch
 ck = torch.load('/content/w3ckpt_staging/checkpoint_last.pth', map_location='cpu', weights_only=False)
-print(f"epoch {ck['epoch']} best {ck.get('best_score', 0):.4f} (colab-cli A100)")
+print(f"epoch {ck['epoch']} best {ck.get('best_score', 0):.4f} (colab-cli)")
 EOF
 )
 kaggle datasets version -p "$ST" -m "$MSG"

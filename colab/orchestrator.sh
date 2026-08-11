@@ -10,6 +10,13 @@ REPO=/Users/maruanottoni/home/kaggle/biohub-cell-tracking
 KEY=~/.ssh/id_ed25519_colab
 TOKEN=$(cat ~/.kaggle/access_token)
 TARGET_EPOCH=${TARGET_EPOCH:-28}
+# Row 56 control: same orchestrator drives the w2 identical-conditions control.
+# Defaults reproduce the w3 probe; override for the control run:
+#   TARGET_EPOCH=28 CKPT_DS=biohub-w2ctl-ckpt SPREFIX=w2auto WINDOW=2 METHOD=w2ctl
+CKPT_DS=${CKPT_DS:-biohub-w3-ckpt}
+SPREFIX=${SPREFIX:-w3auto}
+WINDOW=${WINDOW:-3}
+METHOD=${METHOD:-w3probe}
 N=0
 
 log() { echo "[orch $(date +%H:%M)] $*"; }
@@ -24,11 +31,11 @@ age_of() {  # newest file date in a dataset -> age in minutes (9999 on parse fai
 
 while true; do
   N=$((N+1))
-  SNAME="w3auto$N"
+  SNAME="${SPREFIX}${N}"
 
   # ---- termination check: what does the ckpt store hold?
   EPOCH=$(cd /tmp && rm -rf orch_ck && ${REPO}/.venv/bin/kaggle datasets download \
-      maruanbottoni/biohub-w3-ckpt -p orch_ck --unzip >/dev/null 2>&1 && \
+      "maruanbottoni/${CKPT_DS}" -p orch_ck --unzip >/dev/null 2>&1 && \
       ${REPO}/.venv/bin/python -c "
 import torch
 ck = torch.load('/tmp/orch_ck/checkpoint_last.pth', map_location='cpu', weights_only=False)
@@ -44,7 +51,7 @@ print(ck['epoch'])" 2>/dev/null)
   # a fresh life signal, wait for it to go stale before provisioning — never
   # run two trainers against one ckpt store.
   while true; do
-    LIFE=$(age_of maruanbottoni/biohub-w3-ckpt)
+    LIFE=$(age_of "maruanbottoni/${CKPT_DS}")
     B=$(age_of maruanbottoni/biohub-w3-beacon)
     [ "$B" -lt "$LIFE" ] && LIFE=$B
     [ "$LIFE" -gt 45 ] && break
@@ -74,7 +81,7 @@ print(ck['epoch'])" 2>/dev/null)
   $CB upload "$REPO/colab/w3_runner.sh" /content/w3_runner.sh -s "$SNAME" >/dev/null 2>&1
   $CB upload "$REPO/scripts/local/patch_fullrecipe_trainer.py" /content/patcher.py -s "$SNAME" >/dev/null 2>&1
   $CB upload "$REPO/configs/w3_probe_splits48.json" /content/w3_probe_splits.json -s "$SNAME" >/dev/null 2>&1
-  printf 'import subprocess, os\nenv = dict(os.environ)\nenv["KAGGLE_API_TOKEN"] = os.environ["KT"]\nenv["MAX_MINUTES"] = "100000"\nenv["BATCH"] = "%s"\nwith open("/content/runner.log", "a") as f:\n    subprocess.run(["bash", "/content/w3_runner.sh"], env=env, stdout=f, stderr=subprocess.STDOUT)\nprint("runner finished")\n' "$BATCH" \
+  printf 'import subprocess, os\nenv = dict(os.environ)\nenv["KAGGLE_API_TOKEN"] = os.environ["KT"]\nenv["MAX_MINUTES"] = "100000"\nenv["BATCH"] = "%s"\nenv["WINDOW"] = "%s"\nenv["METHOD"] = "%s"\nenv["CKPT_DS"] = "%s"\nwith open("/content/runner.log", "a") as f:\n    subprocess.run(["bash", "/content/w3_runner.sh"], env=env, stdout=f, stderr=subprocess.STDOUT)\nprint("runner finished")\n' "$BATCH" "$WINDOW" "$METHOD" "$CKPT_DS" \
     | $CB exec -s "$SNAME" --env "KT=$TOKEN" --timeout 10 >/dev/null 2>&1
   log "runner launched on $SNAME (batch $BATCH)"
   SESSION_START=$(date -u +%s)
@@ -85,7 +92,7 @@ print(ck['epoch'])" 2>/dev/null)
   # staleness. Never `colab stop` an unreachable session; it may be training.
   while true; do
     sleep 600
-    AGEMIN=$(age_of maruanbottoni/biohub-w3-ckpt)
+    AGEMIN=$(age_of "maruanbottoni/${CKPT_DS}")
     BEACONMIN=$(age_of maruanbottoni/biohub-w3-beacon)
     FE=1
     OUT=$(echo 'grep -cE "Epoch +[0-9]+/" /content/train.log 2>/dev/null; grep -E "EARLY STOP" /content/train.log 2>/dev/null | tail -1; test -f /content/DONE && echo DONE' \
