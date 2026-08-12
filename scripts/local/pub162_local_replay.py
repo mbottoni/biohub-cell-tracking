@@ -22,7 +22,15 @@ import sys
 from pathlib import Path
 
 S = Path("/private/tmp/claude-501/-Users-maruanottoni-home-kaggle-biohub-cell-tracking/746fd85d-a0d8-47d3-b5cf-be4bb88f1e9a/scratchpad")
-OLD = Path("/private/tmp/claude-501/-Users-maruanottoni-home-kaggle-biohub-cell-tracking/5c5c110c-b819-4168-a812-26fe17d15065/scratchpad")
+# Assets live on the external SSD, NOT in a session scratchpad: /private/tmp is
+# garbage-collected (the 08-12 00:00 sweep deleted every .pt/.pth under the
+# previous session's dir and left the directory tree standing, so the failure
+# surfaced as "no ranker checkpoint found" rather than a missing path).
+# Re-materialise with:
+#   kaggle datasets download pilkwang/biohub-local-association-ranker-unet300-v1 -p ranker --unzip
+#   kaggle datasets download pilkwang/biohub-tracking-support-pack-50ep-v1 -p support_pack --unzip
+OLD = Path(os.environ.get("BIOHUB_REPLAY_ASSETS",
+                          "/Volumes/extSSD/kaggle/biohub/replay_assets"))
 CELLS = Path(os.environ.get("BIOHUB_CELLS_DIR", str(S / "nbcells")))
 MIRROR = S / "kaggle_input"
 
