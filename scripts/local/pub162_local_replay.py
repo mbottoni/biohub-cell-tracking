@@ -39,7 +39,13 @@ os.environ["BIOHUB_PRIMARY_ARTIFACT_MANIFEST"] = str(OLD / "support_pack/ARTIFAC
 os.environ["BIOHUB_SECONDARY_ARTIFACT_MANIFEST"] = str(
     MIRROR / "datasets/pilkwang/biohub-temporal-unet3d-seed314159-v1/ARTIFACT_MANIFEST.json")
 os.environ["BIOHUB_LOCAL_RANKER_ROOT"] = str(OLD / "ranker")
-os.environ["BIOHUB_PRED_CACHE"] = str(S / "pred_cache")
+# ⚠ CACHE COLLISION HAZARD. The cache is keyed by VOLUME NAME only, so it is
+# valid only across variants that change nothing upstream of (coords, edges) --
+# i.e. ILP and post-processing knobs. Any variant touching DETECTION or EDGE
+# inference (DET_THRESHOLD, SECONDARY_*, EDGE_TTA_*, BIDIRECTIONAL_*) MUST be
+# given its own BIOHUB_PRED_CACHE dir, or it will silently load the baseline's
+# predictions and reproduce the baseline score while looking like a real run.
+os.environ.setdefault("BIOHUB_PRED_CACHE", str(S / "pred_cache"))
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 Path(os.environ["BIOHUB_PRED_CACHE"]).mkdir(exist_ok=True)
 

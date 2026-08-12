@@ -30,6 +30,11 @@ log "waiting for GPU quota; polling push every 20 min"
 while true; do
   OUT=$($K kernels push -p "$REPO/kernels/pub162_stack" 2>&1)
   if echo "$OUT" | grep -qi "quota"; then
+    # Heartbeat every 12th poll (~4 h). Silence is indistinguishable from a
+    # wedged loop (row 55's lesson), and it also surfaces a CHANGED error
+    # string -- if Kaggle stops saying "quota" this branch stops matching.
+    POLLS=$((${POLLS:-0} + 1))
+    [ $((POLLS % 12)) -eq 1 ] && log "poll #$POLLS still quota-blocked: $(echo "$OUT" | tail -1)"
     sleep 1200
     continue
   fi
