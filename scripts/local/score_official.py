@@ -19,15 +19,21 @@ CALIBRATION (measured on evalset_d4edge, 24 volumes, 2026-08-08):
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-OFFICIAL = Path(
-    "/private/tmp/claude-501/-Users-maruanottoni-home-kaggle-biohub-cell-tracking/"
-    "5c5c110c-b819-4168-a812-26fe17d15065/scratchpad/official_metric")
+# Durable location: the original vendored copy lived in a session scratchpad and
+# was destroyed by the /private/tmp sweep (row 67). Re-clone with:
+#   git clone https://github.com/royerlab/kaggle-cell-tracking-competition.git official_metric
+# ⚠ Re-cloning takes upstream HEAD, which is NOT necessarily the revision row 46
+# calibrated against — verify against a known artifact before trusting a number.
+OFFICIAL = Path(os.environ.get(
+    "BIOHUB_OFFICIAL_METRIC",
+    "/Volumes/extSSD/kaggle/biohub/replay_assets/official_metric"))
 GT_ROOT = Path("/Volumes/extSSD/kaggle/biohub/gt/train")
 PY = REPO / ".venv/bin/python"
 
