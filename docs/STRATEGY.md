@@ -1,3 +1,10 @@
+> **⚠ START AT `docs/PLAN.md`.** This file is the ARCHIVE, not the entry point. As of
+> 2026-08-13 its framing is superseded on one decisive point: the score is
+> `adj_edge_jaccard + 0.1 · division_jaccard`, and every route argued about below lives in
+> the first term. The division term holds ~13× the remaining headroom (rows 70-72). Use this
+> file to check whether an idea is already dead and to read the evidence — sections marked
+> ⚠ WRONG / ☠ DEAD are kept deliberately, because deleting them invites repeating them.
+
 # Strategy & Findings — Biohub Cell Tracking (living doc)
 
 **Updated:** 2026-08-02 (v4 — six LB measurements landed. The public "metric hack" is a **net

@@ -1,7 +1,11 @@
 # Working agreement — Biohub Cell Tracking
 
-Read `docs/STRATEGY.md` first (start at the newest numbered section and work backwards; later
-sections supersede earlier ones and say so explicitly). Then `docs/experiments.md` for the run log.
+**Read `docs/PLAN.md` first** — current position, the next steps, and the closed-routes table.
+It is the only document you need in order to act.
+
+`docs/STRATEGY.md` and `docs/experiments.md` are the **archive**: consult them to check whether
+an idea is already dead, or for the evidence behind a PLAN claim (PLAN cites row numbers). Do
+not start from them. In STRATEGY, later numbered sections supersede earlier ones and say so.
 
 ## Always register findings, then commit and push
 
