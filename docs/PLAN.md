@@ -83,6 +83,15 @@ Gate passed (row 72). Build in this order:
    the `0.1 × div_J` vs `adj_edge_J` trade.
 4. **Gate before submitting:** must beat 0.9135 on evalset-24 with the official scorer.
 
+### 3.2b Re-read every "flat" verdict — totals hide opposing moves (row 73)
+`MOTION_RELINK_LEARNED_BONUS` 6.0 scores 0.9133 vs the stack's 0.9135 — a dead heat that a
+pre-row-70 session would log as "flat". Decomposed it is **+0.0026 on the association term
+(our best ever there), cancelled by −0.0027 of division term**. So: a flat total is not a
+null result, and configs judged on totals before row 70 are suspect — including row 24's
+`divgeom`. Re-reading them is nearly free: every run stored its `run_stats.csv`.
+Relink-6 specifically is **stranded value** — once the classifier supplies divisions instead
+of the geometric insertion, its association gain should stop being masked. Retest it then.
+
 ### 3.3 Cheap and still open (free, cache-hit minutes each)
 - `SAFE_DIV_*` gate sweep on the stack base — queued as round 10. Row 24 re-centred these
   and lost on the LB, but was judged on total score with no view of the two terms.
