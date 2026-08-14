@@ -59,6 +59,18 @@ Three facts establish the route (all measured, all free):
 | 0.7 × 0.60 | 0.345 | 0.9410 |
 | **0.9 × 0.70** | 0.462 | **0.9527** |
 
+> ⚠ **The precision column is NOT transferable — see row 79.** Those precisions come from
+> row 72's probe at a **1:20** base rate (GT divisions vs sampled non-dividing nodes). Free
+> enumeration of division candidates from our own graph has a **1:336,000** base rate: 5.4 M
+> candidates for 16 positives. Holding the probe's implied FPR (0.055), precision there is
+> **~2e-5**. Reaching 16 TP @ 10 FP needs **FPR ≤ 7e-7** — under 5 false positives in 7.5 M.
+> No model closes that; **the pool is the constraint, not the classifier.**
+>
+> The table stays valid **only** if the classifier re-ranks the pipeline's own safe-division
+> candidates (~355, or 13,495 loosened → ~1:840), which is the regime the probe describes.
+> This is what §3.2 step 3 always said; `division_rerank_e2e.py` violated it by enumerating
+> freely, and that is why it was stopped (rows 78–79).
+
 ---
 
 ## 3. Next steps, in order
@@ -72,9 +84,14 @@ the disappearance weight, so the stack is not decomposable.
 ### 3.2 Division classifier — the only route with the bar in reach
 Gate passed (row 72). Build in this order:
 
-1. **Candidate pool + honest negatives.** The probe used random non-dividing nodes; the
-   deployment pool is fork candidates that already look division-like, so probe precision
-   is optimistic. Rebuild the training set from *pipeline* candidates with GT labels.
+1. **Candidate pool + honest negatives — DO THIS FIRST, it gates everything below.**
+   Rows 78–79 settled the shape of this step the hard way. The pool must be the **pipeline's
+   own safe-division candidate set**, never free enumeration (1:336,000 — unlearnable).
+   **The one measurement to take next, cheap and decisive: how many of the 16 reachable
+   divisions appear in that candidate set?** That is the true ceiling on this route.
+   Row 76 is a warning it may be well under 16 — widening the generator converted *zero*
+   new true divisions. If the answer is small, the bottleneck is the *generator*, and no
+   amount of re-ranking or CNN capacity fixes it. **Measure this before spending Colab credit.**
 2. **3D+t CNN, warm-started from the public TemporalUNet encoder** (we hold the weights;
    151 positives is too thin to train an encoder from scratch). Crops at t−1/t/t+1.
    **This is what the Colab credits are for: hours on one A100.**
