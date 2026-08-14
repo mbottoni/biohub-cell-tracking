@@ -172,6 +172,11 @@ the total was already the whole story and the row needs no re-litigation.
 - Dual-seed **edge** threshold 0.48→0.30 with motion-relink bonus 6.0: the one historical
   change that produced a confirmed LB gain for us (rows 22–23), never tried on this base.
   Needs re-inference (~7 h M1, or minutes on Colab — see 3.4).
+  ⚠ **`DUAL_SEED_EDGE_THRESHOLD` is one of the six knobs `cell08` used to clobber (row 82).**
+  Before row 82's fix this sweep would have silently measured the baseline and been logged as
+  a null — burying our only confirmed-LB-gain association lever. The driver now asserts
+  overrides survive to inference; **confirm you see `[local] all N overrides verified live
+  after cell08` in the log before believing any result from this knob.**
 
 ### 3.4 Use Colab as a fast replay farm, not just a trainer
 Inference-side configs cost ~7 h each on the M1 and ~20–30 min on an A100. If more
@@ -228,4 +233,10 @@ parameterised (`WINDOW`/`METHOD`/`CKPT_DS`) and proven end-to-end.
 - **Verify the artifact, not the config.** The kernel we submit is a different file from
   the one measured; replay it and compare bytes (row 66).
 - **A patch that reaches the code and changes nothing is a finding**, not a null result —
-  it means the constraint does not bind (row 64).
+  it means the constraint does not bind (row 64). **But prove it reached the code first.**
+  Row 82 looked exactly like row 64 — a knob whose output was byte-identical to base — and was
+  a silent no-op instead: a later notebook cell overwrote the override. The two are told apart
+  by evidence *outside* the score. Row 64 grepped the subprocess command line and found the
+  hardcoded clamp; row 82's tell was the pipeline printing `detection weight=0.475` while the
+  config said 0.30. **Any result identical to its control to 4 decimals: sha256 it against the
+  control, then confirm the value actually reached inference — before calling it inert.**

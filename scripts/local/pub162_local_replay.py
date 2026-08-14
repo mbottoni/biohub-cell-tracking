@@ -197,6 +197,28 @@ run_cell(5)
 ns["ensure_dependencies"] = lambda *a, **k: print("[local] wheel install skipped (venv)")
 run_cell(6)
 run_cell(8)
+
+# ---- RE-APPLY overrides, then VERIFY (row 82) -------------------------------
+# cell08 hardcodes six BIOHUB_* vars -- DUAL_SEED_EDGE_THRESHOLD, SECONDARY_
+# {DETECTION_WEIGHT,EDGE_WEIGHT,LINK_MODE,LOW_MARGIN_MAX,MIX_TEMPERATURE} --
+# and it runs AFTER the cell-4 override block above, so it silently CLOBBERED
+# them. Round 7 swept SECONDARY_DETECTION_WEIGHT 0.30/0.60 and produced output
+# byte-identical to the baseline (sha256 87d51dda) while the pipeline printed
+# "detection weight=0.475". A no-op that looks exactly like an inert knob.
+#
+# Re-applying is not enough on its own: assert the value survives, so a future
+# cell that clobbers a DIFFERENT var fails loudly instead of measuring nothing.
+for k, v in overrides.items():
+    if os.environ.get(k) != v:
+        print(f"[override] RE-APPLY after cell08: {k} = {v} "
+              f"(cell08 had set {os.environ.get(k)!r})", flush=True)
+        os.environ[k] = v
+for k, v in overrides.items():
+    assert os.environ[k] == v, (
+        f"[local] override {k} did not survive to inference: "
+        f"want {v!r}, got {os.environ[k]!r} -- a later cell is clobbering it")
+print(f"[local] all {len(overrides)} overrides verified live after cell08", flush=True)
+
 # Kaggle's WORKING_DIR is absolute; locally it is "." and the predict subprocess
 # runs with cwd=REPO_DIR, so the secondary-weights path must be absolutized.
 os.environ["BIOHUB_SECONDARY_WEIGHTS"] = str(Path(os.environ["BIOHUB_SECONDARY_WEIGHTS"]).resolve())
