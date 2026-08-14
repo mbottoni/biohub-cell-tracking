@@ -92,6 +92,12 @@ null result, and configs judged on totals before row 70 are suspect — includin
 Relink-6 specifically is **stranded value** — once the classifier supplies divisions instead
 of the geometric insertion, its association gain should stop being masked. Retest it then.
 
+**`divgeom` re-read: the suspicion was wrong, the original verdict stands (row 76).** It scores
+0.9102 — never flat — and adds 28 false divisions while converting **zero** new true ones
+(TP 3→3, FN 22→22). So the bottleneck is **selection, not candidate generation**: widening the
+geometric gates admits the missed events and still cannot pick them. This is the sharpest
+statement yet of why 3.2 must be an appearance *selector*, not a bigger pool.
+
 **The test that separates the two cases (row 75).** A flat total is masked value only if
 `div_J` MOVED. Round 9 finished with both kinds side by side: relink-6 is flat-with-div_J-moving
 (stranded, retest later), min-track-len is flat-with-div_J-*bit-identical* (a true null, never
