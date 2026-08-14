@@ -92,6 +92,19 @@ null result, and configs judged on totals before row 70 are suspect — includin
 Relink-6 specifically is **stranded value** — once the classifier supplies divisions instead
 of the geometric insertion, its association gain should stop being masked. Retest it then.
 
+**Stranded-value ledger — what §3.2 unblocks (rows 73, 77).** Three configs now buy association
+and pay for it in divisions, all blocked by the same term:
+
+| config | Δ adj_edge_J | Δ division cost | net today |
+|---|---|---|---|
+| `MOTION_RELINK_LEARNED_BONUS` 6.0 | **+0.0026** | −0.0027 | −0.0002 |
+| `DET_THRESHOLD` 0.94 | +0.0010 | −0.0029 | −0.0019 |
+| `DET_THRESHOLD` 0.96 | +0.0007 | −0.0005 | +0.0002 |
+
+They are **not additive** — relink and threshold both act on node/edge supply — so re-measure them
+jointly once the classifier supplies divisions, never by summing. But the direction is consistent:
+association is *not* exhausted, it is being taxed.
+
 **`divgeom` re-read: the suspicion was wrong, the original verdict stands (row 76).** It scores
 0.9102 — never flat — and adds 28 false divisions while converting **zero** new true ones
 (TP 3→3, FN 22→22). So the bottleneck is **selection, not candidate generation**: widening the
@@ -129,7 +142,8 @@ parameterised (`WINDOW`/`METHOD`/`CKPT_DS`) and proven end-to-end.
 | Window-3 temporal context | dead — +0.0021 for 1.6× cost vs a matched w2 control (§50, row 61) |
 | Node-ratio / metric shaping | dead, loses points (§10.5, §10.6 ⚠ WRONG) |
 | ILP appearance & division weights | inert — division weight is byte-identical at 1.5/2.0 (row 64) |
-| Detection threshold, both directions | at optimum; 0.98/0.99 lose, 0.96 is a wash (rows 68, 6-round sweep) |
+| Detection threshold — **STRICTER only** | dead; 0.98/0.99 lose on both terms (row 68) |
+| ~~Detection threshold, looser~~ | **REOPENED (row 77)** — "at optimum" was read off totals. Association rises monotonically as it loosens (0.9065→0.9072→0.9075 at 0.96875/0.96/0.94); only division losses hold it back. Stranded until 3.2 lands. |
 | Gap radius, min-track-len, gap2-recovery | flat or noise (rows 62, 65); **min-track-len re-confirmed decomposed — pure association knob, div_J bit-identical, 6 is optimal (row 75)** |
 | ILP disappearance weight above 2.0 | dead — 2.5/3.0/4.0 all lose monotonically, and ~90% of each loss is the DIVISION term, not association (row 74) |
 | **Division selection by GEOMETRY** | dead (§35, §43) — **but appearance is not; see 3.2** |
