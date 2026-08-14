@@ -92,6 +92,12 @@ null result, and configs judged on totals before row 70 are suspect — includin
 Relink-6 specifically is **stranded value** — once the classifier supplies divisions instead
 of the geometric insertion, its association gain should stop being masked. Retest it then.
 
+**The test that separates the two cases (row 75).** A flat total is masked value only if
+`div_J` MOVED. Round 9 finished with both kinds side by side: relink-6 is flat-with-div_J-moving
+(stranded, retest later), min-track-len is flat-with-div_J-*bit-identical* (a true null, never
+revisit). So when re-reading a pre-row-70 "flat" verdict, read `div_J` first — if it is unchanged
+the total was already the whole story and the row needs no re-litigation.
+
 ### 3.3 Cheap and still open (free, cache-hit minutes each)
 - `SAFE_DIV_*` gate sweep on the stack base — queued as round 10. Row 24 re-centred these
   and lost on the LB, but was judged on total score with no view of the two terms.
@@ -118,7 +124,8 @@ parameterised (`WINDOW`/`METHOD`/`CKPT_DS`) and proven end-to-end.
 | Node-ratio / metric shaping | dead, loses points (§10.5, §10.6 ⚠ WRONG) |
 | ILP appearance & division weights | inert — division weight is byte-identical at 1.5/2.0 (row 64) |
 | Detection threshold, both directions | at optimum; 0.98/0.99 lose, 0.96 is a wash (rows 68, 6-round sweep) |
-| Gap radius, min-track-len, gap2-recovery | flat or noise (rows 62, 65) |
+| Gap radius, min-track-len, gap2-recovery | flat or noise (rows 62, 65); **min-track-len re-confirmed decomposed — pure association knob, div_J bit-identical, 6 is optimal (row 75)** |
+| ILP disappearance weight above 2.0 | dead — 2.5/3.0/4.0 all lose monotonically, and ~90% of each loss is the DIVISION term, not association (row 74) |
 | **Division selection by GEOMETRY** | dead (§35, §43) — **but appearance is not; see 3.2** |
 | Full-recipe retrain at public scale | ~200 A100-h (§50). Unfunded, and not affordable on current credits |
 
