@@ -25,7 +25,12 @@ last consumption on 08-08). Pre-registered read: **~0.917 expected; flat kills t
 
 ---
 
-## 2. The reframing that changes everything (rows 70–72)
+## 2. The reframing that changes everything (rows 70–72) — ⚠ **route falsified by rows 78–81**
+
+> The **decomposition below is solid and still governs everything** — read it. What rows 78–81
+> falsified is the *deployment* claim built on top of it: that a division classifier could
+> harvest the headroom. The headroom is real; the geometric proposer cannot reach it. See §3.2.
+
 
     score = adj_edge_jaccard + 0.1 × division_jaccard
     adj_edge_jaccard = max(0, edge_J × (1 − 0.1 × node_ratio))
@@ -81,7 +86,30 @@ Autosubmit fires on quota reset. If the stack gains, `pub162_disapp20` (local 0.
 the gap fix is worth *nothing* alone (0.9098 ≈ base); the +0.0036 is an interaction with
 the disappearance weight, so the stack is not decomposable.
 
-### 3.2 Division classifier — the only route with the bar in reach
+### 3.2 Division classifier — ⚠ RE-RANKING IS CLOSED (row 81); only a learned PROPOSER is left
+**Read row 81 before doing anything here.** The re-ranker plan below is superseded. Measured:
+the shipped `SAFE_DIV` generator proposes 3,734 candidates containing **0 of the 16** reachable
+divisions, so re-ranking upside is **exactly zero** — the events are not in the pool to rank.
+
+The structural reason, and why no tuning fixes it: **no radius has both recall and a tractable
+pool.** Predicted parent→daughter is median 18.3 µm, so recall needs ~26 µm → 3.68 M candidates
+→ 1:283,000, which row 79 showed demands FPR ≤ 7e-7 (unreachable from AUC 0.845). A pool small
+enough to be learnable (~1:20) contains **zero** positives. Mutually exclusive under *any*
+distance-based proposal rule. This is §35/§43 turned from an empirical failure into a
+quantitative impossibility.
+
+**The appearance selector was never the weak link — the geometric proposer is.** Classifier
+capacity and Colab hours cannot repair a pool that lacks the positives.
+
+**What survives:** a *learned, non-distance-based* proposer — a per-node "this cell is dividing"
+head. It operates at node level (~1:20,000) rather than pair level (1:283,000), and row 72's
+AUC 0.845 was measured at node level, which is the only positive evidence we hold. Still far
+from what precision demands, so it must be **trained**, not hand-featured — a detector-side
+change of the kind §50 priced at ~200 A100-h and marked unfunded. Price it honestly before
+committing; that price is why this is not simply "the next step".
+
+<details><summary>Superseded re-ranker plan (kept per the corrections rule — rows 78–81 are why)</summary>
+
 Gate passed (row 72). Build in this order:
 
 1. **Candidate pool + honest negatives — DO THIS FIRST, it gates everything below.**
@@ -99,6 +127,10 @@ Gate passed (row 72). Build in this order:
    gates. Sweep its threshold on the free local instrument to pick the operating point on
    the `0.1 × div_J` vs `adj_edge_J` trade.
 4. **Gate before submitting:** must beat 0.9135 on evalset-24 with the official scorer.
+
+</details>
+
+**Gate 4 still binds on anything that replaces this: beat 0.9135 on evalset-24, official scorer.**
 
 ### 3.2b Re-read every "flat" verdict — totals hide opposing moves (row 73)
 `MOTION_RELINK_LEARNED_BONUS` 6.0 scores 0.9133 vs the stack's 0.9135 — a dead heat that a
