@@ -100,34 +100,29 @@ Autosubmit fires on quota reset. If the stack gains, `pub162_disapp20` (local 0.
 the gap fix is worth *nothing* alone (0.9098 ≈ base); the +0.0036 is an interaction with
 the disappearance weight, so the stack is not decomposable.
 
-### 3.2 Division detector — ★ ACTIVE ROUTE. Rows 79/81 killed it on a WRONG cost model (row 84)
-**Read row 84 first.** Rows 79 and 81 concluded the route was dead because they priced every
-wrong prediction as a false positive. **It isn't.** `division_metrics.py` only counts a fork as
-FP if it **matches an annotated GT node within 7 µm**, and just ~3.6% of cells are annotated.
-Measured by injection, not inference:
+### 3.2 Division route — ☠ **CLOSED ON MEASUREMENT (row 86).** Do not reopen without new information
+Built end-to-end and swept against the official scorer. **Every operating point loses:**
 
-| injected random forks | div FP | score |
-|---|---|---|
-| 200 | 18 → **18** | 0.9135 (unchanged) |
-| 1000 | 18 → **19** | 0.9132 (−0.0003) |
+| K inserted | score | div TP | div FP |
+|---|---|---|---|
+| **0 (control)** | **0.9135** | 3 | 18 |
+| 250 | 0.9111 | 4 | 57 |
+| 2 000 | 0.9053 | 6 | 1 105 |
+| 20 000 | 0.8841 | 5 | 17 851 |
 
-**A wrong division costs ~1 FP per 1,000, and the real price is the false EDGE it adds
-(~−0.0003 per 1,000 forks).** So the objective is: find true divisions subject to a budget of
-~10³ inserted forks. Rows 79/81 demanded FPR ≤ 7e-7; the truth is ~1e-3 — **four orders of
-magnitude easier.** At row 72's operating point that is already net-positive (~+0.003), and it
-improves superlinearly as tail precision rises, because K shrinks.
+**The detector is not the problem.** AUC 0.863 held out; it captures 6 of the 7 attachable
+divisions by K=10 000. **The problem is that inserting a fork anywhere useful is expensive.**
+FPs are charged on forks matching annotated GT nodes *and* on cross-component / locally-merged
+branches. Random forks land in sparse unannotated regions and are nearly free (row 84); a
+*useful* detector fires on bright, well-tracked, annotated nodes carrying matched children, so
+it triggers both FP rules. **Selection and cost are positively correlated — ranking quality
+cannot fix it.** Gaining needs `Δt > 0.0698·Δf`: best case is 3× short, a meaningful +0.007 is
+**~150× short**. No CNN closes 150×. **Do not spend Colab credits here.**
 
-**Carry forward from the dead attempts — these remain true:**
-- ceiling is **16** of 25 (row 71);
-- geometry cannot *select* (rows 76, 80: widening gates converted 1 event for 77 FPs);
-- the proposer must be **per-node**, never pair-enumeration — the pair pool is what blew up.
-
-**Build order** (each stage gated on the free local instrument before the next):
-1. Node-level appearance features for every candidate parent in the stack submission.
-2. Classifier trained on GT divisions, **volume-grouped CV** — 151 corpus positives.
-3. Insert top-K forks (parent → 2 nearest t+1 nodes); **sweep K** on evalset-24 with the
-   official scorer. K is now a budget in the thousands, not the tens.
-4. Gate: must beat **0.9135**. Then kernel → push → submit.
+> **The argument history, kept because it is instructive.** Rows 79/81 killed this route with
+> wrong arithmetic. Row 84 corrected the arithmetic and revived it — also wrongly, by projecting
+> random-fork costs onto detector-selected forks. Row 86 settled it by running the thing.
+> **Three arithmetic arguments in one day, two of them wrong. Price a route by running it.**
 
 <details><summary>Superseded re-ranker plan (kept per the corrections rule — rows 78–81 are why)</summary>
 
@@ -223,6 +218,7 @@ parameterised (`WINDOW`/`METHOD`/`CKPT_DS`) and proven end-to-end.
 | ILP disappearance weight above 2.0 | dead — 2.5/3.0/4.0 all lose monotonically, and ~90% of each loss is the DIVISION term, not association (row 74) |
 | **Division selection by GEOMETRY** | dead (§35, §43) — **but appearance is not; see 3.2** |
 | Full-recipe retrain at public scale | ~200 A100-h (§50). Unfunded, and not affordable on current credits |
+| **Division route, ALL forms** | ☠ closed on measurement (row 86). Detector ranks well (AUC 0.863, 6/7 captured) and still loses at every K, because a useful fork is inherently expensive. ~150× short of a meaningful gain |
 
 ---
 
