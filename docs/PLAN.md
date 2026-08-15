@@ -13,9 +13,23 @@ starting point. Row numbers below point into `docs/experiments.md`.
 |---|---|
 | Confirmed LB | **0.915 × 2** (`55325321`, `55327761`) — the current final-2 |
 | Readable bar | **0.949** (§44) |
-| Best local config | `kernels/pub162_stack` — official evalset-24 **0.9135** vs pub162 base 0.9099 |
-| Submission status | BLOCKED on Kaggle weekly GPU quota; autosubmit watcher armed and polling |
+| Best local config | `kernels/pub162_stack_adjonly` — official evalset-24 **0.9135** vs pub162 base 0.9099 |
+| Submission status | ⚠ **08-15 run FAILED the kernel's graph audit — not submitted.** Fix built, verified, NOT pushed (row 83) |
 | Colab | credits available; no session running |
+
+> **⚠ ACTION REQUIRED — the stack cannot be submitted as originally built (row 83).**
+> Quota freed 00:09 UTC 08-15, autosubmit pushed, and the commit run died 27 min in on the
+> kernel's own `clean_graph_audit`: `non_adjacent_edges = 1226`, one of twelve invariants that
+> must be 0. Lifting the gap-close clamp emits dt=2/dt=3 edges; the pub162 port at LB 0.915
+> has zero and passes. **The gate did its job — FATAL, no submission.**
+>
+> **The fix is free.** GT edges are all t→t+1, so dt≥2 edges can never match; stripping all
+> 6,588 from the measured stack rescores to **0.9135 with every term identical**. The metric is
+> inert to them. `scripts/build_stack_adjonly_kernel.py` builds the compliant kernel (verified
+> 1226 → 0 against the real failed output). **It is NOT pushed** — it is a different artifact
+> from the row-66-verified one, and spending quota plus a submission slot is an operator call.
+> To ship: push `kernels/pub162_stack_adjonly`, then re-arm `scripts/autosubmit_stack.sh`
+> against the new kernel id (`biohub-pub162-stack-adjonly`).
 
 **`pub162_stack` = ILP disappearance 1.5→2.0 + gap-close clamp lifted with max_gap 3.**
 Verified by replaying the built kernel: byte-identical output (sha256 `87d51dda`) to the
