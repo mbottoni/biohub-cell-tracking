@@ -100,27 +100,34 @@ Autosubmit fires on quota reset. If the stack gains, `pub162_disapp20` (local 0.
 the gap fix is worth *nothing* alone (0.9098 ≈ base); the +0.0036 is an interaction with
 the disappearance weight, so the stack is not decomposable.
 
-### 3.2 Division classifier — ⚠ RE-RANKING IS CLOSED (row 81); only a learned PROPOSER is left
-**Read row 81 before doing anything here.** The re-ranker plan below is superseded. Measured:
-the shipped `SAFE_DIV` generator proposes 3,734 candidates containing **0 of the 16** reachable
-divisions, so re-ranking upside is **exactly zero** — the events are not in the pool to rank.
+### 3.2 Division detector — ★ ACTIVE ROUTE. Rows 79/81 killed it on a WRONG cost model (row 84)
+**Read row 84 first.** Rows 79 and 81 concluded the route was dead because they priced every
+wrong prediction as a false positive. **It isn't.** `division_metrics.py` only counts a fork as
+FP if it **matches an annotated GT node within 7 µm**, and just ~3.6% of cells are annotated.
+Measured by injection, not inference:
 
-The structural reason, and why no tuning fixes it: **no radius has both recall and a tractable
-pool.** Predicted parent→daughter is median 18.3 µm, so recall needs ~26 µm → 3.68 M candidates
-→ 1:283,000, which row 79 showed demands FPR ≤ 7e-7 (unreachable from AUC 0.845). A pool small
-enough to be learnable (~1:20) contains **zero** positives. Mutually exclusive under *any*
-distance-based proposal rule. This is §35/§43 turned from an empirical failure into a
-quantitative impossibility.
+| injected random forks | div FP | score |
+|---|---|---|
+| 200 | 18 → **18** | 0.9135 (unchanged) |
+| 1000 | 18 → **19** | 0.9132 (−0.0003) |
 
-**The appearance selector was never the weak link — the geometric proposer is.** Classifier
-capacity and Colab hours cannot repair a pool that lacks the positives.
+**A wrong division costs ~1 FP per 1,000, and the real price is the false EDGE it adds
+(~−0.0003 per 1,000 forks).** So the objective is: find true divisions subject to a budget of
+~10³ inserted forks. Rows 79/81 demanded FPR ≤ 7e-7; the truth is ~1e-3 — **four orders of
+magnitude easier.** At row 72's operating point that is already net-positive (~+0.003), and it
+improves superlinearly as tail precision rises, because K shrinks.
 
-**What survives:** a *learned, non-distance-based* proposer — a per-node "this cell is dividing"
-head. It operates at node level (~1:20,000) rather than pair level (1:283,000), and row 72's
-AUC 0.845 was measured at node level, which is the only positive evidence we hold. Still far
-from what precision demands, so it must be **trained**, not hand-featured — a detector-side
-change of the kind §50 priced at ~200 A100-h and marked unfunded. Price it honestly before
-committing; that price is why this is not simply "the next step".
+**Carry forward from the dead attempts — these remain true:**
+- ceiling is **16** of 25 (row 71);
+- geometry cannot *select* (rows 76, 80: widening gates converted 1 event for 77 FPs);
+- the proposer must be **per-node**, never pair-enumeration — the pair pool is what blew up.
+
+**Build order** (each stage gated on the free local instrument before the next):
+1. Node-level appearance features for every candidate parent in the stack submission.
+2. Classifier trained on GT divisions, **volume-grouped CV** — 151 corpus positives.
+3. Insert top-K forks (parent → 2 nearest t+1 nodes); **sweep K** on evalset-24 with the
+   official scorer. K is now a budget in the thousands, not the tens.
+4. Gate: must beat **0.9135**. Then kernel → push → submit.
 
 <details><summary>Superseded re-ranker plan (kept per the corrections rule — rows 78–81 are why)</summary>
 
