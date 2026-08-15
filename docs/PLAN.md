@@ -78,27 +78,33 @@ Three facts establish the route (all measured, all free):
 | 0.7 × 0.60 | 0.345 | 0.9410 |
 | **0.9 × 0.70** | 0.462 | **0.9527** |
 
-> ⚠ **The precision column is NOT transferable — see row 79.** Those precisions come from
-> row 72's probe at a **1:20** base rate (GT divisions vs sampled non-dividing nodes). Free
-> enumeration of division candidates from our own graph has a **1:336,000** base rate: 5.4 M
-> candidates for 16 positives. Holding the probe's implied FPR (0.055), precision there is
-> **~2e-5**. Reaching 16 TP @ 10 FP needs **FPR ≤ 7e-7** — under 5 false positives in 7.5 M.
-> No model closes that; **the pool is the constraint, not the classifier.**
+> ☠ **THE TABLE ABOVE IS DEAD — it was never reachable (row 86).** Kept because the reasoning
+> that killed it took four rows and two wrong turns, and deleting it would invite a rebuild.
 >
-> The table stays valid **only** if the classifier re-ranks the pipeline's own safe-division
-> candidates (~355, or 13,495 loosened → ~1:840), which is the regime the probe describes.
-> This is what §3.2 step 3 always said; `division_rerank_e2e.py` violated it by enumerating
-> freely, and that is why it was stopped (rows 78–79).
+> It prices the route on *recall × precision over detectable divisions*, which silently assumes
+> the only cost of a wrong division is its own FP. **It isn't.** Built end-to-end, the detector
+> hits AUC 0.863 and captures 6 of 7 attachable divisions — and **every K loses**, because a
+> fork placed anywhere useful also trips the cross-component / merged-branch FP rules. Gaining
+> needs `Δt > 0.0698·Δf`; we are 3× short at best and **~150× short** of a meaningful gain.
+>
+> **What remains true from §2:** the score decomposition, and that divisions hold 0.007 of a
+> possible 0.100. **The headroom is real and unreachable.** Row 70's "13× our remaining
+> headroom" is arithmetic, not an opportunity. See §3.2.
 
 ---
 
 ## 3. Next steps, in order
 
-### 3.1 Ship what is measured (no decision needed)
-Autosubmit fires on quota reset. If the stack gains, `pub162_disapp20` (local 0.9119,
-−2.1% nodes) is the conservative second arm. **Do not submit a gap-only variant** — row 69:
-the gap fix is worth *nothing* alone (0.9098 ≈ base); the +0.0036 is an interaction with
-the disappearance weight, so the stack is not decomposable.
+### 3.1 Ship what is measured — ⚠ **the only open action; needs an operator decision**
+The 08-15 autosubmit fired and **failed the graph audit** (row 83). `pub162_stack_adjonly` is
+built and verified but **not pushed**. To ship: push `kernels/pub162_stack_adjonly`, then
+re-arm `scripts/autosubmit_stack.sh` against `biohub-pub162-stack-adjonly`.
+
+If it gains, `pub162_disapp20` (local 0.9119, −2.1% nodes) is the conservative second arm.
+**Do not submit a gap-only variant** — row 69: the gap fix is worth *nothing* alone
+(0.9098 ≈ base); the +0.0036 is an interaction with the disappearance weight, so the stack is
+not decomposable. ⚠ Note `disapp20` does **not** lift the gap clamp, so it needs no adjacency
+filter — but re-check `non_adjacent_edges` before shipping anything else (row 83).
 
 ### 3.2 Division route — ☠ **CLOSED ON MEASUREMENT (row 86).** Do not reopen without new information
 Built end-to-end and swept against the official scorer. **Every operating point loses:**
