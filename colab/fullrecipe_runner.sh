@@ -71,6 +71,27 @@ echo -n "$KAGGLE_API_TOKEN" > /root/.kaggle/access_token
 chmod 600 /root/.kaggle/access_token
 kaggle competitions list -s biohub | head -2
 
+# ---- ENSURE THE STORES EXIST -------------------------------------------
+# `kaggle datasets version` only UPDATES an existing dataset; a brand-new slug
+# needs `datasets create`. Every push in this script is wrapped in `|| true`
+# (so a transient API failure cannot kill a training run), which means a missing
+# dataset fails SILENTLY -- forever. The w3 probe never hit this because its
+# stores already existed from earlier sessions. On the first full-recipe run it
+# meant: no beacon, and NO CHECKPOINT EVER BANKED -- the orchestrator would read
+# 9999-min staleness and reap a perfectly healthy session, losing everything.
+for _DS in "$CKPT_DS" "$BEACON_DS"; do
+  if ! kaggle datasets files "maruanbottoni/${_DS}" >/dev/null 2>&1; then
+    echo "store maruanbottoni/${_DS} missing -- creating"
+    _B=/content/mk_${_DS}; rm -rf "$_B"; mkdir -p "$_B"
+    echo "bootstrap $(date -u +%FT%T)" > "$_B/beacon.txt"
+    printf '{"id": "maruanbottoni/%s", "title": "%s", "licenses": [{"name": "CC0-1.0"}]}' "$_DS" "$_DS" > "$_B/dataset-metadata.json"
+    kaggle datasets create -p "$_B" 2>&1 | tail -1
+    sleep 20
+  else
+    echo "store maruanbottoni/${_DS} present"
+  fi
+done
+
 phase data
 NEED=$(wc -l < /content/fullrecipe_volumes.txt)
 HAVE=$(ls /content/data/train 2>/dev/null | grep -c '\.zarr$' || true)
