@@ -53,3 +53,4 @@ kaggle_assets/ctrack_src/ctrack/
 submissions/*/tracking_repo/
 data/locres/
 data/teacher_peaks/
+.venv_colab/

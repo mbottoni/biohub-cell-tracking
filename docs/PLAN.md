@@ -14,10 +14,17 @@ starting point. Row numbers below point into `docs/experiments.md`.
 | Confirmed LB | **0.915 × 2** (`55325321`, `55327761`) — the current final-2 |
 | Readable bar | **0.949** (§44) |
 | Best local config | `kernels/pub162_stack_adjonly` — official evalset-24 **0.9135** vs pub162 base 0.9099 |
-| Submission status | ⚠ **08-15 run FAILED the kernel's graph audit — not submitted.** Fix built, verified, NOT pushed (row 83) |
+| Submission status | ✅ **`stack_adjonly` SUBMITTED 08-16 00:31 UTC — `55539437`, PENDING.** Audit passed (row 88) |
 | Colab | credits available; no session running |
 
-> **⚠ ACTION REQUIRED — the stack cannot be submitted as originally built (row 83).**
+> **✅ RESOLVED 08-16 — the stack is shipped.** `kernels/pub162_stack_adjonly` was pushed, its
+> commit run **COMPLETED**, and `clean_graph_audit` came back **true** with `non_adjacent_edges = 0`:
+> the filter dropped exactly the **1,226** edges that killed the 08-15 run. Output 123,997 nodes /
+> 119,514 edges / 192 divisions over 4 datasets; all twelve invariants clean. Submitted as
+> **`55539437`**, 4 slots left that day. **Pre-registered read: ~0.917 expected; flat kills the
+> stack.** The historical account below is kept because it is why the artifact differs from row 66's.
+
+> **⚠ HISTORICAL (resolved above) — the stack could not be submitted as originally built (row 83).**
 > Quota freed 00:09 UTC 08-15, autosubmit pushed, and the commit run died 27 min in on the
 > kernel's own `clean_graph_audit`: `non_adjacent_edges = 1226`, one of twelve invariants that
 > must be 0. Lifting the gap-close clamp emits dt=2/dt=3 edges; the pub162 port at LB 0.915
@@ -95,10 +102,12 @@ Three facts establish the route (all measured, all free):
 
 ## 3. Next steps, in order
 
-### 3.1 Ship what is measured — ⚠ **the only open action; needs an operator decision**
-The 08-15 autosubmit fired and **failed the graph audit** (row 83). `pub162_stack_adjonly` is
-built and verified but **not pushed**. To ship: push `kernels/pub162_stack_adjonly`, then
-re-arm `scripts/autosubmit_stack.sh` against `biohub-pub162-stack-adjonly`.
+### 3.1 Ship what is measured — ✅ **DONE 08-16, awaiting score**
+`pub162_stack_adjonly` pushed, commit run COMPLETE, `clean_graph_audit: true`,
+`non_adjacent_edges: 0` (1,226 dropped). Submitted **`55539437`**, PENDING; score lands in
+4–6 h. Read it against the pre-registration: **~0.917 expected; flat kills the stack.**
+⚠ `scripts/autosubmit_stack.sh` is still armed at the OLD kernel id (`biohub-pub162-stack`)
+and its sentinel was never written — do not re-run it as-is.
 
 If it gains, `pub162_disapp20` (local 0.9119, −2.1% nodes) is the conservative second arm.
 **Do not submit a gap-only variant** — row 69: the gap fix is worth *nothing* alone
