@@ -69,12 +69,15 @@ def subs(loose: bool) -> list[tuple[str, str]]:
         'os.environ["BIOHUB_SHORT_TRACK_RESCUE_TRIGGER_REMOVED_FRAC"] = "0.001"',
     )]
     if loose:
-        # Widen the quality gates. The shipped gates are conservative: on a
-        # 2-volume smoke only 1-2 components per volume passed, 5-9 nodes
-        # against a budget of ~100.
+        # ⚠ These four values ARE the measured `r11_aggr` config (0.9138). All
+        # four must ship together: the shipped gates rescue 1,691 nodes (0.9136)
+        # and only the widened set reaches 4,935 (0.9138). Emitting a subset
+        # would build an artifact that is NOT the one measured -- the row-66 trap.
         out[0] = (out[0][0], out[0][1] +
+                  '\nos.environ["BIOHUB_SHORT_TRACK_RESCUE_MIN_LEN"] = "2"'
                   '\nos.environ["BIOHUB_SHORT_TRACK_RESCUE_MIN_MEAN_EDGE_PROB"] = "0.70"'
-                  '\nos.environ["BIOHUB_SHORT_TRACK_RESCUE_MAX_MEAN_EDGE_DIST_UM"] = "4.50"')
+                  '\nos.environ["BIOHUB_SHORT_TRACK_RESCUE_MAX_MEAN_EDGE_DIST_UM"] = "4.50"'
+                  '\nos.environ["BIOHUB_SHORT_TRACK_RESCUE_MAX_NODES_ABS"] = "600"')
     return out
 
 
