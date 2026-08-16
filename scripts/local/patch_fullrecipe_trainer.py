@@ -55,7 +55,8 @@ ANCHOR_LOOP = '''    best_score = 0.0
 
     for epoch in pbar:
         t0 = time.monotonic()'''
-PATCH_LOOP = '''    best_score = 0.0
+PATCH_LOOP = '''    import json as _json  # history mirror; do not assume upstream imports json
+    best_score = 0.0
     save_path = output_dir / "edge_predictor_best.pth"
     last_path = output_dir / "checkpoint_last.pth"
 
@@ -73,12 +74,22 @@ PATCH_LOOP = '''    best_score = 0.0
         start_epoch = int(_ck["epoch"]) + 1
         best_score = float(_ck.get("best_score", 0.0))
         since_best = int(_ck.get("since_best", 0))
+        _history = list(_ck.get("history", []))
         print(f"RESUMED from {last_path.name}: epoch {start_epoch} "
-              f"(best {best_score:.4f}, {len(_ck['model_state_dict'])} tensors)", flush=True)
+              f"(best {best_score:.4f}, {len(_ck['model_state_dict'])} tensors, "
+              f"{len(_history)} history rows)", flush=True)
     elif resume == "auto":
         print("fresh run (no checkpoint_last.pth)", flush=True)
 
     since_best = locals().get("since_best", 0)
+    # ---- LOSS HISTORY, carried INSIDE the checkpoint --------------------
+    # The per-epoch losses are only ever printed to /content/train.log, which
+    # dies with the session (row 55: the ssh/exec channel drops at 60-90 min
+    # while the runtime keeps training). The checkpoint dataset is the ONLY
+    # channel that reliably reaches the Mac, so the curve has to ride along
+    # inside it or it is unobservable. Restored on resume above, so the curve
+    # is continuous across an arbitrary number of dead sessions.
+    _history = locals().get("_history", [])
     _run_t0 = time.monotonic()
     _est_epoch_s = None
     pbar = tqdm(range(start_epoch, n_epochs), desc="Training", disable=False)
@@ -99,10 +110,31 @@ PATCH_SAVE = '''        # ---- atomic resumable checkpoint, every epoch ----
         _est_epoch_s = train_time + test_time
         _tmp = last_path.with_suffix(".tmp")
         since_best = 0 if is_best else since_best + 1
+        _history.append({
+            "epoch": int(epoch),
+            "edge_loss": float(edge_loss),
+            "det_loss": float(det_loss),
+            "test_loss": float(test_loss),
+            "test_acc": float(test_acc),
+            "test_recall": float(test_recall),
+            "score": float(score),
+            "best_score": float(best_score),
+            "since_best": int(since_best),
+            "train_s": round(float(train_time), 1),
+            "test_s": round(float(test_time), 1),
+        })
+        # Mirror to a plain JSONL too: if a session dies mid-upload the file is
+        # still on the VM, and it costs nothing.
+        try:
+            with open(output_dir / "history.jsonl", "a") as _hf:
+                _hf.write(_json.dumps(_history[-1]) + "\\n")
+        except Exception:
+            pass
         torch.save({
             "epoch": epoch,
             "best_score": best_score,
             "since_best": since_best,
+            "history": _history,
             "model_state_dict": {k.replace("unet.module.", "unet.", 1): v
                                  for k, v in model.state_dict().items()},
             "optimizer_state_dict": optimizer.state_dict(),
