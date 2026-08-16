@@ -125,15 +125,33 @@ def main() -> None:
     train = sorted(s for s in pool if s not in set(sel))
     capped = len(train) > args.train_cap
     if capped:
-        # Drop from the LARGEST strata first so the cap does not skew balance.
+        # ⚠ Cap PROPORTIONALLY. Dropping from the largest embryo first (the
+        # obvious implementation) drives TRAIN toward 50/50 on a 36/64 corpus --
+        # the golden-8 skew again, and the third time this bug has appeared in
+        # this file's history. TRAIN must look like HOLDOUT or the model is
+        # trained on a different distribution than it is judged on.
         rng2 = random.Random(args.seed + 1)
         by_emb: dict[str, list[str]] = defaultdict(list)
         for s in train:
             by_emb[s.split("_")[0]].append(s)
-        while sum(len(v) for v in by_emb.values()) > args.train_cap:
-            big = max(by_emb, key=lambda k: len(by_emb[k]))
-            by_emb[big].remove(rng2.choice(by_emb[big]))
-        train = sorted(s for v in by_emb.values() for s in v)
+        n_before = sum(len(v) for v in by_emb.values())
+        keep: list[str] = []
+        for emb in sorted(by_emb):
+            quota = round(args.train_cap * len(by_emb[emb]) / n_before)
+            # density-stratified thinning inside the embryo, so the cap does not
+            # preferentially discard sparse or dense volumes
+            ranked_e = sorted(by_emb[emb], key=lambda s: dens.get(s, 0.0))
+            if quota >= len(ranked_e):
+                keep.extend(ranked_e)
+                continue
+            step = len(ranked_e) / quota if quota else 0
+            for i in range(quota):
+                lo = int(i * step)
+                hi = max(lo + 1, int((i + 1) * step))
+                keep.append(rng2.choice(ranked_e[lo:hi]))
+        train = sorted(set(keep))
+        while len(train) > args.train_cap:
+            train.remove(rng2.choice(train))
 
     print(f"\n[3/5] split")
     print(f"      TRAIN                     : {len(train)}"

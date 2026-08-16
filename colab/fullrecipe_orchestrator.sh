@@ -1,0 +1,125 @@
+#!/bin/bash
+# Perpetual session orchestrator for the FULL-RECIPE retrain (row 90).
+# Derived from the w3-probe orchestrator, which is proven end-to-end.
+# CHANGED: staging is ~45 min (81 GB competition zip) not ~7 min (pre-packed
+# subset), so the first checkpoint lands ~80 min into a session -- STALE/GRACE
+# are raised accordingly, and the runner beacons a heartbeat every 5 min while
+# staging. With the old 50-min grace this would kill every healthy session
+# before it ever banked an epoch.
+# Colab CLI runtimes die at 20-90 min regardless of activity; this loop makes
+# that irrelevant: provision -> launch runner -> poll -> respawn on death,
+# until the banked checkpoint reaches TARGET_EPOCH or the trainer early-stops.
+# Run on the Mac as a background task; all state lives in the Kaggle ckpt store.
+set -u
+CB=/Users/maruanottoni/home/kaggle/biohub-cell-tracking/.venv_colab/bin/colab
+REPO=/Users/maruanottoni/home/kaggle/biohub-cell-tracking
+KEY=~/.ssh/id_ed25519_colab
+TOKEN=$(cat ~/.kaggle/access_token)
+TARGET_EPOCH=${TARGET_EPOCH:-120}
+# Row 56 control: same orchestrator drives the w2 identical-conditions control.
+# Defaults reproduce the w3 probe; override for the control run:
+#   TARGET_EPOCH=28 CKPT_DS=biohub-w2ctl-ckpt SPREFIX=w2auto WINDOW=2 METHOD=w2ctl
+CKPT_DS=${CKPT_DS:-biohub-fullrecipe-ckpt}
+SPREFIX=${SPREFIX:-frauto}
+WINDOW=${WINDOW:-2}
+METHOD=${METHOD:-fullrecipe}
+N=0
+
+log() { echo "[orch $(date +%H:%M)] $*"; }
+
+age_of() {  # newest file date in a dataset -> age in minutes (9999 on parse failure)
+  local NOWE D E
+  NOWE=$(date -u +%s)
+  D=$(${REPO}/.venv/bin/kaggle datasets files "$1" 2>/dev/null | awk 'NR>2 {print $(NF-1), $NF}' | sort | tail -1)
+  E=$(date -j -u -f "%Y-%m-%d %H:%M:%S" "${D%%.*}" +%s 2>/dev/null || echo 0)
+  if [ "$E" -eq 0 ] || [ "$E" -gt "$NOWE" ]; then echo 9999; else echo $(( (NOWE - E) / 60 )); fi
+}
+
+while true; do
+  N=$((N+1))
+  SNAME="${SPREFIX}${N}"
+
+  # ---- termination check: what does the ckpt store hold?
+  EPOCH=$(cd /tmp && rm -rf orch_ck && ${REPO}/.venv/bin/kaggle datasets download \
+      "maruanbottoni/${CKPT_DS}" -p orch_ck --unzip >/dev/null 2>&1 && \
+      ${REPO}/.venv/bin/python -c "
+import torch
+ck = torch.load('/tmp/orch_ck/checkpoint_last.pth', map_location='cpu', weights_only=False)
+print(ck['epoch'])" 2>/dev/null)
+  log "ckpt store at epoch ${EPOCH:-unknown} (target ${TARGET_EPOCH})"
+  if [ -n "${EPOCH:-}" ] && [ "$EPOCH" -ge "$TARGET_EPOCH" ] 2>/dev/null; then
+    log "TARGET REACHED at epoch $EPOCH — orchestrator done"
+    exit 0
+  fi
+
+  # ---- adopt guard: a session this loop no longer knows about may still be
+  # training (row 55: `colab sessions` drops live runtimes). If the store shows
+  # a fresh life signal, wait for it to go stale before provisioning — never
+  # run two trainers against one ckpt store.
+  while true; do
+    LIFE=$(age_of "maruanbottoni/${CKPT_DS}")
+    B=$(age_of maruanbottoni/biohub-fullrecipe-beacon)
+    [ "$B" -lt "$LIFE" ] && LIFE=$B
+    [ "$LIFE" -gt 45 ] && break
+    log "life signal ${LIFE}min old — an unlisted session is alive, adopting (waiting)"
+    sleep 600
+  done
+
+  # ---- provision: A100 preferred, L4 fallback
+  GPU=A100
+  if ! $CB new --gpu A100 -s "$SNAME" 2>/dev/null | grep -q READY; then
+    GPU=L4
+    if ! $CB new --gpu L4 -s "$SNAME" 2>/dev/null | grep -q READY; then
+      log "no GPU available — retrying in 10 min"
+      sleep 600
+      continue
+    fi
+  fi
+  BATCH=$([ "$GPU" = "A100" ] && echo 8 || echo 4)
+  # Tier-aware patience: L4's first ckpt push lands ~70 min after session start
+  # (staging + loading + 32-min epoch + eval); A100 ~35 min. The 40/50 defaults
+  # executed a healthy L4 five minutes before epoch 12 banked.
+  STALE_MIN=$([ "$GPU" = "A100" ] && echo 45 || echo 60)
+  GRACE_MIN=$([ "$GPU" = "A100" ] && echo 130 || echo 170)
+  log "session $SNAME up ($GPU, stale>${STALE_MIN}m grace ${GRACE_MIN}m)"
+
+  # ---- payload + launch
+  $CB upload "$REPO/colab/fullrecipe_runner.sh" /content/fullrecipe_runner.sh -s "$SNAME" >/dev/null 2>&1
+  $CB upload "$REPO/scripts/local/patch_fullrecipe_trainer.py" /content/patcher.py -s "$SNAME" >/dev/null 2>&1
+  $CB upload "$REPO/configs/fullrecipe_splits.json" /content/fullrecipe_splits.json -s "$SNAME" >/dev/null 2>&1
+  $CB upload "$REPO/configs/fullrecipe_volumes.txt" /content/fullrecipe_volumes.txt -s "$SNAME" >/dev/null 2>&1
+  printf 'import subprocess, os\nenv = dict(os.environ)\nenv["KAGGLE_API_TOKEN"] = os.environ["KT"]\nenv["MAX_MINUTES"] = "100000"\nenv["BATCH"] = "%s"\nenv["WINDOW"] = "%s"\nenv["METHOD"] = "%s"\nenv["CKPT_DS"] = "%s"\nwith open("/content/runner.log", "a") as f:\n    subprocess.run(["bash", "/content/fullrecipe_runner.sh"], env=env, stdout=f, stderr=subprocess.STDOUT)\nprint("runner finished")\n' "$BATCH" "$WINDOW" "$METHOD" "$CKPT_DS" \
+    | $CB exec -s "$SNAME" --env "KT=$TOKEN" --timeout 10 >/dev/null 2>&1
+  log "runner launched on $SNAME (batch $BATCH)"
+  SESSION_START=$(date -u +%s)
+
+  # ---- poll until STORE-STALE or done. Row 55: ssh dying does NOT mean the
+  # runtime died -- sessions train on for hours after the tunnel 404s, and the
+  # live pusher keeps banking. The only honest death signal is checkpoint-store
+  # staleness. Never `colab stop` an unreachable session; it may be training.
+  while true; do
+    sleep 600
+    AGEMIN=$(age_of "maruanbottoni/${CKPT_DS}")
+    BEACONMIN=$(age_of maruanbottoni/biohub-fullrecipe-beacon)
+    FE=1
+    OUT=$(echo 'grep -cE "Epoch +[0-9]+/" /content/train.log 2>/dev/null; grep -E "EARLY STOP" /content/train.log 2>/dev/null | tail -1; test -f /content/DONE && echo DONE' \
+      | timeout 200 $CB ssh -s "$SNAME" --identity $KEY 2>/dev/null)
+    log "$SNAME: ckpt-age ${AGEMIN}min beacon-age ${BEACONMIN}min | ssh: ${OUT:-(unreachable)}"
+    if echo "$OUT" | grep -qE "EARLY STOP|^DONE"; then
+      log "trainer finished on $SNAME — waiting for final push"
+      sleep 300
+      $CB stop -s "$SNAME" >/dev/null 2>&1
+      log "ORCHESTRATOR DONE"
+      exit 0
+    fi
+    SESSMIN=$(( ($(date -u +%s) - SESSION_START) / 60 ))
+    LIFE=$AGEMIN
+    [ "$BEACONMIN" -lt "$LIFE" ] && LIFE=$BEACONMIN
+    if [ "$LIFE" -gt "$STALE_MIN" ] && [ "$SESSMIN" -gt "$GRACE_MIN" ]; then
+      log "$SNAME: no life signal for ${LIFE}min (ckpt ${AGEMIN} / beacon ${BEACONMIN}) — respawning"
+      $CB stop -s "$SNAME" >/dev/null 2>&1
+      break
+    fi
+  done
+  sleep 30
+done
