@@ -14,15 +14,28 @@ starting point. Row numbers below point into `docs/experiments.md`.
 | Confirmed LB | **0.915 × 2** (`55325321`, `55327761`) — the current final-2 |
 | Readable bar | **0.949** (§44) |
 | Best local config | `kernels/pub162_stack_adjonly` — official evalset-24 **0.9135** vs pub162 base 0.9099 |
-| Submission status | ✅ **`stack_adjonly` SUBMITTED 08-16 00:31 UTC — `55539437`, PENDING.** Audit passed (row 88) |
+| Submission status | ☠ **`stack_adjonly` SCORED 0.912 — the stack is DEAD (row 90)** |
 | Colab | credits available; no session running |
 
-> **✅ RESOLVED 08-16 — the stack is shipped.** `kernels/pub162_stack_adjonly` was pushed, its
-> commit run **COMPLETED**, and `clean_graph_audit` came back **true** with `non_adjacent_edges = 0`:
-> the filter dropped exactly the **1,226** edges that killed the 08-15 run. Output 123,997 nodes /
-> 119,514 edges / 192 divisions over 4 datasets; all twelve invariants clean. Submitted as
-> **`55539437`**, 4 slots left that day. **Pre-registered read: ~0.917 expected; flat kills the
-> stack.** The historical account below is kept because it is why the artifact differs from row 66's.
+> ## ☠☠☠ THE STACK IS CLOSED — LB 0.912 vs 0.915 (row 90)
+> `55539437` shipped clean (audit passed, `non_adjacent_edges` 0, 1,226 dropped) and **scored
+> 0.912 — a LOSS of 0.003.** The pre-registration said *"~0.917 expected; flat kills the stack"*;
+> it came in below flat. **Do not resubmit the stack. The final-2 stays the two genuine 0.915s**
+> (`55325321`, `55327761`).
+>
+> ### ★★★ READ THIS BEFORE TRUSTING ANY LOCAL NUMBER
+> The stack measured **+0.0036 locally** and **−0.003 on the board**: sign inverted, total error
+> ≈ **0.0066**. The cause is structural, not a bug. **evalset-24 is drawn from TRAIN volumes and
+> the pilkwang detector trained on EVERY train volume — so no uncontaminated local set for the
+> public pipeline exists.** §50.2 measured the level inflation at +0.062; row 90 shows the
+> *ranking* is unreliable too. Mechanism: the stack's gain was detection-FN recovery via a
+> gap-close clamp lifted to max_gap 3. Where the detector memorised the data, the few remaining
+> gaps are easy and safe to bridge; on hidden test detection is worse, so a 3-frame bridge spans
+> real discontinuities and invents edges. **Gap closing is riskiest exactly where detection is
+> weakest, and our local set is where it is strongest.**
+>
+> **Operating rule from now on:** a local delta below **~0.007** is uninterpretable. Local gating
+> may be used to **REJECT** (lose locally ⇒ dead) but **never to CONFIRM**.
 
 > **⚠ HISTORICAL (resolved above) — the stack could not be submitted as originally built (row 83).**
 > Quota freed 00:09 UTC 08-15, autosubmit pushed, and the commit run died 27 min in on the
