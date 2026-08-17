@@ -113,6 +113,31 @@ print("CUDA device:", _torch.cuda.get_device_name(0))'''
 FAILFAST_NEW = 'print("[local] CUDA fail-fast bypassed; single-process MPS/CPU predict")'
 
 LOCAL_PATCH_HOOK = '''
+# ---- OPTIONAL: swap in OUR trained detector -------------------------------
+# BIOHUB_OVERRIDE_PRIMARY_WEIGHTS=<path> replaces the public primary checkpoint
+# in the freshly staged repo. Verified drop-in: our full-recipe checkpoint has
+# the identical 136 tensors / 2,077,996 params / key set / shapes.
+# ⚠ Any run using this MUST have its own BIOHUB_PRED_CACHE -- it changes
+# DETECTION, so a shared cache would silently replay the public model's
+# predictions and reproduce its score exactly (row 67).
+_ow = os.environ.get("BIOHUB_OVERRIDE_PRIMARY_WEIGHTS", "")
+if _ow:
+    import hashlib as _hl, shutil as _sh
+    _dst = REPO_DIR / "weights" / "unet_transformer" / "split_0" / "edge_predictor_best.pth"
+    assert _dst.exists(), f"[local] staged primary weights missing at {_dst}"
+    _before = _hl.sha256(_dst.read_bytes()).hexdigest()[:8]
+    _src = _hl.sha256(open(_ow, "rb").read()).hexdigest()[:8]
+    if _dst.is_symlink():
+        _dst.unlink()          # support pack stages a read-only symlink
+    _sh.copyfile(_ow, _dst)
+    _after = _hl.sha256(_dst.read_bytes()).hexdigest()[:8]
+    # The check that matters is "the staged file IS our checkpoint", not "the
+    # bytes changed". A re-run over a persisted tracking_repo has already been
+    # swapped, so before == after is correct there and must not fail the run.
+    assert _after == _src, f"[local] weight swap FAILED: staged {_after} != source {_src}"
+    print(f"[local] PRIMARY WEIGHTS {'ALREADY' if _before == _after else 'SWAPPED'} "
+          f"{_before} -> {_after} (source {_src}) from {_ow}", flush=True)
+
 # ---- local replay: device + cache patches on the freshly staged+patched repo
 _lp = REPO_DIR / "scripts" / "predict_unet_transformer.py"
 _lt = _lp.read_text()
@@ -221,8 +246,16 @@ print(f"[local] all {len(overrides)} overrides verified live after cell08", flus
 
 # Kaggle's WORKING_DIR is absolute; locally it is "." and the predict subprocess
 # runs with cwd=REPO_DIR, so the secondary-weights path must be absolutized.
-os.environ["BIOHUB_SECONDARY_WEIGHTS"] = str(Path(os.environ["BIOHUB_SECONDARY_WEIGHTS"]).resolve())
-print(f"[local] BIOHUB_SECONDARY_WEIGHTS -> {os.environ['BIOHUB_SECONDARY_WEIGHTS']}", flush=True)
+# An EMPTY value disables the second seed entirely -- predict_unet_transformer
+# gates the whole secondary block on `if secondary_weights_text:`. Resolving ""
+# would turn it into the cwd and silently re-enable a *public* secondary model,
+# which on a holdout run would quietly contaminate the very thing being measured.
+if os.environ.get("BIOHUB_SECONDARY_WEIGHTS", "").strip():
+    os.environ["BIOHUB_SECONDARY_WEIGHTS"] = str(Path(os.environ["BIOHUB_SECONDARY_WEIGHTS"]).resolve())
+    print(f"[local] BIOHUB_SECONDARY_WEIGHTS -> {os.environ['BIOHUB_SECONDARY_WEIGHTS']}", flush=True)
+else:
+    os.environ["BIOHUB_SECONDARY_WEIGHTS"] = ""
+    print("[local] SECONDARY SEED DISABLED (single-model run)", flush=True)
 run_cell(10, transform=transform10)
 run_cell(11)
 run_cell(13, transform=transform13)
