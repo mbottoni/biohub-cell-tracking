@@ -13,9 +13,11 @@ starting point. Row numbers below point into `docs/experiments.md`.
 |---|---|
 | Confirmed LB | **0.915 × 2** (`55325321`, `55327761`) — the current final-2 |
 | Readable bar | **0.949** (§44) |
-| Best local config | `kernels/pub162_stack_adjonly` — official evalset-24 **0.9135** vs pub162 base 0.9099 |
-| Submission status | ☠ **`stack_adjonly` SCORED 0.912 — the stack is DEAD (row 90)** |
-| Colab | credits available; no session running |
+| Best local config | ☠ none better than base. `stack_adjonly` scored **0.912** — the local +0.0036 was an artefact (row 90) |
+| Submission status | idle. Final-2 = the two genuine **0.915**s. Nothing pending |
+| Own detector | trained (row 91): honest sel **0.9585** (matches the public model's *inflated* 0.9574) but **over-detects 3×** and scores **0.8323 vs 0.9392** deployed. Not fundable further |
+| Colab | credits available; **no session running** (stopped 08-17) |
+| Only live lever | **Trackastra** (row 89) — foreign pretrained linker, +6/801 decisions blended at 0.15, untested at score level |
 
 > ## ☠☠☠ THE STACK IS CLOSED — LB 0.912 vs 0.915 (row 90)
 > `55539437` shipped clean (audit passed, `non_adjacent_edges` 0, 1,226 dropped) and **scored
@@ -115,12 +117,17 @@ Three facts establish the route (all measured, all free):
 
 ## 3. Next steps, in order
 
-### 3.1 Ship what is measured — ✅ **DONE 08-16, awaiting score**
-`pub162_stack_adjonly` pushed, commit run COMPLETE, `clean_graph_audit: true`,
-`non_adjacent_edges: 0` (1,226 dropped). Submitted **`55539437`**, PENDING; score lands in
-4–6 h. Read it against the pre-registration: **~0.917 expected; flat kills the stack.**
-⚠ `scripts/autosubmit_stack.sh` is still armed at the OLD kernel id (`biohub-pub162-stack`)
-and its sentinel was never written — do not re-run it as-is.
+### 3.1 Ship what is measured — ☠ **DONE and DEAD. Scored 0.912 (row 90)**
+`pub162_stack_adjonly` shipped clean and **lost 0.003**. The stack is closed; the final-2
+stays the two genuine 0.915s. **Do not resubmit it, and do not re-run
+`scripts/autosubmit_stack.sh`** — it is still armed at the OLD kernel id
+(`biohub-pub162-stack`) and its sentinel was never written, so it would re-push a config
+that is now known to lose.
+
+**What replaces this section: there is no measured config better than base.** Per row 90's
+operating rule, a local delta below ~0.007 cannot confirm anything, and nothing on the
+table clears that. The honest options are (a) lock the two 0.915s, or (b) test Trackastra
+(§3.2b) as the last live lever.
 
 If it gains, `pub162_disapp20` (local 0.9119, −2.1% nodes) is the conservative second arm.
 **Do not submit a gap-only variant** — row 69: the gap fix is worth *nothing* alone
@@ -246,6 +253,10 @@ parameterised (`WINDOW`/`METHOD`/`CKPT_DS`) and proven end-to-end.
 | ILP disappearance weight above 2.0 | dead — 2.5/3.0/4.0 all lose monotonically, and ~90% of each loss is the DIVISION term, not association (row 74) |
 | **Division selection by GEOMETRY** | dead (§35, §43) — **but appearance is not; see 3.2** |
 | Full-recipe retrain at public scale | ~200 A100-h (§50). Unfunded, and not affordable on current credits |
+| **The stack (disapp 2.0 + gap 3)** | ☠ **LB 0.912 vs 0.915 (row 90)** — measured +0.0036 locally, LOST 0.003. Local↔LB error ≈0.0066, sign inverted |
+| Detection-side, ALL forms (ultrack multi-hypothesis, Spotiflow, looser thresholds) | ☠ closed on a **mechanism-independent bound** (row 87): only 68 annotated cells are undetected, so perfect detection is worth **~+0.003** |
+| Node retention / short-track rescue | ☠ +0.0003 and saturating (row 88). Selective beats blanket — but the node-budget penalty eats 80% of the gain |
+| **Full-recipe retrain (own detector)** | ☠ row 91 — sel matches honestly (0.9585 vs their inflated 0.9574) but it over-detects 3×, threshold cannot fix it, and closing it needs ~400 epochs (~1,630 units) for a payoff row 87 caps at +0.003 |
 | **Division route, ALL forms** | ☠ closed on measurement (row 86). Detector ranks well (AUC 0.863, 6/7 captured) and still loses at every K, because a useful fork is inherently expensive. ~150× short of a meaningful gain |
 
 ---
