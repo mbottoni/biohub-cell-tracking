@@ -123,12 +123,30 @@ LOCAL_PATCH_HOOK = '''
 _ow = os.environ.get("BIOHUB_OVERRIDE_PRIMARY_WEIGHTS", "")
 if _ow:
     import hashlib as _hl, shutil as _sh
-    _dst = REPO_DIR / "weights" / "unet_transformer" / "split_0" / "edge_predictor_best.pth"
+    # ⚠⚠ THE `weights` DIRECTORY IS A SYMLINK into the read-only support pack
+    # (repo/weights -> kaggle_input/.../support-pack/weights -> extSSD). Checking
+    # `_dst.is_symlink()` is USELESS: the FILE is not a symlink, its PARENT is,
+    # so copyfile() resolves through and OVERWRITES THE REAL SUPPORT PACK.
+    # That is exactly what happened on 08-18: the pristine primary (12f6881e)
+    # was replaced by our trained checkpoint, silently, and every later run used
+    # our model as BOTH primary and secondary while reporting it as "public".
+    # Materialise the directory as REAL storage inside the run dir first.
+    _wd = REPO_DIR / "weights" / "unet_transformer" / "split_0"
+    for _anc in (REPO_DIR / "weights", REPO_DIR / "weights" / "unet_transformer", _wd):
+        if _anc.is_symlink():
+            _real = _anc.resolve()
+            _anc.unlink()
+            _sh.copytree(_real, _anc)
+            print(f"[local] materialised symlinked dir {_anc.name}/ (was -> {_real})", flush=True)
+    _dst = _wd / "edge_predictor_best.pth"
     assert _dst.exists(), f"[local] staged primary weights missing at {_dst}"
+    # Refuse to write anywhere outside the run directory, belt and braces.
+    assert str(_dst.resolve()).startswith(str(REPO_DIR.resolve())), (
+        f"[local] REFUSING to write outside the run dir: {_dst.resolve()}")
     _before = _hl.sha256(_dst.read_bytes()).hexdigest()[:8]
     _src = _hl.sha256(open(_ow, "rb").read()).hexdigest()[:8]
     if _dst.is_symlink():
-        _dst.unlink()          # support pack stages a read-only symlink
+        _dst.unlink()
     _sh.copyfile(_ow, _dst)
     _after = _hl.sha256(_dst.read_bytes()).hexdigest()[:8]
     # The check that matters is "the staged file IS our checkpoint", not "the
