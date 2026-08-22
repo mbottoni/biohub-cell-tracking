@@ -154,10 +154,16 @@ def transform02(src: str) -> str:
     for k, v in overrides.items():
         pat = re.compile(r'("%s":\s*)([^,\n]+)(,?)' % re.escape(k))
         def repl(m, _v=v):
-            try:
-                val = repr(float(_v))
-            except ValueError:
-                val = repr(_v)
+            # Preserve the guard's type: _EXPECTED_TEXT entries hold quoted strings
+            # and compare env TEXT verbatim; _EXPECTED_NUMERIC entries hold floats.
+            old = m.group(2).strip()
+            if old.startswith(("'", '"')):
+                val = repr(str(_v))
+            else:
+                try:
+                    val = repr(float(_v))
+                except ValueError:
+                    val = repr(_v)
             return m.group(1) + val + m.group(3)
         src, n = pat.subn(repl, src)
         print(f"[guard] {k}: {n} expected-value rewrite(s)", flush=True)
