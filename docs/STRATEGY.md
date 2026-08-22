@@ -4093,6 +4093,73 @@ kernels-only competition with a large public-notebook culture, the field's front
 readable, free, and moves faster than our own iteration loop. Standing still IS losing: we lost
 297 places without changing a thing.
 
+## 52. ★★ THE ENDGAME FRAME — first place is +0.038 away and the big routes were closed on a blind instrument (2026-08-22)
+
+Supersedes nothing measured; it **re-prices three closures** (rows 87, 91, 94) as
+*instrument-conditional* and sets the plan for the remaining 38 days. ⚠ **This section is an
+ARGUMENT, not a measurement.** This project has re-priced routes by argument three times in one
+day and was wrong twice (rows 79/81/84; settled by running it, row 86). The §52.4 probes exist
+precisely to convert this argument into measurement *before* the big spend.
+
+### 52.1 The arithmetic
+
+Us **0.920** (rank 149/2,633) · leader **0.958** · top-10 ≈0.943 · top-50 0.929. Gap to first:
+**+0.038**. Deadline **2026-09-29** → **~38 days, ~190 submission slots, ~5×30 Kaggle T4-h,
+Colab credits**. Our best self-generated gain ever is ~+0.003; both +0.005 jumps were ports of
+the public frontier — which can never put us *ahead* of it. First place requires a structural
+play, and there is time to fund exactly one.
+
+### 52.2 The instrument-conditional closures (the argument)
+
+Row 90 established evalset volumes are TRAIN volumes and the public detector memorised them.
+Follow that through the closed-routes table:
+
+1. **Row 87's "+0.003 detection cap"** — the verdict that killed ultrack, Spotiflow,
+   cross-family detectors and priced the retrain — is detection recall 0.9958 *measured on
+   memorised volumes*. Row 90's own post-mortem says hidden-test detection is worse (it is the
+   stated mechanism of the stack's sign inversion). The cap is labelled "mechanism-independent";
+   it is actually **instrument-conditional** and bounds nothing about hidden test.
+2. **Trackastra (row 94)** was killed at **−0.0007** — 10× below the ±0.007 interpretability
+   floor — ranking edges between *memorised* detections. Learned association matters most
+   exactly where detection is noisy, i.e. on hidden test, i.e. where it was never measured.
+3. **The retrain (row 91)** was closed as "not worth funding" against row 87's cap (see 1),
+   and its over-detection diagnosis vs the public primary ALONE is explicitly **unmeasured**
+   (row 93 — the resolving experiment was the corrupted one).
+
+**The pattern:** mechanisms whose value *scales with detection errors* — retention, gap
+handling, orphan pools, learned association, a generalising detector — are systematically
+undervalued by an instrument with almost no detection errors. That class is the most plausible
+explanation of how 0.958 exists. Corollary: the "local can REJECT" operating rule is also
+unsafe for this class — a robustness mechanism can lose on memorised detections and win on
+hidden test.
+
+### 52.3 The plays
+
+* **Decompose the hidden test** (2 probe submissions): divisions-off pub920 measures
+  0.1×div_J_hidden; a far-field pad probe measures the node_ratio multiplier → recover
+  edge_J_hidden. Replaces the single ±0.007 scalar with per-term local→hidden transfer error.
+  We have NEVER decomposed an LB number; probes are ~1% of remaining slots.
+* **Finish the honest instrument** (row 91 already bought the split, an honestly-trained
+  checkpoint matching the public detector's inflated sel number, and holdout replay): full
+  pipeline on holdout with OUR checkpoints as both seeds, fixed override hook, sha-asserted
+  weights. Then re-score every instrument-conditional kill.
+* **Fund the retrain if the probes say detection/association is the gap.** Re-price: 400
+  epochs ≈ 138 A100-h ≈ 1,630 Colab units ≈ **$160–200 pay-as-you-go** in a $60,000
+  competition. "Unfunded" (§48.3, §50) was a default, never a decision put to the operator.
+* **Divisions/ensemble if the probes say the mass is there.** NOT gate-widening on the pub920
+  branch — row 99 is an *LB-measured* loss (0.914). The open forms: the 0.917 family's
+  orphan-pool mechanism on a graph built to feed it (row 97's lesson), and edge-level
+  intersection/union across pipeline families — different operation from row 95's detection
+  veto, never tried.
+
+### 52.4 Sequencing
+
+Week 1: probes + 0.920 attribution (§51.4) + honest instrument — all cheap. Gate: probe
+decomposition picks retrain vs divisions/ensemble. Weeks 2–4: execute ONE play, one change per
+experiment, LB-gated. Week 5 (from ~09-22): freeze, confirm final-2; public↔private can invert
+exactly as local↔public did (row 90). Sober read: +0.038 is a long shot; this same plan is
+also the max-expected-placement plan if first does not happen.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)
