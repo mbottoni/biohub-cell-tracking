@@ -226,6 +226,17 @@ def run_cell(i: int, transform=None) -> None:
     # `display` is provided in ns by the driver; the import fails outside Jupyter.
     src = src.replace("from IPython.display import display",
                       "pass  # [local] display provided by driver")
+    # ROW 82 / ROW 105: cells HARDCODE os.environ assignments for knobs (cell01 the
+    # sheet, cell05 re-sets BIOHUB_DUAL_SEED_MIN_CANDIDATE_RETENTION="0.90" right
+    # before launching predict — clobbering any env-level override). Rewrite every
+    # hardcoded assignment of an overridden key, in every cell, at source level.
+    for k, v in overrides.items():
+        pat = re.compile(r'(os\.environ\[["\']%s["\']\]\s*=\s*)(["\'][^"\']*["\'])'
+                         % re.escape(k))
+        src, n = pat.subn(lambda m, _v=v: m.group(1) + repr(str(_v)), src)
+        if n:
+            print(f"[override] cell{i:02d}: {n} hardcoded assignment(s) of {k} "
+                  f"rewritten to {v!r}", flush=True)
     if transform:
         src = transform(src)
     print(f"\n===== cell {i:02d} =====", flush=True)
