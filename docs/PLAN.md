@@ -11,13 +11,13 @@ starting point. Row numbers below point into `docs/experiments.md`.
 
 | | value |
 |---|---|
-| Confirmed LB | **0.915 × 2** (`55325321`, `55327761`) — the current final-2 |
-| Readable bar | **0.949** (§44) |
-| Best local config | ☠ none better than base. `stack_adjonly` scored **0.912** — the local +0.0036 was an artefact (row 90) |
-| Submission status | idle. Final-2 = the two genuine **0.915**s. Nothing pending |
-| Own detector | trained (row 91): honest sel **0.9585** (matches the public model's *inflated* 0.9574) but **over-detects 3×** and scores **0.8323 vs 0.9392** deployed. Not fundable further |
-| Colab | credits available; **no session running** (stopped 08-17) |
-| Only live lever | **Trackastra** (row 89) — foreign pretrained linker, +6/801 decisions blended at 0.15, untested at score level |
+| Confirmed LB | ★ **0.920** (`55678092`) — NEW BEST, rank **149 of 2,633** |
+| Previous best | 0.915 × 2 (`55325321`, `55327761`) |
+| Readable bar | leader **0.958**; top-10 0.943; top-50 0.929; **top-100 0.922** (+0.002 away) |
+| What bought it | the **public LB-0.920 line ported verbatim** (row 98) — a different BRANCH: DeepCenter veto ON, ranker/lookahead/edge-TTA OFF, bidir weight 0.30 |
+| Final-2 | **0.920 + one 0.915** |
+| Colab | credits available; no session running |
+| ⚠ Standing obligation | **RE-CENSUS THE BOARD WEEKLY.** Rows 87–95 spent a week on our own ideas for +0.000; one census + one port bought +0.005 (rows 96, 98) |
 
 > ## ☠☠☠ THE STACK IS CLOSED — LB 0.912 vs 0.915 (row 90)
 > `55539437` shipped clean (audit passed, `non_adjacent_edges` 0, 1,226 dropped) and **scored
