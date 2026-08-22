@@ -21,7 +21,12 @@ import os
 import sys
 from pathlib import Path
 
-S = Path("/private/tmp/claude-501/-Users-maruanottoni-home-kaggle-biohub-cell-tracking/746fd85d-a0d8-47d3-b5cf-be4bb88f1e9a/scratchpad")
+S = Path(os.environ.get(
+    "BIOHUB_REPLAY_SCRATCH",
+    "/private/tmp/claude-501/-Users-maruanottoni-home-kaggle-biohub-cell-tracking/746fd85d-a0d8-47d3-b5cf-be4bb88f1e9a/scratchpad"))
+# ^ default is the 08-1x session dir (partially garbage-collected); new sessions MUST set
+#   BIOHUB_REPLAY_SCRATCH to their own scratchpad and rebuild the kaggle_input mirror
+#   (3 symlinks into replay_assets) + copy nbcells from the SSD (nbcells_pub162/_stack).
 # Assets live on the external SSD, NOT in a session scratchpad: /private/tmp is
 # garbage-collected (the 08-12 00:00 sweep deleted every .pt/.pth under the
 # previous session's dir and left the directory tree standing, so the failure

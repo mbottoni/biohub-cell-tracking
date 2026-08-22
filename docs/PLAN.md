@@ -18,6 +18,7 @@ starting point. Row numbers below point into `docs/experiments.md`.
 | Final-2 | **0.920 + one 0.915** |
 | Colab | credits available; no session running |
 | **Deadline** | **2026-09-29** — ~38 days, ~190 submission slots, ~5×30 Kaggle T4-h/week + Colab |
+| ★ Measured 08-22 (rows 100–102) | replay instrument re-established; divoff probe calibrated; scorer aggregation identified; **memorisation gap measured: ep20 recall 1.0000 on a trained-on volume vs 0.94–0.97 unseen — row 87's detection cap is instrument-conditional** |
 | Fresh intel (row 99) | nothing public above 0.920; the 0.920 author is publicly testing SAFE_DIV widening on his own line and his comment logs an **LB loss** (0.914 at MAX_UM 7.0) — watch `kimi-notebook-v17`, do not copy |
 | ⚠ Standing obligation | **RE-CENSUS THE BOARD WEEKLY.** Rows 87–95 spent a week on our own ideas for +0.000; one census + one port bought +0.005 (rows 96, 98) |
 
@@ -126,23 +127,33 @@ instrument that memorised its own volumes and is therefore blind to the error cl
 test contains. Phase 1 converts that argument into measurement before anything is spent.
 Standing obligations (census, 3.1g) continue throughout.
 
-### 3.1 Phase 1a — DECOMPOSE THE HIDDEN TEST: two probe submissions (do first)
-We have never decomposed an LB number; every hidden-test read has been a single scalar.
-The metric (`official_metric/.../metrics.py:33`): `score = max(0, edge_J × (1 − 0.1 ×
-node_ratio)) + 0.1 × div_J`. Two designed probes on the **pub920 base** isolate the terms:
+### 3.1 Phase 1a — the highest-probability >0.920 submissions + the ONE probe (stress-tested 08-22)
 
-1. **`pub920_divoff`** — pub920 with safe-division insertion disabled (the `divoff`
-   mechanism, e.g. `BIOHUB_SAFE_DIV_GLOBAL_FRAC_CAP=0`; verify division count → 0 in the
-   graph audit). **Pre-register the expected drop from local replay first** (cache-hit,
-   minutes). LB drop ≈ `0.1 × div_J_hidden` + whatever edge-side coupling replay quantifies.
-2. **`pub920_pad`** — add K isolated far-field nodes (the July `probe_pad` mechanism,
-   scored 0.868 on the old base) to measure the node_ratio multiplier slope → recovers
-   hidden `n_gt`, hence `node_ratio_hidden`, hence **`edge_J_hidden`** from probe 1's result.
+**Prerequisite (in progress):** the pub920 branch replayed locally. The instrument was
+re-established 08-22 (row 100; driver now takes `BIOHUB_REPLAY_SCRATCH`); the DeepCenter
+dataset is on the SSD (`replay_assets/deepcenter_dl`); pub920's cells are extracted
+(`nbcells_920`) — ⚠ they are a DIFFERENT notebook layout (failfast in cell05, post-proc in
+cell06, no knob-guard cell, retention-floor/`DIAGNOSTIC_ARM` code pub162 lacks), so the
+driver needs a pub920 variant. Every reject-gate below runs on that replay.
 
-Output: `edge_J / node_ratio / div_J` of our 0.920 **on hidden test**, each compared to its
-local-replay value → per-term local→hidden transfer error, replacing the single ±0.007
-scalar. Cost: 2 slots scoring below 0.920 — harmless, final-2 selection protects us.
-⚠ Pre-register both reads before submitting, per row 90 discipline.
+1. **Neighbourhood search around the confirmed 0.920 optimum** — one knob per submission,
+   local reject gate + pre-registration each: retention floor 0.85/0.95, DeepCenter gap-veto
+   threshold, bidir weight 0.25/0.35, DET_THRESHOLD 0.96. The author's own public iteration
+   mined the division-side neighbourhood and lost (row 99); the veto/retention neighbourhood
+   is unexplored. Expected: mostly flat, one or two +0.001–0.002 → 0.921–0.923.
+2. **pub920 ⊗ pub162 edge-level intersection/union** — both branches held (0.920 / 0.915),
+   genuinely different mechanisms, operation never tried (row 95 killed detection-level
+   vetoes, a different thing). Build post-hoc from the two submission CSVs; reject-gate; one slot.
+3. **`pub920_divoff` probe — CALIBRATED (row 100):** `div_J_hidden ≈ 10 × (LB drop + 0.0005)`;
+   the coupling is positive, so the naive read understates div_J. Re-register the coupling on
+   the pub920 replay first (DeepCenter safe-div veto changes the division profile). **Real
+   payoff:** if div_J_hidden ≈ 0, the hidden division tax blocking the stranded association
+   levers (rows 73/77) is a local artifact and they unlock immediately.
+4. ☠ **Pad probe CUT** (row 101): the scorer's aggregation is now exactly identified
+   (per-volume J_adj weighted by edge sample size — the naive model was 16% off), and the
+   July pad probe retrospectively bounds hidden n_pred/N_total ≈ 0.97: **the node term is
+   small and slightly favourable; the leaders' +0.038 lives in edge_J and/or div_J.**
+   Do not spend a slot re-measuring it.
 
 ### 3.1b Phase 1b — attribute the 0.920 (free, local; was §3.1c, §51.4)
 Row 98 shipped the whole branch unattributed. Hypothesis: `DUAL_SEED_MIN_CANDIDATE_RETENTION
@@ -161,7 +172,7 @@ manifest before AND after the run**. That instrument's detection-error profile r
 hidden test. Then **re-score the instrument-conditional kills on it**: Trackastra blend
 (row 94, killed at −0.0007, below the floor), retention gates (row 88), gap-close (row 90's
 own mechanism predicts it gains where detection is worse), the 0.917 orphan-pool division rule
-(row 97). **Any sign flip is a legitimate reopening.**
+(row 97). **Use both instruments as a BRACKET** — the public-weights instrument is too clean (memorised detections, row 102), the ep20 instrument too dirty (deploys at 0.83); hidden test sits between. A candidate must gain on the dirty instrument and not lose on the clean one to earn an LB slot; a sign flip on one instrument alone is a hypothesis, not a result.
 
 ### 3.1d Phase 2 — THE DECISION GATE (end of week 1)
 
@@ -293,6 +304,10 @@ the total was already the whole story and the row needs no re-litigation.
   and lost on the LB, but was judged on total score with no view of the two terms.
 - Dual-seed **edge** threshold 0.48→0.30 with motion-relink bonus 6.0: the one historical
   change that produced a confirmed LB gain for us (rows 22–23), never tried on this base.
+  ⚠ **Redundancy caveat (08-22):** its mechanism was detection-FN recovery via node
+  retention — and the pub920 branch's `DUAL_SEED_MIN_CANDIDATE_RETENTION=0.90` is itself a
+  retention mechanism. Run the 3.1b attribution FIRST; if the floor bought the +0.005, this
+  lever likely double-dips nothing.
   Needs re-inference (~7 h M1, or minutes on Colab — see 3.4).
   ⚠ **`DUAL_SEED_EDGE_THRESHOLD` is one of the six knobs `cell08` used to clobber (row 82).**
   Before row 82's fix this sweep would have silently measured the baseline and been logged as
