@@ -4032,6 +4032,67 @@ verify gate, resumable patched trainer. A future funded run is an env-var change
 window axis dead (this section), full-recipe-at-scale priced at ~200 A100-h and
 unfunded.** The submission-side work continues on the quota-free local replay (row 60).
 
+## 51. ★★★ READING THE BOARD BEAT OPTIMISING OUR OWN LINE — 0.915 → 0.920 (2026-08-22)
+
+Supersedes nothing; it **reframes §48.3's "one route left"**, which said the only lever with
+ceiling above +0.01 was a funded full-recipe retrain. That was true of routes *we* could
+invent. It was not true of the board.
+
+### 51.1 The two-week ledger, side by side
+
+| effort | outcome |
+|---|---|
+| rows 87–95: ultrack, Spotiflow, retention, a funded retrain, Trackastra, consensus partners — a full week | **+0.000** |
+| row 96 (one census, 14 days stale) + row 98 (one port, one afternoon) | **+0.005** |
+
+Every internally-generated idea was measured dead. The census was the only thing that
+produced a gain, and it is the **second** time (§44.2 → LB 0.915 was the first). Two for two.
+
+### 51.2 What the census found
+
+The board moved while we were not looking: leader **0.949 → 0.958**, top-20 0.922 → 0.935,
+teams 2,091 → 2,611. Our 0.915 sat still and fell from rank ~166 to **463**. The 0.915 shelf
+itself **doubled** (104 → 223 teams) and a **new 0.917 shelf** (163 teams) formed above it,
+with an accelerating fork curve (9/27/31/36/52 per day) — the signature of a published
+notebook. Two public notebooks existed: an LB-0.917 and an **LB-0.920**.
+
+### 51.3 What we shipped, and what it means that we could have built it
+
+`kernels/pub920_port` = the public 0.920 line, verbatim. Scored **0.920**, rank **149/2,633**.
+It is a different BRANCH of the same pipeline we already run:
+
+* DeepCenter veto stack **ON** (`USE`/`REQUIRE`/`GAP`/`SAFE_DIV`, checkpoint, `EXPECTED_EPOCH 2`)
+* local-association ranker, forward-acceleration lookahead, edge-TTA **OFF**
+* `BIDIRECTIONAL_EDGE_WEIGHT` 0.20 → 0.30, `DUAL_SEED_MIN_CANDIDATE_RETENTION` **0.90**
+
+**We owned every one of those knobs.** We never ran that combination.
+
+### 51.4 Why our own version of this failed — the hypothesis, NOT yet measured
+
+⚠ We submitted the whole branch at once, so the gain is **unattributed**. This is a deliberate
+violation of one-change-per-experiment, accepted because the goal was to catch up, not explain.
+
+The best hypothesis, and it is built on our own failures:
+
+* §95 showed a detection veto is both powerful and dangerous — a badly matched veto partner
+  destroyed node recall 0.9838 → 0.6955 and cost −0.068. Vetoes dominate this pipeline.
+* Our `divveto` test failed the same way: DeepCenter safe-div veto ON rejected **355/355**
+  divisions. Unconstrained, the veto eats everything, so we abandoned the route.
+* The 0.920 line adds **`DUAL_SEED_MIN_CANDIDATE_RETENTION = 0.90`** — a floor guaranteeing
+  no more than 10% of candidates are removed. **That is the missing rail**: it lets an
+  aggressive third-model veto run *without* the recall collapse that killed ours.
+
+⇒ We had the mechanism and lacked the constraint that makes it safe — then killed the route
+on a single-flag test on an old base. **Ablation to confirm is free** (local replay): drop the
+retention floor, or DeepCenter, and see which returns the points.
+
+### 51.5 The standing obligation this creates
+
+**RE-CENSUS THE BOARD WEEKLY.** Not as housekeeping — as the highest-EV action available. In a
+kernels-only competition with a large public-notebook culture, the field's frontier is
+readable, free, and moves faster than our own iteration loop. Standing still IS losing: we lost
+297 places without changing a thing.
+
 ## 8. Operational notes
 
 - GPU: Kaggle caps **2 concurrent GPU sessions**; kernels default to P100 (sm_60, torch-incompatible)

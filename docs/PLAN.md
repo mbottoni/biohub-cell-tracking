@@ -117,23 +117,34 @@ Three facts establish the route (all measured, all free):
 
 ## 3. Next steps, in order
 
-### 3.1 Ship what is measured — ☠ **DONE and DEAD. Scored 0.912 (row 90)**
-`pub162_stack_adjonly` shipped clean and **lost 0.003**. The stack is closed; the final-2
-stays the two genuine 0.915s. **Do not resubmit it, and do not re-run
-`scripts/autosubmit_stack.sh`** — it is still armed at the OLD kernel id
-(`biohub-pub162-stack`) and its sentinel was never written, so it would re-push a config
-that is now known to lose.
+### 3.1 ★ PORT THE PUBLIC FRONTIER — this is what works (rows 96, 98; §51)
+**Twice now, reading the board has beaten optimising our own line.** §44.2 → 0.915;
+row 98 → **0.920**. Meanwhile rows 87–95 spent a week on internally-generated ideas
+for a combined **+0.000**.
 
-**What replaces this section: there is no measured config better than base.** Per row 90's
-operating rule, a local delta below ~0.007 cannot confirm anything, and nothing on the
-table clears that. The honest options are (a) lock the two 0.915s, or (b) test Trackastra
-(§3.2b) as the last live lever.
+**Open and ready:** the **0.917-shelf notebook**
+(`reyhanksatria/graph-patches-for-cell-tracking-0-917-lb`, 163 teams behind it) is a
+**different pipeline family** — 3-model U-Net ensemble (2 base + 1 tophat), flip-quartet
+TTA, Hungarian + velocity + appearance-similarity linking, `CAND_THR 0.05`. Its
+post-processing does **not** port onto our graph (row 97: 300 divisions added, ZERO
+converted, because our pipeline keeps no low-confidence orphan pool). **But it may port
+WHOLE, exactly as the 0.920 did.** Top-100 is 0.922 — **+0.002 away**.
+⚠ When porting a public kernel, strip the author's `id_no` and `docker_image` from
+`kernel-metadata.json` or the push 403s (it tries to modify THEIR kernel).
 
-If it gains, `pub162_disapp20` (local 0.9119, −2.1% nodes) is the conservative second arm.
-**Do not submit a gap-only variant** — row 69: the gap fix is worth *nothing* alone
-(0.9098 ≈ base); the +0.0036 is an interaction with the disappearance weight, so the stack is
-not decomposable. ⚠ Note `disapp20` does **not** lift the gap clamp, so it needs no adjacency
-filter — but re-check `non_adjacent_edges` before shipping anything else (row 83).
+### 3.1b ⚠ WEEKLY BOARD CENSUS — a standing obligation, not housekeeping
+The board moved 0.949 → 0.958 and the 0.915 shelf doubled while we were not looking; we
+fell rank ~166 → 463 **without changing anything**. In a kernels-only competition the
+frontier is readable, free, and moves faster than our own iteration loop.
+`kaggle competitions leaderboard --download` + `kaggle kernels list --sort-by dateRun`.
+
+### 3.1c Attribute the 0.920 gain (free, local, optional)
+Row 98 shipped the whole branch at once, so the +0.005 is **unattributed**. §51.4's
+hypothesis: `DUAL_SEED_MIN_CANDIDATE_RETENTION = 0.90` is the safety rail that lets an
+aggressive DeepCenter veto run without the recall collapse that killed our `divveto`
+(355/355 divisions rejected) and row 95's consensus partner (recall 0.9838 → 0.6955).
+Ablate locally — drop the retention floor, or DeepCenter — and see which returns the
+points. Worth it only to BUILD on the result; not needed to bank it.
 
 ### 3.2 Division route — ☠ **CLOSED ON MEASUREMENT (row 86).** Do not reopen without new information
 Built end-to-end and swept against the official scorer. **Every operating point loses:**
