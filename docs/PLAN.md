@@ -18,6 +18,7 @@ starting point. Row numbers below point into `docs/experiments.md`.
 | Final-2 | **0.920 + one 0.915** |
 | Colab | credits available; no session running |
 | **Deadline** | **2026-09-29** — ~38 days, ~190 submission slots, ~5×30 Kaggle T4-h/week + Colab |
+| ★★★ PROBES READ (row 106, 08-23) | **dcoff 0.920** (DeepCenter dead weight everywhere — drop it) · gapthr20 0.920 (inert) · **divoff 0.906 → div_J_hidden ≈ 0.13 > local 0.09**. Our hidden decomposition: **adj ≈ 0.906 + divisions ≈ 0.014**. Leader closes through divisions alone: 0.906 + 0.1×0.5 = 0.956 ≈ 0.958 |
 | ★ Measured 08-22 (rows 100–102) | replay instrument re-established; divoff probe calibrated; scorer aggregation identified; **memorisation gap measured: ep20 recall 1.0000 on a trained-on volume vs 0.94–0.97 unseen — row 87's detection cap is instrument-conditional** |
 | Fresh intel (row 99) | nothing public above 0.920; the 0.920 author is publicly testing SAFE_DIV widening on his own line and his comment logs an **LB loss** (0.914 at MAX_UM 7.0) — watch `kimi-notebook-v17`, do not copy |
 | ⚠ Standing obligation | **RE-CENSUS THE BOARD WEEKLY.** Rows 87–95 spent a week on our own ideas for +0.000; one census + one port bought +0.005 (rows 96, 98) |
@@ -149,6 +150,8 @@ driver needs a pub920 variant. Every reject-gate below runs on that replay.
    the pub920 replay first (DeepCenter safe-div veto changes the division profile). **Real
    payoff:** if div_J_hidden ≈ 0, the hidden division tax blocking the stranded association
    levers (rows 73/77) is a local artifact and they unlock immediately.
+   ★ **READ (row 106): div_J_hidden ≈ 0.131 — the tax is real and BIGGER on hidden. The
+   stranded levers stay BLOCKED, permanently.**
 4. ☠ **Pad probe CUT** (row 101): the scorer's aggregation is now exactly identified
    (per-volume J_adj weighted by edge sample size — the naive model was 16% off), and the
    July pad probe retrospectively bounds hidden n_pred/N_total ≈ 0.97: **the node term is
@@ -174,13 +177,27 @@ hidden test. Then **re-score the instrument-conditional kills on it**: Trackastr
 own mechanism predicts it gains where detection is worse), the 0.917 orphan-pool division rule
 (row 97). **Use both instruments as a BRACKET** — the public-weights instrument is too clean (memorised detections, row 102), the ep20 instrument too dirty (deploys at 0.83); hidden test sits between. A candidate must gain on the dirty instrument and not lose on the clean one to earn an LB slot; a sign flip on one instrument alone is a hypothesis, not a result.
 
-### 3.1d Phase 2 — THE DECISION GATE (end of week 1)
+### 3.1d Phase 2 — THE DECISION GATE — ★ RESOLVED 08-23 (row 106)
 
 | probe outcome | read | play |
 |---|---|---|
 | `edge_J_hidden` ≈ local edge_J | detection survives on hidden; row 87's cap roughly binds after all | → **3.1f** divisions / ensemble |
 | `edge_J_hidden` well below local | the gap is detection/association robustness | → **3.1e** funded retrain |
 | `div_J_hidden` ≫ local 0.07 | division term carries more than believed | re-price both before choosing |
+
+**Outcome: the THIRD row fired.** div_J_hidden ≈ 0.131 (> local 0.0909); hidden adj ≈ 0.906
+(≈ −0.02 vs local level, the usual contamination offset — no catastrophic edge gap). The
+re-pricing: **the leader's 0.958 closes through divisions alone** (our adj 0.906 + div_J 0.5),
+while closing it through edges alone would need edge_J ≈ 0.94 — far above anything measured.
+⇒ **Phase 3 = 3.1f (the 0917 family's division architecture), with 3.1c (honest instrument)
+as its measuring device** — noting the local instrument UNDER-prices divisions by ~0.04, so
+every historical local division verdict was measured with a biased ruler. Row 86 (insertion
+on OUR graph) and row 99 (gate widening, LB-dead) still stand — the open route is the
+0917 family's orphan-pool architecture, not our graph. **3.1e (funded retrain) is DEPRIORITISED**:
+the hidden edge term shows no gap large enough to fund against. Also resolved: **DeepCenter is
+dead weight on hidden (dcoff 0.920)** — §51.4's rail hypothesis is FALSE; the rail can be
+dropped for free (runtime saving), and the retention floor is the last rail piece under test
+(`pub920_ret00`, in flight).
 
 ### 3.1e Phase 3a — THE FUNDED RETRAIN (~$160–200 of Colab units; OPERATOR PURCHASE DECISION)
 Re-priced from §50's "unfunded": 400 epochs ≈ 138 A100-h ≈ 1,630 units ≈ **$160–200
