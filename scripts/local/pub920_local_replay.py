@@ -181,6 +181,16 @@ def transform05(src: str) -> str:
     n = src.count(FAILFAST_OLD)
     assert n == 1, f"fail-fast block match count {n}"
     src = src.replace(FAILFAST_OLD, FAILFAST_NEW)
+    # cell05 carries an INLINE guard on the bidir weight (literal 0.30 twice) —
+    # a fourth style of hardcoded expectation. Rewrite when overridden.
+    if "BIOHUB_BIDIRECTIONAL_EDGE_WEIGHT" in overrides:
+        v = float(overrides["BIOHUB_BIDIRECTIONAL_EDGE_WEIGHT"])
+        g1 = "_bidirectional_weight_guard, 0.30, rel_tol=0.0, abs_tol=1e-12"
+        g2 = '"expected_bidirectional_weight": 0.30,'
+        assert src.count(g1) == 1 and src.count(g2) == 1, (src.count(g1), src.count(g2))
+        src = src.replace(g1, f"_bidirectional_weight_guard, {v}, rel_tol=0.0, abs_tol=1e-12")
+        src = src.replace(g2, f'"expected_bidirectional_weight": {v},')
+        print(f"[guard] cell05 inline bidir guard rewritten to {v}", flush=True)
     anchor = "start_time = time.time()"
     n = src.count(anchor)
     assert n == 1, f"start_time anchor count {n}"
