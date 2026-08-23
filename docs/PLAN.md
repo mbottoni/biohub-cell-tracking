@@ -20,7 +20,8 @@ starting point. Row numbers below point into `docs/experiments.md`.
 | **Deadline** | **2026-09-29** — ~38 days, ~190 submission slots, ~5×30 Kaggle T4-h/week + Colab |
 | ★★★ PROBES READ (row 106, 08-23) | **dcoff 0.920** (DeepCenter dead weight everywhere — drop it) · gapthr20 0.920 (inert) · **divoff 0.906 → div_J_hidden ≈ 0.13 > local 0.09**. Our hidden decomposition: **adj ≈ 0.906 + divisions ≈ 0.014**. Leader closes through divisions alone: 0.906 + 0.1×0.5 = 0.956 ≈ 0.958 |
 | ★ Measured 08-22 (rows 100–102) | replay instrument re-established; divoff probe calibrated; scorer aggregation identified; **memorisation gap measured: ep20 recall 1.0000 on a trained-on volume vs 0.94–0.97 unseen — row 87's detection cap is instrument-conditional** |
-| Fresh intel (row 99) | nothing public above 0.920; the 0.920 author is publicly testing SAFE_DIV widening on his own line and his comment logs an **LB loss** (0.914 at MAX_UM 7.0) — watch `kimi-notebook-v17`, do not copy |
+| ★★★ PHASE-3 PROBE READ (row 108, 08-23) | **pub917_divoff = 0.893 → div_J_917_hidden ≈ 0.24, ~2× ours (0.13).** The orphan-pool architecture carries the big hidden div term — divisions-explain-the-leader has its first direct evidence. **Hybrid prices at ~0.930** (our adj 0.906 + their 0.024) ≈ top-50 bar. The hybrid is the funded priority |
+| Fresh intel (rows 99, 109) | ⚠ **the 0.920 config is now FULLY PUBLIC** (`yunusgmsoy/lb-0-920-...-v17`, titled by its LB, + `kimi-notebook-v17` 106 votes — same knobs as ours, verified by pulling both) → expect rank compression at 0.920; >0.920 requires the hybrid. Author's own SAFE_DIV widening logged an **LB loss** (0.914) — do not copy. Discussions are API-unreachable (KGAT lacks `forums.get`) — census them via browser |
 | ⚠ Standing obligation | **RE-CENSUS THE BOARD WEEKLY.** Rows 87–95 spent a week on our own ideas for +0.000; one census + one port bought +0.005 (rows 96, 98) |
 
 > ## ☠☠☠ THE STACK IS CLOSED — LB 0.912 vs 0.915 (row 90)
@@ -209,11 +210,20 @@ single decorrelated partner grafted onto the public primary destroys recall; a m
 the unmeasured configuration. Gate on the honest instrument (3.1c) before spending a slot.
 
 ### 3.1f Phase 3b — DIVISIONS VIA THE 0.917 FAMILY / CROSS-FAMILY EDGE ENSEMBLE
+
+> ★★★ **RESOLVED IN FAVOUR OF THE HYBRID (row 108, 08-23).** Step 1 below is DONE and the
+> answer is loud: pub917_port = 0.917 (row 107, transfers exactly), pub917_divoff = **0.893**
+> → their hidden div term ≈ **0.24 vs our 0.13**, despite a worse adjacency base (0.893 vs
+> 0.906). **The build is now the graft: their CAND_THR-0.05 orphan pool + mutual-NN/divergence
+> division rule producing forks ON TOP of our 0.920 pipeline's graph.** Additive price
+> ≈ 0.906 + 0.024 = **0.930** ≈ top-50. Constraints that bind the graft: reproduce THEIR pool
+> (row 86: insertion priced on our graph loses), no gate-widening (row 99), LB-gate the result
+> (local <0.007 cannot confirm).
+
 **Not** gate-widening on the pub920 branch — row 99 is an *LB-measured* loss (0.914). Open:
-1. Port the **0.917 family whole** (`reyhanksatria/graph-patches-for-cell-tracking-0-917-lb`;
-   strip `id_no`/`docker_image` before push). Its value is not its 0.917 — it is a different
-   family whose `CAND_THR 0.05` orphan pool feeds the mutual-NN + divergence division rule
-   that starved on our graph (row 97). Measure its div_J on the honest instrument.
+1. ✅ DONE (rows 106–108). Port the **0.917 family whole** (`reyhanksatria/...-0-917-lb`).
+   Its `CAND_THR 0.05` orphan pool feeds the mutual-NN + divergence division rule
+   that starved on our graph (row 97). Measured: div term ≈ 0.24 on hidden.
 2. **Edge-level intersection/union across families** (pub920 / pub162 / 0917) — a different
    operation from row 95's detection-level veto, never tried. Sweep on the honest instrument;
    LB-gate one operating point.
