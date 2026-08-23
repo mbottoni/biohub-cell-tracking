@@ -13,7 +13,7 @@ starting point. Row numbers below point into `docs/experiments.md`.
 |---|---|
 | Confirmed LB | ★ **0.920** (`55678092`) — NEW BEST, rank **149 of 2,633** |
 | Previous best | 0.915 × 2 (`55325321`, `55327761`) |
-| Readable bar | leader **0.958**; #2 0.957; top-10 ≈0.943; top-20 ≈0.938; top-50 0.929; **top-100 0.922** (rows 96, 99) |
+| Readable bar (08-23, row 110) | leader **0.962**; #2 0.959; top-10 0.944; top-20 0.939; top-50 0.932; top-100 0.923; ⚠ **0.920 ≈ rank 230** (was 149 — the public v17 compressed the board); 0.930 ≈ top-60 |
 | What bought it | the **public LB-0.920 line ported verbatim** (row 98) — a different BRANCH: DeepCenter veto ON, ranker/lookahead/edge-TTA OFF, bidir weight 0.30 |
 | Final-2 | **0.920 + one 0.915** |
 | Colab | credits available; no session running |
@@ -222,8 +222,38 @@ the unmeasured configuration. Gate on the honest instrument (3.1c) before spendi
 
 **Not** gate-widening on the pub920 branch — row 99 is an *LB-measured* loss (0.914). Open:
 1. ✅ DONE (rows 106–108). Port the **0.917 family whole** (`reyhanksatria/...-0-917-lb`).
-   Its `CAND_THR 0.05` orphan pool feeds the mutual-NN + divergence division rule
+   Its orphan pool feeds the mutual-NN + divergence division rule
    that starved on our graph (row 97). Measured: div term ≈ 0.24 on hidden.
+
+> ★★ **THE GRAFT RECIPE IS NOW FULLY SPECIFIED (row 110, from kunal's inline LB changelog —
+> `kunaldesale2408/biohub-cell-tracking`, the 0.917-family ancestor).** Reference config:
+> pool = **unclaimed t+1 orphan detections** (full-threshold; the "CAND_THR 0.05" phrasing is
+> xiaolei's M001 snap pool, a separate idea); parent ≤ 12.0 µm, sister ≤ 15.0,
+> existing-child ≤ 10.0; **mutual-nearest-unclaimed-orphan REQUIRED**; **forward divergence
+> REQUIRED** (both daughters single-successor at t+2, grandchild − sister separation
+> ≥ 2.25 µm); DeepCenter safe-div veto `best.pt` EPOCH 2, thr 0.12; one division per parent;
+> caps 0.0076/0.00375. **Field-paid negative control: wide radii WITHOUT the two filters
+> = 0.915→0.914** (consistent with our row 99) — the filters are the mechanism, not the
+> radius. **ILP division weight is INERT (kunal: 0.3–3.0 all 0.915) — never spend there.**
+> A/B variant (backtracking `biohub-general-v6`): in-linker second daughter from the
+> transformer's own edge-prob row, prob ≥ 0.25, sister ≤ 15 µm, 1%/frame cap, plus a
+> continuation guard (drop fork whose second branch dies at t+2 when prob margin ≥ 0.12).
+> **Free LB reads to poll before spending slots: `mtoshidesu/test-notebook-v17-d17ce0`**
+> (wide radii + divergence 1.5 on stock v17) **and `kimi-notebook-v17`.**
+
+3. ★ **NEW (row 110) — fused-detection threshold recalibration (hiranorm, real-LB-logged
+   series at 0.914–0.916):** probability-averaged dual-model detection kills one-sided
+   detections at det 0.96875 ("averaging is not union": 0.99 vs 0.10 → 0.545); lowering the
+   fused threshold to **node-count parity with solo** (their 0.90) scored holdout
+   +0.0185, and 60% of their recoverable edges fail on one-sided detection. Our pub920
+   blends at 0.475/thresholds 0.96875 and the retention floor only *falls back* — same
+   structural loss. Experiment: calibrate `BIOHUB_DET_THRESHOLD` on the blended field to
+   node-count parity locally (reject-only), then LB-gate one point. Attacks the 0.906 adj
+   term; composes with the division graft. ⚠ node-ratio is signed (under-detection bonus)
+   — calibrate to parity, not maximum recall.
+4. (medium effort) Cross-family detector branch: xiaolei's tophat-trained UNet heatmap,
+   mean/std-aligned into the pub920 detection field (M001 evidence: 3 branches 0.917 vs
+   single 0.915; preprocessing diversity ≠ seed diversity).
 2. **Edge-level intersection/union across families** (pub920 / pub162 / 0917) — a different
    operation from row 95's detection-level veto, never tried. Sweep on the honest instrument;
    LB-gate one operating point.
