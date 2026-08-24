@@ -1,17 +1,18 @@
 # scripts/cloud — GPU training on rented/hosted compute
 
-**Placeholder — intentionally empty for now.** Cloud GPU orchestration lives here when we need
-it. Right now detector training runs locally on Apple MPS (`scripts/local/train_detector.py`),
-which is reliable and reaches >98% peak recall in ~4 epochs; cloud is only worth the setup once
-a bigger model or many-fold sweeps outgrow the Mac.
+Cloud GPU orchestration for the full-recipe retrain lives in `colab/` (smoke-verified
+08-24; launch is an operator decision gated by PLAN 3.1e). Local MPS
+(`scripts/local/train_detector.py`) remains the path for the small ctrack detector.
 
 ## Layout
 
 - `colab/` — headless [google-colab-cli](https://github.com/googlecolab/google-colab-cli)
-  orchestration (A100/L4/T4). A first attempt lived here and is preserved in git history
-  (commit before the refactor); it worked end to end but the integration overhead (token
-  handling, dataset persistence) wasn't worth it versus local MPS for the current model size.
-  For interactive Colab, use `notebooks/train_detector_colab.ipynb` instead.
+  orchestration (A100/L4/T4) for the **PLAN 3.1e funded retrain**, smoke-verified 08-24.
+  Read `colab/RETRAIN_PLAN.md` first: data path, GPU choice, cost arithmetic, the
+  checkpoint-beacon stop mechanism (row 91's fix), and the exact launch commands.
+  Supersedes the repo-root `colab/` directory (w3-probe / row-91 era), which is kept as
+  the historical record. For interactive Colab, `notebooks/train_detector_colab.ipynb`
+  still exists but trains the ctrack detector, not the full recipe.
 - `vast/` — [Vast.ai](https://vast.ai) rental orchestration. Not started.
 
 ## When to fill this in

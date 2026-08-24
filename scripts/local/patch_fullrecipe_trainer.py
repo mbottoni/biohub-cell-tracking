@@ -25,7 +25,13 @@ import sys
 from pathlib import Path
 
 ANCHOR_ARGS = '''    parser.add_argument("--single-gpu", dest="data_parallel", action="store_false",'''
-PATCH_ARGS = '''    parser.add_argument("--resume", type=str, default="auto",
+PATCH_ARGS = '''    parser.add_argument("--seed", type=int, default=None,
+                        help="global RNG seed (model init + data order). Upstream train() "
+                             "has a seed param that main() never passes, and it only seeds "
+                             "the DataLoader generator anyway -- decorrelated multi-seed "
+                             "training (PLAN 3.1e: replace BOTH public seeds) needs model "
+                             "init to differ, so we also torch.manual_seed before train()")
+    parser.add_argument("--resume", type=str, default="auto",
                         help="'auto' resumes from checkpoint_last.pth in the output dir if "
                              "present; 'none' starts fresh")
     parser.add_argument("--max-minutes", type=float, default=None,
@@ -44,9 +50,22 @@ PATCH_SIG = '''    max_iters: int | None = None,
 
 ANCHOR_CALL = '''            max_iters=args.max_iters,'''
 PATCH_CALL = '''            max_iters=args.max_iters,
+            seed=args.seed,
             resume=args.resume,
             max_minutes=args.max_minutes,
             patience=args.patience,'''
+
+# Global seeding must happen BEFORE train() constructs the model: the upstream
+# seed param only feeds the DataLoader generator, which decorrelates data order
+# but NOT initialisation. Seed at parse time so everything downstream differs.
+ANCHOR_SEED = '''    args = parser.parse_args()'''
+PATCH_SEED = '''    args = parser.parse_args()
+    if args.seed is not None:
+        import random as _random
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed % 2**32)
+        _random.seed(args.seed)
+        print(f"seeded: torch/np/random <- {args.seed}", flush=True)'''
 
 ANCHOR_LOOP = '''    best_score = 0.0
     save_path = output_dir / "edge_predictor_best.pth"
@@ -160,6 +179,7 @@ def patch(path: Path) -> None:
     for name, old, new in [("args", ANCHOR_ARGS, PATCH_ARGS),
                            ("sig", ANCHOR_SIG, PATCH_SIG),
                            ("call", ANCHOR_CALL, PATCH_CALL),
+                           ("seed", ANCHOR_SEED, PATCH_SEED),
                            ("loop", ANCHOR_LOOP, PATCH_LOOP),
                            ("save", ANCHOR_SAVE, PATCH_SAVE)]:
         n = s.count(old)
@@ -167,7 +187,7 @@ def patch(path: Path) -> None:
         s = s.replace(old, new, 1)
     compile(s, str(path), "exec")
     path.write_text(s)
-    print(f"patched {path} (5/5 anchors, compile OK)")
+    print(f"patched {path} (6/6 anchors, compile OK)")
 
 
 if __name__ == "__main__":
