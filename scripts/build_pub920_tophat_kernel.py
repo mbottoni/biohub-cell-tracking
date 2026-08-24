@@ -38,11 +38,22 @@ CELL_BLOCK = f'''
 
 # ===== TOPHAT CONFIRM RESCUE (row 110 idea 4): independent-model detection rescue =====
 import base64 as _th_b64
-os.environ.setdefault("BIOHUB_M001_WEIGHTS", "/kaggle/input/biohub-unet3d-weights/unet3d_traintophat.pt")
+import glob as _th_glob
+if "BIOHUB_M001_WEIGHTS" not in os.environ:
+    # this image mounts datasets under /kaggle/input/datasets/<user>/<slug>/ (v1 ERROR was
+    # the bare-slug path); probe the known layouts then glob as a last resort.
+    _th_cands = [
+        "/kaggle/input/datasets/xiaoleilian/biohub-unet3d-weights/unet3d_traintophat.pt",
+        "/kaggle/input/biohub-unet3d-weights/unet3d_traintophat.pt",
+    ] + _th_glob.glob("/kaggle/input/**/unet3d_traintophat.pt", recursive=True)
+    _th_hit = next((p for p in _th_cands if Path(p).exists()), None)
+    assert _th_hit is not None, f"tophat weights not found; /kaggle/input: {{_th_glob.glob('/kaggle/input/*/*')}}"
+    os.environ["BIOHUB_M001_WEIGHTS"] = _th_hit
 os.environ["BIOHUB_DET_RESCUE_ENABLE"] = "1"
 os.environ["BIOHUB_DET_RESCUE_THRESHOLD"] = "0.90"
 os.environ["BIOHUB_DET_CONFIRM_UM"] = "3.0"
 assert Path(os.environ["BIOHUB_M001_WEIGHTS"]).exists(), os.environ["BIOHUB_M001_WEIGHTS"]
+print("m001 weights:", os.environ["BIOHUB_M001_WEIGHTS"])
 
 _M001_MODULE_B64 = "{mod_b64}"
 (REPO_DIR / "scripts" / "m001_confirm.py").write_text(_th_b64.b64decode(_M001_MODULE_B64).decode())
