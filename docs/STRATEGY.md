@@ -4168,3 +4168,49 @@ also the max-expected-placement plan if first does not happen.
 - Data staged at `/Volumes/extSSD/kaggle/biohub/{raw,gt}/train`. `ctrack` shipped to kernels via the
   `ctrack-src` dataset; detector weights via `biohub-detector-weights`.
 - 5 submissions/day. Calibrate against the ~0.04 offset before spending one.
+
+## 53. ★★★ THE REFRAME — the division term is the game, and we closed it with a broken ruler (2026-08-24)
+
+Supersedes the route-priority ordering of §52 (its endgame frame stands; its route list is
+re-priced here). Evidence: rows 106–115.
+
+**Where we stand after the div917 graft (row 114): LB 0.923 = adjacency 0.906 + divisions
+0.017.** Rank ~200/2,685 and sinking ~+0.003/day at this altitude because the public v17
+notebook commoditised 0.920 (row 109). Leader 0.962 and still climbing.
+
+**Fact 1 — stages 2–4 of the pipeline are DRY.** Association (bidir plateau, ranker,
+lookahead, trackastra), assignment (ILP weights at lineage optimum, division weight inert
+0.3–3.0), and graph repair (gap radii, rescue caps, dt≥2) are all measured to ±0.002 by
+us or by the field's own logged LB reads. The public pack grinds these stages; that is
+why it compresses at 0.920–0.926.
+
+**Fact 2 — every post-processing route into the division term is now measured dead.**
+Gate widening (row 99, LB), classifier-on-our-graph as priced pre-correction (row 86,
+local), prob-gated in-linker SD2 (row 114, local flat), link-stealing (row 115, local,
+monotone loss — true divisions live exactly where link confidence is low). The graft
+(row 114) captured what post-processing could: +0.003 of the +0.010 gap to the 917
+family; the rest is pool starvation that post-processing cannot fix (row 115).
+
+**Fact 3 — the instrument that closed the LEARNED division route was biased, and we can
+prove it.** Row 86 killed the trained division classifier using local scoring. Row 106
+then measured the local instrument under-pricing divisions ~1.5× against hidden (div_J
+0.09 local vs 0.13 hidden on the same config). Two subsequent hidden reads confirm the
+hidden term is more generous than local (917 family 0.24 hidden; our graft transferring
+at all). **Row 86's verdict is instrument-conditional and must be re-run as an LB probe.**
+
+**Fact 4 — the metric structurally subsidises division recall.** Fork FPs are only
+chargeable against the ~3.6% annotated cells (row 84: 1,000 random forks ≈ 1 penalty
+point). A ranked-proposal system can operate at high recall almost free. Signal exists:
+appearance ROC-AUC 0.845 with 32 crude features (row 72); a trained 3D-CNN patch ranker
+should clear that comfortably.
+
+**The leader model that follows (§52 updated):** 0.962 ≈ generalising detector
+(adj 0.91–0.92; the public checkpoints memorised train, row 100) + a TRAINED division
+model (div_J 0.45–0.55 → +0.03–0.05) + possibly node-count calibration (the signed
+node-ratio bonus, unexploited by us, ≈+0.003). No public notebook has the middle piece.
+
+**⇒ Priority inversion: the learned division pipeline is the main line; everything else
+is support.** The concrete plan lives in PLAN §3 (three horizons). What §52 called "the
+funded retrain" survives as the parallel slow track; the cross-family ensemble and
+tophat rescue (both in local gates as this is written) are the last cheap picks in the
+dry stages.

@@ -1,4 +1,4 @@
-# PLAN — current position and next steps (2026-08-22, ENDGAME — §52)
+# PLAN — current position and next steps (2026-08-24, THREE HORIZONS — §53)
 
 **Read this first.** It is the only document you need to act. `docs/STRATEGY.md` and
 `docs/experiments.md` are the archive: consult them to check whether an idea is already
@@ -120,7 +120,65 @@ Three facts establish the route (all measured, all free):
 
 ---
 
-## 3. Next steps — THE ENDGAME PLAN (§52)
+## 3. Next steps — THE THREE-HORIZON PLAN (§53, 2026-08-24)
+
+> Supersedes the §52 route ordering below (kept as archive). Read §53 in STRATEGY for
+> the evidence. One sentence of context: **we are 0.923 = adj 0.906 + div 0.017, rank
+> ~200 and sinking ~0.003/day as the board compresses; stages 2–4 of the pipeline are
+> measured dry; the division term is the only +0.03-class headroom and we previously
+> closed it with an instrument later proven biased (row 106 vs row 86).**
+
+### H1 — TODAY/TOMORROW: cash the last cheap picks (ceiling ≈ +0.008 combined)
+1. **Tophat confirmation rescue** — kernel `pub920_div917_tophat` built; 6-volume local
+   gate IN FLIGHT. If not rejected → submit (one change vs 0.923). Ceiling ~+0.003.
+2. **Cross-family edge ensemble** — local 917 replay IN FLIGHT
+   (`scripts/local/p917_local_run.py`, row 115 unlocked it); then
+   `scripts/local/merge_edges_exp.py` scores 4 strategies (transplant_divs / union_add /
+   drop_leaf / intersect). Best non-rejected variant → build kernel → submit.
+   Ceiling ~+0.005.
+3. **Node-count calibration probe** — the node-ratio penalty is SIGNED (hiranorm
+   measured under-detection bonus +0.003, row 110). We have never tuned toward the
+   calibrated count. One-knob probe AFTER 1–2 read out; costs one slot.
+4. Riders for any submission: boundary-track exemption (row 110; ≤+0.0003, free).
+
+### H2 — DAYS 2–5: THE LEARNED DIVISION PIPELINE (the main line, +0.02–0.04)
+Re-opens row 86 as an LB question (the local verdict was made with a ruler that
+under-prices divisions ~1.5×, row 106). Build spec:
+1. **Proposer (high recall, cheap):** candidate triplets (parent, d1, d2) from our final
+   graph — single-child sources × ALL nodes within 15 µm at t+1 (claimed or not; no
+   filters beyond geometry). Target: ≥80% of GT divisions covered; volume is fine
+   because fork FPs are ~free outside the 3.6% annotated set (row 84).
+2. **Ranker (the new capability):** small 3D CNN on image patches around (parent, d1,
+   d2) + the row-72 features. Train on the 151 GT divisions + hard negatives mined from
+   proposer output; volume-grouped CV (the row-72 protocol). Success bar: beat the
+   geometric filters' precision at 2× their recall on held-out volumes.
+3. **Operating point by LB PROBE, not local score:** submit two points (conservative /
+   aggressive) as pre-registered probes; use the row-103 inversion to read div_J_hidden
+   directly. The local scorer may only REJECT (bias direction is known: it UNDER-prices).
+4. Timeline: proposer + training data day 1, ranker day 2, first LB probe day 3.
+
+### H3 — PARALLEL SLOW TRACKS (operator decisions needed)
+1. **Funded retrain** (3.1e below, ~$160–200 Colab): the only adjacency lever
+   (+~0.010); the public checkpoints memorised train (row 100). START IF BUDGET
+   APPROVED — it has days of wall-clock.
+2. **Team merge**: the single biggest win-probability lever. We bring 0.923 + the only
+   published-quality hidden decompositions in the competition; a partner brings a
+   trained model we lack. Merger deadline is the binding constraint — check it, decide
+   within 2 weeks.
+3. **Final-2 hygiene** (standing): one safe config (today: div917 0.923) + one
+   aggressive; never two experiments. Private-LB split means probes must not chase
+   public noise.
+
+### Standing rules (unchanged, they keep paying)
+- Local gates may REJECT, never CONFIRM (<0.007 uninterpretable; div term biased low).
+- One mechanism per submission; pre-register every read before it scores.
+- Weekly board census (rows 96/98/109/110: census beat invention twice).
+- Register → commit → push before moving on.
+
+---
+
+## 3-ARCHIVE. The §52 endgame plan (SUPERSEDED by §53 above; kept for the sub-section
+specs still referenced: 3.1e retrain spec, 3.1f graft recipe, 3.1g census)
 
 **The gap to first is +0.038 in ~38 days; there is time and budget to fund exactly ONE
 structural play.** §52.2 argues (argument, not measurement) that the three biggest closures —
