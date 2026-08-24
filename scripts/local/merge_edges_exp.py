@@ -46,7 +46,9 @@ def load(path):
         for r in csv.DictReader(f):
             ds = r["dataset"]
             if r["row_type"] == "node":
-                nodes[ds][int(r["node_id"])] = (int(r["t"]), int(r["z"]), int(r["y"]), int(r["x"]))
+                # 917-family submissions carry refined float centroids; base is int.
+                nodes[ds][int(r["node_id"])] = (
+                    int(float(r["t"])), float(r["z"]), float(r["y"]), float(r["x"]))
             else:
                 edges[ds].append((int(r["source_id"]), int(r["target_id"])))
     return nodes, edges
@@ -136,9 +138,11 @@ def write_submission(path, all_nodes, all_edges):
         w = csv.writer(f)
         w.writerow(["id", "dataset", "row_type", "node_id", "t", "z", "y", "x", "source_id", "target_id"])
         rid = 0
+        def fmt(v):
+            return int(v) if float(v).is_integer() else v
         for ds in sorted(all_nodes):
             for nid, (t, z, y, x) in sorted(all_nodes[ds].items()):
-                w.writerow([rid, ds, "node", nid, t, z, y, x, -1, -1])
+                w.writerow([rid, ds, "node", nid, t, fmt(z), fmt(y), fmt(x), -1, -1])
                 rid += 1
             for s, t in all_edges[ds]:
                 w.writerow([rid, ds, "edge", -1, -1, -1, -1, -1, s, t])
