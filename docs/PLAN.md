@@ -11,11 +11,11 @@ starting point. Row numbers below point into `docs/experiments.md`.
 
 | | value |
 |---|---|
-| Confirmed LB | ★ **0.920** (`55678092`) — NEW BEST, rank **149 of 2,633** |
+| Confirmed LB | ★ **0.923** (`55720749`, div917 graft, row 114) — rank ~202 of 2,685; previous 0.920 (`55678092`) |
 | Previous best | 0.915 × 2 (`55325321`, `55327761`) |
 | Readable bar (08-23, row 110) | leader **0.962**; #2 0.959; top-10 0.944; top-20 0.939; top-50 0.932; top-100 0.923; ⚠ **0.920 ≈ rank 230** (was 149 — the public v17 compressed the board); 0.930 ≈ top-60 |
 | What bought it | the **public LB-0.920 line ported verbatim** (row 98) — a different BRANCH: DeepCenter veto ON, ranker/lookahead/edge-TTA OFF, bidir weight 0.30 |
-| Final-2 | **0.920 + one 0.915** |
+| Final-2 | **0.923 (`55720749`) + 0.920 (`55678092`)** |
 | Colab | credits available; no session running |
 | **Deadline** | **2026-09-29** — ~38 days, ~190 submission slots, ~5×30 Kaggle T4-h/week + Colab |
 | ★★★ PROBES READ (row 106, 08-23) | **dcoff 0.920** (DeepCenter dead weight everywhere — drop it) · gapthr20 0.920 (inert) · **divoff 0.906 → div_J_hidden ≈ 0.13 > local 0.09**. Our hidden decomposition: **adj ≈ 0.906 + divisions ≈ 0.014**. Leader closes through divisions alone: 0.906 + 0.1×0.5 = 0.956 ≈ 0.958 |
