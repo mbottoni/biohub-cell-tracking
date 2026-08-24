@@ -54,11 +54,13 @@ from ctrack.data.geff import load_geff  # noqa: E402
 
 S = ("/private/tmp/claude-501/-Users-maruanottoni-home-kaggle-biohub-cell-tracking/"
      "746fd85d-a0d8-47d3-b5cf-be4bb88f1e9a/scratchpad")
-N = ("/private/tmp/claude-501/-Users-maruanottoni-home-kaggle-biohub-cell-tracking/"
-     "2ad68fab-98b7-4dc4-b103-ce7227df708f/scratchpad")
+N = os.environ.get(  # artifacts dir; original session scratchpad was cleaned (08-24)
+    "DIVDET_OUT",
+    "/private/tmp/claude-501/-Users-maruanottoni-home-kaggle-biohub-cell-tracking/"
+    "2ad68fab-98b7-4dc4-b103-ce7227df708f/scratchpad")
 RAW = "/Volumes/extSSD/kaggle/biohub/raw/train"
 GT = "/Volumes/extSSD/kaggle/biohub/gt/train"
-SUB = f"{S}/runs/reverify_stack/submission.csv"
+SUB = os.environ.get("DIVDET_SUB", f"{S}/runs/reverify_stack/submission.csv")
 EVALSET = f"{S}/evalset24"
 
 RZ, RY, RX = 2, 12, 12        # crop half-extents (voxels)
