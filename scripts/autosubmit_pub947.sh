@@ -43,7 +43,9 @@ while :; do
     if [ ! -f "$STATE/$k.pushed" ]; then
       out=$(cd "$ROOT/kernels/$k" && "$K" kernels push -p . 2>&1)
       if echo "$out" | grep -q "successfully pushed"; then
-        log "$k: PUSHED ($out)"; touch "$STATE/$k.pushed"
+        ver=$(echo "$out" | sed -n 's/.*Kernel version \([0-9][0-9]*\).*/\1/p'); : "${ver:=1}"
+        echo "$ver" > "$STATE/$k.version"
+        log "$k: PUSHED v$ver ($out)"; touch "$STATE/$k.pushed"
       else
         log "$k: push blocked: $out"
       fi
@@ -53,7 +55,8 @@ while :; do
     case "$st" in
       *COMPLETE*)
         log "$k: COMPLETE -> submitting"
-        sub=$("$K" competitions submit "$COMP" -k "$ref" -v 1 -f submission.csv -m "$(msg_for "$k")" 2>&1)
+        v=$(cat "$STATE/$k.version" 2>/dev/null || echo 1)
+        sub=$("$K" competitions submit "$COMP" -k "$ref" -v "$v" -f submission.csv -m "$(msg_for "$k")" 2>&1)
         log "$k: submit result: $sub"
         if echo "$sub" | grep -qi "error\|400\|denied"; then touch "$STATE/$k.failed"; else touch "$STATE/$k.submitted"; fi
         ;;
