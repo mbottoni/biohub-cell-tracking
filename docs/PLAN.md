@@ -1,4 +1,46 @@
-# PLAN — current position and next steps (2026-08-24, THREE HORIZONS — §53)
+# PLAN — current position and next steps (2026-09-14, THE 0.947 RESET)
+
+> **This header supersedes everything below it** (kept per the corrections rule; the old
+> §1–§3 describe the pre-0.947 world). Evidence: rows 120–126.
+
+## 0. Where we stand (2026-09-14 night)
+
+| | value |
+|---|---|
+| Confirmed LB | ★ **0.947** (`56232696`, pub947_port, row 125) — verbatim port of the public 0.947 line (reyhanksatria progression, zhincez runnable variant), SAME pilkwang weights as before |
+| ⚠ Shelf warning | **450 teams tie at exactly 0.947**; we are at the back of the tie block. +0.003 clears ~500 teams. Cuts: top-50 0.950 · top-25 0.954 · top-10 0.958 · leader 0.970 |
+| Final-2 | pub947_port 0.947 (safe) + TBD aggressive |
+| Deadline | **2026-09-29** (~15 days). Merger deadline: CHECK IT — likely ~09-22 |
+| Closed 09-14 (rows 124/126) | one-knob perimeter of 0.947: DC thr 0.15 (−0.001), relink bonus 6.0 (−0.001, row-73 lever still taxed), global div cap ×2 (flat — **cap not binding on hidden**, diverges from local row 111) |
+| Dead as of 09-14 | the 3.1e retrain (obsolete: 0.947 extracts +0.024 from the same detector, row 122); ALL our pre-0.947 postproc division mechanisms (rows 114–119, different substrate anyway) |
+| Key structural read (row 126) | capup FLAT + dcthr NEGATIVE ⇒ if hidden holds more real divisions, they are blocked by **confirmation precision**, not the cap ⇒ an added independent confirm signal + cap raise is the funded division play |
+
+## 0.1 The plan (in order)
+
+1. **divoff probe on the 0.947 base** (1 slot) — calibrated inversion (rows 100/103/106)
+   reads div_J_hidden of the 0.947 config; decides whether the 0.023 gap to the leader is
+   edges or divisions BEFORE either lane is funded.
+2. **pub947 local replay** on the M1 (adapt `pub162_local_replay.py`; own `BIOHUB_PRED_CACHE`)
+   — reject-gating for everything below. Local may REJECT, never CONFIRM.
+3. **Divisions lane (if probe says divisions):** appearance-confirm stack on THEIR candidate
+   pool — div CNN (AUC 0.863, row 116 rebuild) + volume-drop signature (row 122 side-insight:
+   −27% half-max volume, onset −2 frames, peak holds) as an added gate, WITH the cap raise
+   (the row-126 2-knob combo). Operating point by LB probe.
+4. **Edges lane (if probe says edges):** hiranorm node-count-parity DET calibration (row 110),
+   relink bonus INTERMEDIATE values (2–3) only if replay-gated, D4-TTA blend-weight micro-grid.
+5. **Team merge outreach to reyhanksatria** (operator decision, time-critical): they hold the
+   frontier and are publicly recruiting; our dowry = probe decompositions + replay instrument +
+   the two appearance division signals. Also: tell zhincez their public copy is mount-fragile
+   (row 123b) — goodwill + correctness.
+6. **Freeze from ~09-22** (3.1h unchanged): final-2 hygiene; the 450-tie shelf will scatter on
+   the private split — banked robustness beats last-week gambles.
+
+Standing rules unchanged: one mechanism per submission · pre-register every read ·
+local gates reject-only · register → commit → push · weekly census (it bought +0.024 today).
+
+---
+
+# ARCHIVE — pre-0.947 plan below (2026-08-24, THREE HORIZONS — §53)
 
 **Read this first.** It is the only document you need to act. `docs/STRATEGY.md` and
 `docs/experiments.md` are the archive: consult them to check whether an idea is already
