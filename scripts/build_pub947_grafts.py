@@ -28,6 +28,9 @@ DIVNET_BLOCK = r'''
 # Architecture reconstructed from the checkpoint state dict (strict-load verified);
 # preprocessing pinned by the embedded config + local GT discrimination (AUC 0.78,
 # marker-last / mean-pool-4 / per-crop percentile norm / InstanceNorm3d(affine)).
+import torch
+import numpy as np
+
 DIVNET_VETO_FRAC = float(os.environ.get('BIOHUB_DIVNET_VETO_FRAC', '0.40'))
 DIVNET_REQUIRE = os.environ.get('BIOHUB_DIVNET_REQUIRE', '1') != '0'
 
