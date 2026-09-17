@@ -75,7 +75,7 @@ def main():
                  if cell['cell_type'] == 'code' for c in cell['source'])
     assert s2.count('_biohub_ds(') == 1 + 7, s2.count('_biohub_ds(')  # def + 7 call sites
     for old, new in knob_edits:
-        assert old not in s2 and s2.count(new) >= 1
+        assert s2.count(new) >= 1 and (old in new or old not in s2)
     print(f'{name}: hardened base + {len(knob_edits)} knob edit(s); post-conditions pass')
 
 
