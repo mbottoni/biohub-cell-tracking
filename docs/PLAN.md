@@ -7,13 +7,18 @@
 
 | | value |
 |---|---|
-| Confirmed LB | ★ **0.947** (`56232696`, pub947_port, row 125) — verbatim port of the public 0.947 line (reyhanksatria progression, zhincez runnable variant), SAME pilkwang weights as before |
+| Confirmed LB | ★ **0.948** (`56313419`, pub947_densad, row 131) — density-adaptive motion-relink on the 0.947 base; FIRST above-shelf config. Previous: 0.947 port (`56232696`, row 125) |
 | ⚠ Shelf warning | **450 teams tie at exactly 0.947**; we are at the back of the tie block. +0.003 clears ~500 teams. Cuts: top-50 0.950 · top-25 0.954 · top-10 0.958 · leader 0.970 |
-| Final-2 | pub947_port 0.947 (safe) + TBD aggressive |
+| Final-2 | **densad 0.948 (safe) + TBD aggressive** |
 | Deadline | **2026-09-29** (~15 days). Merger deadline: CHECK IT — likely ~09-22 |
 | Closed 09-14 (rows 124/126) | one-knob perimeter of 0.947: DC thr 0.15 (−0.001), relink bonus 6.0 (−0.001, row-73 lever still taxed), global div cap ×2 (flat — **cap not binding on hidden**, diverges from local row 111) |
 | Dead as of 09-14 | the 3.1e retrain (obsolete: 0.947 extracts +0.024 from the same detector, row 122); ALL our pre-0.947 postproc division mechanisms (rows 114–119, different substrate anyway) |
 | Key structural read (row 126) | capup FLAT + dcthr NEGATIVE ⇒ if hidden holds more real divisions, they are blocked by **confirmation precision**, not the cap ⇒ an added independent confirm signal + cap raise is the funded division play |
+
+## 0.0b Wave-2 verdicts (09-18, rows 129–132) — the plan below is REWEIGHTED by these
+- **div_J_hidden(0.947 line) ≈ 0.35** (divoff 0.911): division term near-saturated; adj ≈ 0.912; **the 0.023 gap to the leader is EDGES** — division work closed on every substrate (divnet combo 0.944 confirmed).
+- **densad 0.948 = new best**: density-conditioned relink is real (+0.001); uniform was −0.001. Edge mechanisms respond to per-volume conditioning — the general lesson for the edges lane.
+- haideptry branch debunked (0.945); their DivNet is dead code (row 128 forensics).
 
 ## 0.1 The plan (in order)
 
