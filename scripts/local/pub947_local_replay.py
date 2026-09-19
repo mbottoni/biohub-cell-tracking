@@ -85,11 +85,16 @@ assert TEST_DIR.is_dir() and list(TEST_DIR.glob("*.zarr")), f"[local] no volumes
 _test_link.symlink_to(TEST_DIR)
 print(f"[local] mirror ok; test -> {TEST_DIR} ({len(list(TEST_DIR.glob('*.zarr')))} volumes)", flush=True)
 
-RUN = S / "runs" / variant
+# Run dirs live on the HOME volume (APFS): the pipeline's zarr/.geff writer uses
+# os.link, which the exFAT SSD rejects (Errno 45, caught by smoke1). The mirror and
+# pred caches (plain writes) stay on the SSD; run dirs are cheap to regenerate.
+RUNS_ROOT = Path(os.environ.get("BIOHUB_REPLAY_RUNS", str(Path.home() / "biohub_replay947_runs")))
+RUN = RUNS_ROOT / variant
 RUN.mkdir(parents=True, exist_ok=True)
 os.chdir(RUN)
 print(f"[local] pub947 variant={variant} nb={NB.name} run_dir={RUN}", flush=True)
 
+os.environ["BIOHUB_LOCAL_RUN_DIR"] = str(RUN)  # cache wrapper: guard-line replay target
 os.environ.setdefault("BIOHUB_PRED_CACHE", str(S / "cache_densad"))
 os.environ.setdefault("BIOHUB_VALIDATOR_ENABLE", "0")  # score locally with the official scorer instead
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
@@ -113,17 +118,41 @@ DEV_NEW = '''    if torch.cuda.is_available():
 CACHE_DEF_OLD = "def predict_video("
 CACHE_DEF_NEW = "def _predict_video_uncached("
 CACHE_MAIN_ANCHOR = "def main() -> None:"
-CACHE_WRAPPER = '''def predict_video(model, ds_path, device, **kw):
-    import os as _os, pickle as _pickle
+CACHE_WRAPPER = '''def _guard_files():
+    import os as _os
+    _run = Path(_os.environ.get("BIOHUB_LOCAL_RUN_DIR", "."))
+    return sorted(_run.glob("retention_guard_*.jsonl")), _run
+
+
+def predict_video(model, ds_path, device, **kw):
+    import os as _os, pickle as _pickle, json as _json
     _c = _os.environ.get("BIOHUB_PRED_CACHE", "")
     _f = Path(_c) / (ds_path.stem + ".pkl") if _c else None
     if _f is not None and _f.exists():
-        print(f"[cache] loaded {ds_path.stem}", flush=True)
-        return _pickle.loads(_f.read_bytes())
+        _payload = _pickle.loads(_f.read_bytes())
+        if isinstance(_payload, dict):
+            # replay this volume's frame-retention diagnostics (the notebook
+            # hard-gates on their completeness; they are emitted per-frame
+            # inside inference, which the cache hit just skipped)
+            _, _run = _guard_files()
+            _shard = _os.environ.get("BIOHUB_GPU_SHARD", "single").replace("/", "_")
+            with (_run / f"retention_guard_{_shard}.jsonl").open("a") as _h:
+                for _line in _payload["guard"]:
+                    _h.write(_line + "\\n")
+            print(f"[cache] loaded {ds_path.stem} (+{len(_payload['guard'])} guard lines)", flush=True)
+            return _payload["ce"]
+        print(f"[cache] loaded {ds_path.stem} (LEGACY pkl, no guard lines)", flush=True)
+        return _payload
     _r = _predict_video_uncached(model, ds_path, device, **kw)
     if _f is not None:
-        _f.write_bytes(_pickle.dumps(tuple(_r)))
-        print(f"[cache] saved {ds_path.stem}", flush=True)
+        _lines = []
+        _gfs, _run = _guard_files()
+        for _p in _gfs:
+            for _line in _p.read_text().splitlines():
+                if _line.strip() and _json.loads(_line).get("dataset") == ds_path.stem:
+                    _lines.append(_line)
+        _f.write_bytes(_pickle.dumps({"ce": tuple(_r), "guard": _lines}))
+        print(f"[cache] saved {ds_path.stem} (+{len(_lines)} guard lines)", flush=True)
     return _r
 
 
@@ -132,7 +161,7 @@ def main() -> None:'''
 # Re-indented to the anchor's depth at inject time (T7).
 HOOK_LINES = '''_lp = REPO_DIR / "scripts" / "predict_unet_transformer.py"
 _lt = _lp.read_text()
-if "BIOHUB_PRED_CACHE" in _lt:
+if "BIOHUB_LOCAL_RUN_DIR" in _lt:
     print("[local] staged repo already patched (resume)", flush=True)
 else:
     for _lo, _ln, _tag in ((DEV_OLD, DEV_NEW, "device"),
