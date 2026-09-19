@@ -9,7 +9,7 @@
 |---|---|
 | Confirmed LB | ★ **0.948** (`56313419`, pub947_densad, row 131) — density-adaptive motion-relink on the 0.947 base; FIRST above-shelf config. Previous: 0.947 port (`56232696`, row 125) |
 | ⚠ Shelf warning | ~~450-team 0.947 tie~~ **DISSOLVED (row 139, 09-19 census): board is now a gradient — rank-100 0.949 · rank-150 0.948 · rank-200 0.947. We are 0.948 ≈ rank 138 and sinking ~3 ranks/day.** Cuts: top-50 0.953 · top-25 0.957 · top-10 0.964 · leader 0.974 |
-| Final-2 | **densad 0.948 (safe) + TBD aggressive** (consensus `56345198` pending decides it) |
+| Final-2 | **densad 0.948 (safe) + TBD aggressive** — ⚠ consensus `56345198` is a densad DUPLICATE (row 140: vote never fired), it cannot fill the aggressive slot |
 | Deadline | **2026-09-29**. Merger/new-entrant deadline **CONFIRMED via API: 2026-09-22 23:59 UTC** (row 139) |
 | Closed 09-14 (rows 124/126) | one-knob perimeter of 0.947: DC thr 0.15 (−0.001), relink bonus 6.0 (−0.001, row-73 lever still taxed), global div cap ×2 (flat — **cap not binding on hidden**, diverges from local row 111) |
 | Dead as of 09-14 | the 3.1e retrain (obsolete: 0.947 extracts +0.024 from the same detector, row 122); ALL our pre-0.947 postproc division mechanisms (rows 114–119, different substrate anyway) |
