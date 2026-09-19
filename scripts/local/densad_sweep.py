@@ -60,6 +60,17 @@ GRIDS = {
         ("bound_low_100",  {"BIOHUB_DENSAD_LOW_MAX": "100"}),
         ("bound_low_150",  {"BIOHUB_DENSAD_LOW_MAX": "150"}),
     ],
+    # Core grid found two live, disjoint-volume levers (row 146): mid_bonus↑, low_tight↓.
+    # Extend each to its edge, then test the combo (should be ~additive: low group = 2
+    # volumes, middle = 4, non-overlapping). The combo is the actual LB-slot candidate.
+    "combo": [
+        ("mid_bonus_10p0", {"BIOHUB_DENSAD_MID_BONUS": "10.0"}),
+        ("mid_bonus_12p0", {"BIOHUB_DENSAD_MID_BONUS": "12.0"}),
+        ("low_tight_6p0",  {"BIOHUB_DENSAD_LOW_TIGHT": "6.0"}),
+        ("low_tight_5p75", {"BIOHUB_DENSAD_LOW_TIGHT": "5.75"}),
+        ("combo_mb8_lt65", {"BIOHUB_DENSAD_MID_BONUS": "8.0", "BIOHUB_DENSAD_LOW_TIGHT": "6.5"}),
+        ("combo_mb10_lt6", {"BIOHUB_DENSAD_MID_BONUS": "10.0", "BIOHUB_DENSAD_LOW_TIGHT": "6.0"}),
+    ],
 }
 
 SUMMARY_RE = re.compile(
