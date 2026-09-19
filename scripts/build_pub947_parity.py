@@ -54,7 +54,11 @@ if _parity_on and primary_candidates > 0 and blended_candidates < primary_candid
     import math as _p_math
     _p_shift = _p_math.log(_p_thr0 / (1.0 - _p_thr0)) - _p_math.log(_p_lo / (1.0 - _p_lo))
     det_logits[f] = blended_det + _p_shift
-    use_primary_detection = False
+    # NB: use_primary_detection is intentionally NOT reassigned here. It stays the
+    # retention guard's own cliff decision so the guard record (logged below) remains
+    # consistent with the notebook's downstream consistency validator, which recomputes
+    # expected_use_primary = (primary>0 and retention<0.9). Parity is a transparent
+    # re-thresholding layered ON the blend; it does not claim to be the guard's decision.
     _p_after = len(_detect_cells_pooled(det_logits[f][0], int(frame_indices[f]), _p_thr0, pool_k))
     print('BIOHUB_PARITY ' + json.dumps({'dataset': ds_path.stem, 'frame': int(frame_indices[f]), 'primary': int(primary_candidates), 'blended': int(blended_candidates), 'tstar': round(_p_lo, 5), 'after': int(_p_after)}, sort_keys = True), flush = True)
 else:
