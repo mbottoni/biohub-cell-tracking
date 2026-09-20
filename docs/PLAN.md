@@ -1,3 +1,70 @@
+# PLAN — current position and next steps (2026-09-20, THE ROUTE AUDIT)
+
+> **This header supersedes everything below it.** Evidence: rows 151–154, STRATEGY §54.
+> The 09-14 header that used to sit here is kept unchanged directly beneath.
+
+## 0-2026-09-20. Where we stand
+
+| | value |
+|---|---|
+| Confirmed LB | **0.948** (`56313419` densad) — rank **153 / 3,753**, sinking ~3 ranks/day |
+| Pending | `56398358` densad_tuned — ⚠ the two local instruments now DISAGREE IN SIGN on it (holdout6 +0.0013, visible-4 −0.0008, row 154); both sub-floor |
+| Board | rank 100 = 0.950 · 50 = 0.954 · 25 = 0.958 · 10 = 0.964 · leader 0.974. 686 teams at 0.947, 84 at 0.948 |
+| Deadlines | **merger 09-22 23:59 UTC** · competition 09-29 23:59 UTC |
+| Real budget (row 154 / budget audit) | commit run **~1 h 45** (NOT the documented 21 min) · hidden scoring **7–12 h** (NOT 4–6 h) · push→read 9–14 h ⇒ **GPU quota, not the 5/day cap, limits us to ~25–30 more LB reads** |
+
+## 0-2026-09-20.1 The finding that governs everything
+
+**The loss is mis-labelled.** §18's "association is 76% of remaining loss, worth +0.077" survives
+as accounting and dies as a route: 58 of 69 association-FN edges have a mis-localised endpoint
+with a rival node within 9 µm, and the GT match *hops* between two real predicted tracks. A
+perfect linker on our node set realistically buys **+0.0066**, not +0.055 (row 151).
+**And the obvious fix is measured dead:** a GT-omniscient z-snap oracle changes TP/FP/FN in
+**zero** volumes, because the matcher's Hungarian is cardinality-dominated (row 153). Residual
+*predicts* error; fixing it does not *fix* error. Read §54 before proposing anything here.
+
+## 0-2026-09-20.2 What was audited and closed (row 153)
+
+Sixteen mechanisms, two independent adversarial skeptics each, **fifteen dead** — five by
+measurement taken during the audit at zero slot cost: z-flip/16-view TTA (z-oracle +0.0000) ·
+float/sub-voxel coordinates (oracle 0.0000) · two-window detection averaging (residuals
+**worse**) · feifanque tracklet+endpoint repair, the census's top port candidate (**0
+interventions of 20,931 candidates**) · sub-threshold candidates into the relinker (0.9309 vs
+0.9315). Also answered without a slot: **`OUTPUT_MOTION_RELINK=0` loses** (adj 0.93335 vs
+0.93436) — PLAN 3.3's "built Aug-04, never run" is closed (row 152).
+
+## 0-2026-09-20.3 The plan
+
+1. **MERGE — the only lever above +0.005, and it expires 09-22 23:59 UTC.** Costs no GPU-h and
+   no submission slot, and it is the one gain already measured on the *hidden* instrument.
+   ⚠ **The reyhanksatria thesis (rows 122/125/132/139/147/149/150) is STALE** — they are rank
+   753 / 0.947 / idle since 09-13, i.e. 600 ranks *below* us. Target instead the ~27 verified
+   **active solo teams at 0.949–0.958 with ≤30 submissions**, leading with the 0.949–0.953 tier
+   (smallest asymmetry ⇒ highest acceptance). **Operator decision — this is an outward-facing
+   action and must not be taken unattended.** Two facts to verify before sending: whether a
+   Kaggle merge request carries any private free-text channel, and the current selected-final-2.
+   Name the dowry (divoff decompositions, 8 one-knob closures, the replay instrument, §54);
+   never publish it — a public post hands it to the 686 teams below us.
+2. **The one surviving technical route**, contested: a pass-0 hard-committing transformer pairs
+   at p≥0.90 + mutual-top before the unchanged relink. Skeptic-adjusted **+0.0005…+0.0012 at
+   p≈0.25**. Gate on BOTH local instruments (holdout6 cache-hit ~20 min; visible-4 for the
+   high-density branch holdout6 lacks) before it may have a slot.
+3. **Do NOT fill the remaining reads.** This line's one-knob base rate is 9 flat-or-negative in
+   10, and every false positive corrupts the final-2 pick.
+4. **Final-2.** Slot 1 = the LB-confirmed anchor. Slot 2 = highest **measured** divergence that
+   read ≥0.948. ⚠ **NEVER `56345198`** — it is a byte-duplicate of `56313419` (row 142), option
+   value exactly zero, and row 136 currently implies selecting it. Lock by 09-28 12:00 UTC.
+
+## 0-2026-09-20.4 Instruments (row 154)
+
+`holdout6` (6 vols, 2 low + 4 middle density groups): contamination **+0.0045 optimistic**.
+`visible-4` (`scripts/local/visible4_calibration.py`): Spearman **+0.58** vs LB, concordance
+**72%**, level **0.049 pessimistic**, **division_jaccard exactly 0.0000** — edge term only, so
+**never gate division work on it**; it is the only instrument holding a high-density
+(~700 nodes/frame) and linking-limited volume. Both remain **reject-only**.
+
+---
+
 # PLAN — current position and next steps (2026-09-14, THE 0.947 RESET)
 
 > **This header supersedes everything below it** (kept per the corrections rule; the old

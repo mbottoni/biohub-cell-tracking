@@ -4214,3 +4214,106 @@ is support.** The concrete plan lives in PLAN §3 (three horizons). What §52 ca
 funded retrain" survives as the parallel slow track; the cross-family ensemble and
 tophat rescue (both in local gates as this is written) are the last cheap picks in the
 dry stages.
+
+## 54. ★★★ THE LOSS IS MIS-LABELLED — "association" is mostly detection quality, and it is not reachable (2026-09-20)
+
+Supersedes **§18's route claim** (not its arithmetic) and **§13.3/§13.6's** successor framing.
+Evidence: rows 151–154. Read §18 first; this section is what happens when its measurement is
+repeated on the line we actually ship.
+
+### 54.1 What §18 said, and what is still true
+
+§18 (Aug-04, pub162 base) measured a perfect-linker oracle and concluded **association is 76% of
+all remaining loss** and worth **+0.077**. Row 151 repeats it on the 0.947/densad line and
+reproduces the accounting almost exactly: association 74%, oracle **+0.0546**. The swap
+statistics barely moved in seven weeks (swap GT displacement 5.20 → 4.64 µm; wrong link shorter
+in 100% → 98% of swaps). **The 947 line did not change the anatomy at all; it only shrank the
+counts.**
+
+### 54.2 What is new, and what it kills
+
+The oracle is a ceiling **on paper only**. Decompose the 69 association-FN edges by the quality
+of their own endpoints:
+
+| class | count | reachable? |
+|---|---|---|
+| both endpoints within 3.0 µm of GT (clean) | **11** | the only genuinely linker-fixable set |
+| an endpoint >3 µm off, with a rival predicted node within 9 µm | **58** | the match itself hops; the linker never sees the error |
+
+The mechanism, traced lineage by lineage (`anatomy947c.py`): the GT→prediction match **hops
+between two real, persistent predicted tracks** as the residual to the incumbent track creeps
+2 → 5–7 µm over several frames and a neighbour at 3–6 µm becomes the Hungarian's closer choice.
+Each hop costs 1 FN and ~1.5 FP. **Our own link is short and motion-consistent**, so there is
+nothing for a linker to correct. Realistic linker headroom: **+0.0066** (the 6 clean+slow cases
+plus their 13 paired FP), or **+0.0019** at the strict cut — against the **+0.0546** oracle.
+
+The per-node discriminator is sharp and it is not speed:
+
+    P(correct | endpoint residual)   ≤1.7 µm 1.000 (n=817) · 4–5 µm 0.894 · 5–7 µm 0.829
+    P(correct | rivals within 9 µm)  1 → 0.997 (n=2395) · 2 → 0.953 · ≥3 → 0.890
+    clean+slow 1 lost / 1995 · dirty+slow 39/1075 · fast+dirty 20/53
+
+### 54.3 ⚠ AND THE OBVIOUS COROLLARY IS FALSE — residual predicts, but fixing it does not pay
+
+The natural next step is "improve localisation, since residual predicts error." **Measured and
+dead** (row 153): a GT-omniscient oracle that snaps all 3,449 matched nodes to their true z
+leaves per-volume TP/FP/FN **bit-identical in all six volumes**; the full ±0.8125 µm all-axis
+version likewise. The matcher is a per-frame one-to-one Hungarian maximising Σ1/(1+d) in which
+**cardinality dominates**, so moving an already-matched node cannot change the assignment.
+Residual is a **correlate of contention**, not its cause. This retro-justifies §25/§40/§42
+(localisation refinement, dead) on a mechanism they never identified, and it caps the whole
+detection-quality lane: 16-view TTA, float coordinates and sub-voxel refinement all inherit it.
+
+**This is the third time this project has priced a route by argument and been wrong in the
+optimistic direction** (rows 79/81/84 were the first; §53's instrument-bias rescue the second).
+Both halves of §54 were settled by running the thing.
+
+### 54.4 The structural facts underneath (row 152)
+
+* **The edges we submit are not the solver's.** `filter_output_graph` overwrites them with a
+  per-frame 1-1 Hungarian on `motion_dist + 0.05·raw − bonus·prob` (20,143 of 20,326 replaced on
+  one volume). The transformer supplies the node set and a bonus on ILP-selected pairs.
+* **The ILP cannot emit a division** (edge gain ≤1.0 vs division cost 1.2, appearance free), and
+  the 1-1 relinker would discard one regardless. Every division we output is geometric. That is
+  the mechanism behind the field's "division weight is inert at 0.3–3.0".
+* **`OUTPUT_MOTION_RELINK=0` is answered without a slot:** the pure-ILP graph scores adj 0.93335
+  vs 0.93436. The geometric relinker beats it. PLAN 3.3's "built Aug-04, never run" is closed.
+* **Row 138 (ourseed −0.022) is confounded** — the secondary seed carries 0.80 detection blend
+  weight while its edge influence is capped at 15% and provably cannot flip an argmax. It
+  measured a weak *detector*, not the association consensus.
+
+### 54.5 The instrument, finally calibrated (row 154)
+
+"Local may reject, never confirm" (row 90) was a scalar prior from one sign inversion. It now has
+error bars. Pulling 13 already-paid commit outputs back with `kaggle kernels output` (free) and
+scoring them on the 4 visible volumes' on-disk GT gives **12 paired (local, hidden) points**:
+Spearman **+0.58**, pairwise concordance **72%**. Its two worst calls are its two best local
+scores. Level is **0.049 pessimistic** — the opposite sign to holdout6 — because
+**division_jaccard is exactly 0.0000 for every config**: the 4 visible volumes hold 3 GT
+divisions and we match none, so the divoff ablation reads −0.0001 locally against −0.036 on
+hidden.
+
+⇒ **Use the visible-4 as a second reject gate with a different blind spot.** It holds
+6bba_05db0fb1 (~700 nodes/frame), the only high-density-group and only linking-limited volume we
+own, which holdout6 (2 low + 4 middle) structurally lacks. **Never gate division work on it.**
+And note the two local instruments **disagree in sign** on densad_tuned (−0.0008 vs +0.0013):
+that spread is the honest width of local uncertainty here.
+
+### 54.6 Where this leaves the campaign
+
+Sixteen mechanisms were generated across six lenses and adversarially refuted by two independent
+skeptics each; **fifteen died, five of them by measurement taken during the audit at zero slot
+cost** (row 153). The one survivor is contested and worth ≈+0.001 at p≈0.25 — a coin flip at the
+LB's 0.001 grain, on a line whose one-knob base rate is nine flat-or-negative in ten.
+
+**The honest read: the technical lane is idea-limited, not budget-limited.** We hold ~25–30
+GPU-affordable LB reads and roughly one mechanism worth spending them on, so the correct action
+is **not to fill the reads** — each false positive corrupts the final-2 pick. The remaining
+variance is concentrated in three binary events: a team merge (expires 09-22 23:59 UTC, costs no
+GPU and no slot), the public→private shakeup across the two selected submissions, and the ~10%
+tail in which the surviving linker mechanism transfers at full local strength.
+
+**Standing correction to the final-2:** row 136 implies selecting `56345198` (pp-consensus) as
+the aggressive candidate. It is a **byte-duplicate** of `56313419` (row 142 — the vote never
+fired), so its option value is **exactly zero**. Slot 2 must go to the highest *measured*
+divergence candidate that read ≥0.948.

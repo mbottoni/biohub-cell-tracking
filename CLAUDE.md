@@ -80,5 +80,9 @@ These are earned, not stylistic:
 - Code-competition submissions need `-k <user>/<kernel> -v <version> -f submission.csv`; a plain
   file upload returns 400.
 - 5 submissions/day (resets 00:00 UTC), 2 concurrent GPU sessions, ~30 GPU-h/week, 12 h/session.
-- A kernel commit run is ~21 min; the scoring rerun on hidden test is ~4–6 h. Configs are cheap to
-  produce and expensive to score — choose which 5 to submit deliberately.
+- A kernel commit run is ~21 min; the scoring rerun on hidden test is ~4–6 h.
+- ⚠ **Those figures are pub162-era and STALE for the 947 line (row 154).** Measured on the line we
+  ship: a commit run is **~1 h 45** (range 88–123 min) and the hidden scoring rerun is **7–12 h**,
+  so push→LB read is **9–14 h**. GPU quota, not the 5/day cap, is the binding constraint —
+  budget ~25–30 LB reads per remaining week, not 35. Configs are cheap to produce and expensive
+  to score — choose which to submit deliberately, and do not fill the slots just because they exist.
