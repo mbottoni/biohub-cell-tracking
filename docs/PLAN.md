@@ -45,10 +45,22 @@ interventions of 20,931 candidates**) · sub-threshold candidates into the relin
    Kaggle merge request carries any private free-text channel, and the current selected-final-2.
    Name the dowry (divoff decompositions, 8 one-knob closures, the replay instrument, §54);
    never publish it — a public post hands it to the 686 teams below us.
-2. **The one surviving technical route**, contested: a pass-0 hard-committing transformer pairs
-   at p≥0.90 + mutual-top before the unchanged relink. Skeptic-adjusted **+0.0005…+0.0012 at
-   p≈0.25**. Gate on BOTH local instruments (holdout6 cache-hit ~20 min; visible-4 for the
-   high-density branch holdout6 lacks) before it may have a slot.
+2. **The one surviving technical route — BUILT AND GATED 09-21 (row 155), and it PASSED both
+   instruments: +0.0073 holdout6, +0.0075 visible-4, above the 0.007 floor.** `kernels/pub947_tfpass`
+   on the densad anchor; control arm sha-identical with the pass disabled; topology invariants hold.
+   ⚠ **But read the shape before spending the slot:** the two safeguards that made this form
+   acceptable (mutual-top, distance gate) are measured DECORATION — mutual-top drops zero pairs at
+   every threshold, the gate never binds — so p0 is a bare hand-over-fraction dial, and the response
+   is **monotone all the way to 99.3% hand-over with no interior optimum**, i.e. local prefers exactly
+   the configuration row 153's skeptics refuted. Both instruments are train volumes the transformer
+   fitted and no uncontaminated local set exists (§3.1), so local cannot tell "beats geometry" from
+   "memorised these volumes". **ONE pre-registered slot at p90, operator-authorised; do NOT chase
+   p80/p50 on local evidence.** Pre-registered brackets:
+   **≥0.950** = it transfers → new best, anchor, and the p0 axis reopens ·
+   **0.949** = real but small → keep as the aggressive final-2 ·
+   **0.948 flat** = the local +0.0073 was memorisation → the linker lane CLOSES, no micro-grid follow-up ·
+   **≤0.947** = the transformer's argmax is worse than geometry on hidden → revert, and row 153's
+   refutation is retro-confirmed.
 3. **Do NOT fill the remaining reads.** This line's one-knob base rate is 9 flat-or-negative in
    10, and every false positive corrupts the final-2 pick.
 4. **Final-2.** Slot 1 = the LB-confirmed anchor. Slot 2 = highest **measured** divergence that
