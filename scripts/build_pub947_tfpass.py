@@ -54,6 +54,7 @@ check the value of knobs that already exist, and these are new names.
 
     python scripts/build_pub947_tfpass.py
 """
+import argparse
 import json
 import os
 
@@ -147,6 +148,15 @@ OLD_C = (
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--p0', type=float, default=0.0,
+                    help='bake this probability floor in as the DEFAULT (0 = pass off, the sweep build). '
+                         'An armed build also fails loud if the pass does not fire on a volume, so a '
+                         'silent no-op can never reach the 7-12 h hidden scoring run.')
+    ap.add_argument('--name', default=NAME)
+    a = ap.parse_args()
+    armed = a.p0 > 0.0
+
     nb = json.load(open(NB_IN))
     cells = [c for c in nb['cells'] if c['cell_type'] == 'code']
     assert len(cells) == 1, f'expected one code cell, found {len(cells)}'
@@ -156,7 +166,23 @@ def main() -> None:
         n = src.count(old)
         assert n == 1, f'anchor {label}: {n} matches (expected 1)'
 
-    src = src.replace(OLD_A, NEW_A, 1)
+    new_a = NEW_A
+    if armed:
+        # Bake the floor in as the default so the Kaggle run (which has no env overrides)
+        # actually arms the pass, and make a no-op fatal rather than silently scoring base.
+        new_a = new_a.replace(
+            "    _tf_p0 = float(os.environ.get('BIOHUB_TFPASS_P0', '0'))\n",
+            f"    _tf_p0 = float(os.environ.get('BIOHUB_TFPASS_P0', '{a.p0}'))\n")
+        new_a = new_a.replace(
+            "    # ====================================================================================\n",
+            "\n"
+            "        if not _tf_by_source_frame:\n"
+            "            raise RuntimeError('tfpass ARMED at p0=' + str(_tf_p0) + ' but no candidate pair cleared it — refusing to score a silent no-op')\n"
+            "    elif _tf_p0 > 0.0:\n"
+            "        raise RuntimeError('tfpass ARMED but learned_edge_probs is empty — the probability table never reached the relinker')\n"
+            "    # ====================================================================================\n")
+
+    src = src.replace(OLD_A, new_a, 1)
     src = src.replace(OLD_B, NEW_B, 1)
 
     # Guard against silent no-ops (CLAUDE.md): prove both blocks are present.
@@ -166,21 +192,25 @@ def main() -> None:
     # The pre-commit runs before the tight/relaxed loop, so its edges can never be
     # counted as tight/relaxed: the bookkeeping branch is inside that loop only.
     assert src.index("frame_matches.append((_tf_a") < src.index("for pass_name, gate_um in")
+    if armed:
+        assert f"'BIOHUB_TFPASS_P0', '{a.p0}'" in src, 'floor not baked in'
+        assert src.count('refusing to score a silent no-op') == 1, 'fail-loud guard missing'
 
     compile(src, 'tfpass_cell', 'exec')
     cells[0]['source'] = src.splitlines(keepends=True)
 
-    os.makedirs(f'kernels/{NAME}', exist_ok=True)
-    json.dump(nb, open(f'kernels/{NAME}/{NAME}.ipynb', 'w'))
+    name = a.name
+    os.makedirs(f'kernels/{name}', exist_ok=True)
+    json.dump(nb, open(f'kernels/{name}/{name}.ipynb', 'w'))
 
-    meta_in = f'kernels/pub947_densad/kernel-metadata.json'
-    meta = json.load(open(meta_in))
-    meta['id'] = 'maruanbottoni/biohub-pub947-tfpass'
-    meta['title'] = 'biohub pub947 tfpass'
-    meta['code_file'] = f'{NAME}.ipynb'
-    json.dump(meta, open(f'kernels/{NAME}/kernel-metadata.json', 'w'), indent=2)
+    meta = json.load(open('kernels/pub947_densad/kernel-metadata.json'))
+    meta['id'] = f'maruanbottoni/biohub-{name.replace("_", "-")}'
+    meta['title'] = f'biohub {name.replace("_", " ")}'
+    meta['code_file'] = f'{name}.ipynb'
+    json.dump(meta, open(f'kernels/{name}/kernel-metadata.json', 'w'), indent=2)
 
-    print(f'{NAME}: built on {NB_IN} (pass-0 OFF by default; set BIOHUB_TFPASS_P0 to arm)')
+    state = f'ARMED at p0={a.p0}, fail-loud on no-op' if armed else 'pass-0 OFF by default (sweep build)'
+    print(f'{name}: built on {NB_IN} ({state}) -> {meta["id"]}')
 
 
 if __name__ == '__main__':
