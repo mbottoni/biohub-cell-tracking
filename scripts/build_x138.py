@@ -81,11 +81,39 @@ def build(name, edits):
 
 
 def main():
+    # ☠ Row 169: x138 as published CANNOT RUN outside its author's account. Cell 5 loads
+    # biohub-v1284-head-s075/v1284_head.pt, a coordinate-refinement MLP the author trained
+    # on 20 train movies, from a PRIVATE dataset (the '' entry in its metadata). Our v1 of
+    # pub947x_x138 died on the mount check at ~6 min. The two builds below are kept for
+    # the record; they error the same way.
     build('pub947x_x138', [])
     build('pub947x_x138_densad', [
         (READ_FRAME_ANCHOR, DENSAD_BLOCK + READ_FRAME_ANCHOR),
         (CALLSITE_OLD, CALLSITE_NEW),
     ])
+    # Portable form: head OFF via the module's own V1284_MODE='zero' (refine() returns the
+    # detections unchanged; integer coords through the trilinear index reproduce the native
+    # gather exactly, per its docstring). Everything else in x138 stays on.
+    HEAD_OFF = [
+        ("_myhead = sorted(Path('/kaggle/input').rglob('biohub-v1284-head-s075/v1284_head.pt'))\n"
+         "if len(_myhead) != 1:\n"
+         "    raise RuntimeError(('my V1284 head mount mismatch', [str(p) for p in _myhead]))\n",
+         "_myhead = ['/nonexistent/v1284_head.pt']  # head is PRIVATE (row 169): mode 'zero'\n"),
+        ("os.environ['V1284_MODE']='candidate'", "os.environ['V1284_MODE']='zero'"),
+    ]
+    # Ablations on the portable form (row 169): scored on visible-4 from commit outputs.
+    # Each switches one mechanism off at its env line; 'sub' = all three off.
+    FLOW = ('os.environ["BIOHUB_MOTION_RELINK_FLOW_MODE"] = "seed"',
+            'os.environ["BIOHUB_MOTION_RELINK_FLOW_MODE"] = "off"')
+    READMIT = ('os.environ["BIOHUB_READMIT_RADIUS_UM"] = "4"',
+               'os.environ["BIOHUB_READMIT_RADIUS_UM"] = "0"')
+    GAPFILL = ('os.environ["BIOHUB_GAPFILL_MAX_GAP"] = "3"',
+               'os.environ["BIOHUB_GAPFILL_MAX_GAP"] = "0"')
+    build('pub947x_nh', HEAD_OFF)
+    build('pub947x_nh_sub', HEAD_OFF + [FLOW, READMIT, GAPFILL])
+    build('pub947x_nh_noflow', HEAD_OFF + [FLOW])
+    build('pub947x_nh_noreadmit', HEAD_OFF + [READMIT])
+    build('pub947x_nh_nogapfill', HEAD_OFF + [GAPFILL])
 
 
 if __name__ == '__main__':
