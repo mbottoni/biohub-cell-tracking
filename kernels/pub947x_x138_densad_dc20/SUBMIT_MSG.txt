@@ -1,0 +1,1 @@
+pub947x_x138_densad_dc20 (row 178): densad (LB 0.957) + DeepCenter safe-div threshold 0.25->0.20. Queued automatically because dc20 alone beat the x138 control on the LB (decision rule, row 178). PRE-REGISTERED: >0.957 = the two stack -> final-2; =0.957 = no stacking; <0.957 = interaction, drop.

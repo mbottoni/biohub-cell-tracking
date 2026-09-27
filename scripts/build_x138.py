@@ -210,3 +210,48 @@ def build_densad_ourhead(name='pub947x_x138_densad_ourhead'):
 
 if __name__ == '__main__' and os.environ.get('BUILD_DO'):
     build_densad_ourhead()
+
+
+# Row 178: extend densad's per-density conditioning to x138's MAIN flow tight gate, which
+# densad leaves at a fixed 7.0 um for every volume. Deltas mirror densad's own tight_um deltas
+# vs the 6.0 default it replaced (low +1.25, middle +0.5, high -0.5): 7.0 -> 8.25 / 7.5 / 6.5.
+FLOW_TIGHT_BY_GROUP = {'low': 8.25, 'middle': 7.5, 'high': 6.5}
+CALLSITE_NEW_FT = CALLSITE_NEW.replace(
+    "        print(f'[densad] {dataset}",
+    "        globals()['MOTION_RELINK_FLOW_TIGHT_UM'] = " + repr(FLOW_TIGHT_BY_GROUP) + "[_dg]\n"
+    "        print(f'[densad+ft] flow_tight={MOTION_RELINK_FLOW_TIGHT_UM}', flush=True)\n"
+    "        print(f'[densad] {dataset}")
+
+
+def build_densad_flowtight(name='pub947x_x138_densad_ft'):
+    assert CALLSITE_NEW_FT != CALLSITE_NEW
+    build(name, [(READ_FRAME_ANCHOR, DENSAD_BLOCK + READ_FRAME_ANCHOR), (CALLSITE_OLD, CALLSITE_NEW_FT)],
+          extra=['anvithpothula/biohub-v1284-head-s075'])
+
+
+if __name__ == '__main__' and os.environ.get('BUILD_FT'):
+    build_densad_flowtight()
+
+
+OURHEAD120_DS = 'maruanbottoni/biohub-v1284-head-ours120'
+
+
+def build_row178():
+    # 120-movie capture (60/prefix; 44b6 has ~69 non-test movies) -> head v2 (3x the 40-movie head)
+    build_capture('pub947x_v1284cap120', n_per_type=60)
+    # densad + threshold 0.20 (queued only if dc20 beats the x138 control on the LB)
+    build('pub947x_x138_densad_dc20',
+          [(READ_FRAME_ANCHOR, DENSAD_BLOCK + READ_FRAME_ANCHOR), (CALLSITE_OLD, CALLSITE_NEW),
+           ('os.environ["BIOHUB_DEEPCENTER_SAFE_DIV_THRESHOLD"] = "0.25"',
+            'os.environ["BIOHUB_DEEPCENTER_SAFE_DIV_THRESHOLD"] = "0.20"')],
+          extra=['anvithpothula/biohub-v1284-head-s075'])
+    # densad + the 120-movie head (queued only if the 40-movie head holds up on the LB)
+    build('pub947x_x138_densad_ourhead120',
+          [(READ_FRAME_ANCHOR, DENSAD_BLOCK + READ_FRAME_ANCHOR), (CALLSITE_OLD, CALLSITE_NEW),
+           ("_myhead = sorted(Path('/kaggle/input').rglob('biohub-v1284-head-s075/v1284_head.pt'))",
+            "_myhead = sorted(Path('/kaggle/input').rglob('biohub-v1284-head-ours120/v1284_head.pt'))  # 120-movie head, row 178")],
+          extra=[OURHEAD120_DS])
+
+
+if __name__ == '__main__' and os.environ.get('BUILD_178'):
+    build_row178()
