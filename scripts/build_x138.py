@@ -198,3 +198,15 @@ def build_ourhead(name='pub947x_x138_ourhead'):
 
 if __name__ == '__main__' and os.environ.get('BUILD_OURHEAD'):
     build_ourhead()
+
+
+def build_densad_ourhead(name='pub947x_x138_densad_ourhead'):
+    """Row 177: densad (LB 0.957, row 177) + OUR V1284 head (row 175) on the 0.953 ORIGINAL."""
+    swap = ("_myhead = sorted(Path('/kaggle/input').rglob('biohub-v1284-head-s075/v1284_head.pt'))",
+            "_myhead = sorted(Path('/kaggle/input').rglob('biohub-v1284-head-ours/v1284_head.pt'))  # OUR head, row 174")
+    build(name, [(READ_FRAME_ANCHOR, DENSAD_BLOCK + READ_FRAME_ANCHOR), (CALLSITE_OLD, CALLSITE_NEW), swap],
+          extra=[OURHEAD_DS])
+
+
+if __name__ == '__main__' and os.environ.get('BUILD_DO'):
+    build_densad_ourhead()
