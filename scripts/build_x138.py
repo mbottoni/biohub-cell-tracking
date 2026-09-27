@@ -55,7 +55,7 @@ CALLSITE_NEW = ('''        _dg = determine_density_group(nodes_by_id)
 ''' + CALLSITE_OLD)
 
 
-def build(name, edits):
+def build(name, edits, extra=()):
     nb = json.load(open(SRC))
     n_code = sum(c['cell_type'] == 'code' for c in nb['cells'])
     for old, new in edits:
@@ -76,6 +76,7 @@ def build(name, edits):
     meta['id'] = f"maruanbottoni/biohub-{name.replace('_', '-')}"
     meta['title'] = f"biohub {name.replace('_', ' ')}"
     meta['code_file'] = f'{name}.ipynb'
+    meta['dataset_sources'] = meta['dataset_sources'] + [d for d in extra if d not in meta['dataset_sources']]
     json.dump(meta, open(f'kernels/{name}/kernel-metadata.json', 'w'), indent=2)
     print(f'{name}: {n_code} code cells, {len(edits)} edit(s), compiles, datasets={meta["dataset_sources"]}')
 
@@ -86,11 +87,11 @@ def main():
     # on 20 train movies, from a PRIVATE dataset (the '' entry in its metadata). Our v1 of
     # pub947x_x138 died on the mount check at ~6 min. The two builds below are kept for
     # the record; they error the same way.
-    build('pub947x_x138', [])
+    build('pub947x_x138', [], extra=['anvithpothula/biohub-v1284-head-s075'])
     build('pub947x_x138_densad', [
         (READ_FRAME_ANCHOR, DENSAD_BLOCK + READ_FRAME_ANCHOR),
         (CALLSITE_OLD, CALLSITE_NEW),
-    ])
+    ], extra=['anvithpothula/biohub-v1284-head-s075'])
     # Portable form: head OFF via the module's own V1284_MODE='zero' (refine() returns the
     # detections unchanged; integer coords through the trilinear index reproduce the native
     # gather exactly, per its docstring). Everything else in x138 stays on.
@@ -109,6 +110,12 @@ def main():
                'os.environ["BIOHUB_READMIT_RADIUS_UM"] = "0"')
     GAPFILL = ('os.environ["BIOHUB_GAPFILL_MAX_GAP"] = "3"',
                'os.environ["BIOHUB_GAPFILL_MAX_GAP"] = "0"')
+    # Row 173: one knob on the 0.953 ORIGINAL (head ON, public dataset attached below):
+    # DeepCenter safe-div threshold 0.25 -> 0.20, the reyhan line's last LB-paid step
+    # (0.15 then lost -0.001, row 124) -- the one setting where x138 differs from our 947 base.
+    build('pub947x_x138_dc20', [('os.environ["BIOHUB_DEEPCENTER_SAFE_DIV_THRESHOLD"] = "0.25"',
+                                 'os.environ["BIOHUB_DEEPCENTER_SAFE_DIV_THRESHOLD"] = "0.20"')],
+          extra=['anvithpothula/biohub-v1284-head-s075'])
     build('pub947x_nh', HEAD_OFF)
     build('pub947x_nh_sub', HEAD_OFF + [FLOW, READMIT, GAPFILL])
     build('pub947x_nh_noflow', HEAD_OFF + [FLOW])
@@ -118,3 +125,76 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+def build_capture(name='pub947x_v1284cap', n_per_type=20):
+    """Row 174: capture-and-train kernel for OUR V1284 head. x138 cells 0-7 (setup, test
+    inference, validator inference on 2*n_per_type TRAIN movies -- the validator already
+    excludes the 4 visible test stems, so visible-4 stays an honest check for our head)
+    with V1284_MODE='capture'; cells 8-11 (validator scoring, PPSWEEP, manifest) dropped;
+    scripts/v1284_train_cell.py appended as the last cell. NOT a submission kernel."""
+    nb = json.load(open(SRC))
+    edits = [
+        ('os.environ["BIOHUB_VALIDATOR_ENABLE"] = "0"', 'os.environ["BIOHUB_VALIDATOR_ENABLE"] = "1"'),
+        ('os.environ["BIOHUB_VALIDATOR_N_PER_TYPE"] = "4"', f'os.environ["BIOHUB_VALIDATOR_N_PER_TYPE"] = "{n_per_type}"'),
+        ("os.environ['V1284_MODE']='candidate'",
+         "os.environ['V1284_MODE']='capture'\nos.environ['V1284_CAPTURE']='/kaggle/working/v1284cap'"),
+    ]
+    for old, new in edits:
+        hits = [i for i, c in enumerate(nb['cells']) if old in ''.join(c['source'])]
+        assert len(hits) == 1, (old, hits)
+        s = ''.join(nb['cells'][hits[0]]['source'])
+        assert s.count(old) == 1
+        nb['cells'][hits[0]]['source'] = s.replace(old, new).splitlines(keepends=True)
+    code = [c for c in nb['cells'] if c['cell_type'] == 'code']
+    assert 'VALIDATOR_ENABLE = os.environ.get' in ''.join(code[7]['source'])
+    assert 'def match_nodes_bipartite' in ''.join(code[8]['source'])
+    train_src = open('scripts/v1284_train_cell.py').read()
+    tail = train_src + '''
+
+# ---- kernel entry (row 174) ----
+assert val_stems, 'validator selected no TRAIN stems -- nothing to train on'
+_cap = sorted(p.name for p in Path(os.environ['V1284_CAPTURE']).iterdir())
+print(f'[v1284-train] capture dirs: {len(_cap)} ({len(val_stems)} val stems)', flush=True)
+main(os.environ['V1284_CAPTURE'], TRAIN_DIR, list(val_stems), '/kaggle/working/v1284_out', epochs=150)
+import shutil
+shutil.rmtree(os.environ['V1284_CAPTURE'], ignore_errors=True)  # GBs of per-frame features
+'''
+    new_cell = {'cell_type': 'code', 'metadata': {}, 'execution_count': None, 'outputs': [],
+                'source': tail.splitlines(keepends=True)}
+    nb['cells'] = code[:8] + [new_cell]
+    for c in nb['cells']:
+        c['outputs'], c['execution_count'] = [], None
+        compile(''.join(c['source']), name, 'exec')
+    os.makedirs(f'kernels/{name}', exist_ok=True)
+    json.dump(nb, open(f'kernels/{name}/{name}.ipynb', 'w'))
+    meta = json.load(open('kernels/pub947_densad/kernel-metadata.json'))
+    meta.update(id=f"maruanbottoni/biohub-{name.replace('_', '-')}", title=f"biohub {name.replace('_', ' ')}",
+                code_file=f'{name}.ipynb')
+    meta['dataset_sources'] = meta['dataset_sources'] + ['anvithpothula/biohub-v1284-head-s075']
+    json.dump(meta, open(f'kernels/{name}/kernel-metadata.json', 'w'), indent=2)
+    print(f'{name}: {len(nb["cells"])} cells, capture on {2 * n_per_type} train movies, compiles')
+
+
+if __name__ == '__main__' and os.environ.get('BUILD_CAPTURE'):
+    build_capture()
+
+
+OURHEAD_DS = 'maruanbottoni/biohub-v1284-head-ours'
+
+
+def build_ourhead(name='pub947x_x138_ourhead'):
+    """Row 174: the 0.953 ORIGINAL with the author's V1284 head swapped for OURS (trained by
+    pub947x_v1284cap on 40 train movies, 2x the author's 20; visible-4 excluded from training).
+    ONE mechanism vs pub947x_x138: the head's training set."""
+    swap = ("_myhead = sorted(Path('/kaggle/input').rglob('biohub-v1284-head-s075/v1284_head.pt'))",
+            "_myhead = sorted(Path('/kaggle/input').rglob('biohub-v1284-head-ours/v1284_head.pt'))  # OUR head, row 174")
+    build(name, [swap], extra=[OURHEAD_DS])
+    meta_p = f'kernels/{name}/kernel-metadata.json'
+    meta = json.load(open(meta_p))
+    assert 'anvithpothula/biohub-v1284-head-s075' not in meta['dataset_sources']
+    json.dump(meta, open(meta_p, 'w'), indent=2)
+
+
+if __name__ == '__main__' and os.environ.get('BUILD_OURHEAD'):
+    build_ourhead()
