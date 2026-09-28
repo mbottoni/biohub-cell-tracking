@@ -311,3 +311,18 @@ def build_row184():
 
 if __name__ == '__main__' and os.environ.get('BUILD_184'):
     build_row184()
+
+
+def build_row186():
+    """Row 186: densad + mean-controlled heads trained on 120 movies (per-node centred residual
+    -22.3% amean / -22.6% zmean vs the author's -11.3% on the same 24 held-out movies)."""
+    for t in ('amean', 'zmean'):
+        build(f'pub947x_x138_densad_{t}120',
+              [(READ_FRAME_ANCHOR, DENSAD_BLOCK + READ_FRAME_ANCHOR), (CALLSITE_OLD, CALLSITE_NEW),
+               ("_myhead = sorted(Path('/kaggle/input').rglob('biohub-v1284-head-s075/v1284_head.pt'))",
+                f"_myhead = sorted(Path('/kaggle/input').rglob('biohub-v1284-head-{t}120/v1284_head.pt'))  # row 186")],
+              extra=[f'maruanbottoni/biohub-v1284-head-{t}120'])
+
+
+if __name__ == '__main__' and os.environ.get('BUILD_186'):
+    build_row186()
