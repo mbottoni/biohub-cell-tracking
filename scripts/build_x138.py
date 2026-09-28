@@ -255,3 +255,40 @@ def build_row178():
 
 if __name__ == '__main__' and os.environ.get('BUILD_178'):
     build_row178()
+
+
+# Row 181: three one-knob moves along densad's own axes, each vs densad (0.957). densad's
+# values were tuned for the non-flow relinker; on x138 they act on different stages (tight_um
+# = flow SEED gate, relaxed_um = relaxed pass, learned_bonus = cost bonus), so its optimum may
+# have moved. Row 180 showed conditioning the MAIN gate hurts; these stay on densad's knobs.
+DENSAD_TABLE = """DENSITY_GROUP_OVERRIDES = {
+    'low': {'tight_um': 7.25, 'relaxed_um': 11.0, 'velocity_weight': 0.5, 'learned_bonus': 3.0},
+    'middle': {'tight_um': 6.5, 'relaxed_um': 9.0, 'velocity_weight': 0.0, 'learned_bonus': 6.0},
+    'high': {'tight_um': 5.5, 'relaxed_um': 10.0, 'velocity_weight': 0.5, 'learned_bonus': 1.0},
+}"""
+DENSAD_VARIANTS = {
+    # seed gate +0.75 um in every group
+    'pub947x_x138_densad_seed': DENSAD_TABLE.replace("'tight_um': 7.25", "'tight_um': 8.0")
+        .replace("'tight_um': 6.5", "'tight_um': 7.25").replace("'tight_um': 5.5", "'tight_um': 6.25"),
+    # learned bonus x1.5 where densad raised it (low 3->4.5, middle 6->9); high stays 1.0
+    'pub947x_x138_densad_bonus': DENSAD_TABLE.replace("'learned_bonus': 3.0", "'learned_bonus': 4.5")
+        .replace("'learned_bonus': 6.0", "'learned_bonus': 9.0"),
+    # relaxed pass +1.0 um in every group
+    # (per-line replacement: chained str.replace hit the wrong group in the first build)
+    'pub947x_x138_densad_relax': DENSAD_TABLE
+        .replace("'low': {'tight_um': 7.25, 'relaxed_um': 11.0", "'low': {'tight_um': 7.25, 'relaxed_um': 12.0")
+        .replace("'middle': {'tight_um': 6.5, 'relaxed_um': 9.0", "'middle': {'tight_um': 6.5, 'relaxed_um': 10.0")
+        .replace("'high': {'tight_um': 5.5, 'relaxed_um': 10.0", "'high': {'tight_um': 5.5, 'relaxed_um': 11.0"),
+}
+
+
+def build_row181():
+    assert DENSAD_TABLE in DENSAD_BLOCK
+    for name, table in DENSAD_VARIANTS.items():
+        assert table != DENSAD_TABLE, name
+        build(name, [(READ_FRAME_ANCHOR, DENSAD_BLOCK.replace(DENSAD_TABLE, table) + READ_FRAME_ANCHOR),
+                     (CALLSITE_OLD, CALLSITE_NEW)], extra=['anvithpothula/biohub-v1284-head-s075'])
+
+
+if __name__ == '__main__' and os.environ.get('BUILD_181'):
+    build_row181()
