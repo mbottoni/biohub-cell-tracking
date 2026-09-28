@@ -1,0 +1,17 @@
+{
+  "id": "maruanbottoni/biohub-pub947x-cap120-fetch",
+  "title": "biohub pub947x cap120 fetch",
+  "code_file": "pub947x_cap120_fetch.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "kernel_sources": [
+    "maruanbottoni/biohub-pub947x-v1284cap120"
+  ],
+  "competition_sources": [],
+  "model_sources": []
+}

@@ -292,3 +292,22 @@ def build_row181():
 
 if __name__ == '__main__' and os.environ.get('BUILD_181'):
     build_row181()
+
+
+def build_row184():
+    """Row 184: densad with the V1284 head OFF (mode 'zero'). The head's LB value was never
+    measured: x138 (head ON) is 0.953, x138-without-head never read. Rows 160/179 say mean
+    coordinate shifts cost ~-0.005; the author's head carries a +0.19 um z mean shift."""
+    head_off = [
+        ("_myhead = sorted(Path('/kaggle/input').rglob('biohub-v1284-head-s075/v1284_head.pt'))\n"
+         "if len(_myhead) != 1:\n"
+         "    raise RuntimeError(('my V1284 head mount mismatch', [str(p) for p in _myhead]))\n",
+         "_myhead = ['/nonexistent/v1284_head.pt']  # head OFF (row 184): mode 'zero'\n"),
+        ("os.environ['V1284_MODE']='candidate'", "os.environ['V1284_MODE']='zero'"),
+    ]
+    build('pub947x_x138_densad_nh', [(READ_FRAME_ANCHOR, DENSAD_BLOCK + READ_FRAME_ANCHOR),
+                                     (CALLSITE_OLD, CALLSITE_NEW)] + head_off)
+
+
+if __name__ == '__main__' and os.environ.get('BUILD_184'):
+    build_row184()
