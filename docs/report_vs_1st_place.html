@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Biohub Cell Tracking: our solution vs 1st place</title>
+<style>
+:root{
+  --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#7a7972;
+  --rule:#e3e2dc; --band:#f0efec; --s1:#2a78d6; --s2:#eb6834;
+  --good:#0ca30c; --crit:#d03b3b; --note:#fff6df; --noteb:#eda100;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8f8e86;
+    --rule:#383835; --band:#262624; --s1:#3987e5; --s2:#d95926; --note:#2b2516; --noteb:#c98500;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8f8e86;
+  --rule:#383835; --band:#262624; --s1:#3987e5; --s2:#d95926; --note:#2b2516; --noteb:#c98500;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--page);color:var(--ink);
+  font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+main{max-width:920px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:2rem;line-height:1.2;margin:0 0 8px;letter-spacing:-.01em}
+h2{font-size:1.4rem;margin:56px 0 12px;padding-top:20px;border-top:1px solid var(--rule)}
+h3{font-size:1.05rem;margin:28px 0 8px}
+p{margin:0 0 14px}
+.lede{color:var(--ink2);font-size:1.08rem;max-width:68ch}
+.meta{color:var(--muted);font-size:.85rem;margin-bottom:28px}
+a{color:var(--s1)}
+code{font:.86em ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--band);padding:1px 5px;border-radius:4px}
+ul,ol{padding-left:22px;margin:0 0 14px}
+li{margin-bottom:6px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:24px 0}
+.tile{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:14px 16px}
+.tile .k{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.tile .v{font-size:1.7rem;font-weight:650;line-height:1.2;margin:4px 0 2px;font-variant-numeric:tabular-nums}
+.tile .d{font-size:.85rem;color:var(--ink2)}
+.tw{overflow-x:auto;margin:0 0 18px;border:1px solid var(--rule);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{font-size:.76rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--band);white-space:nowrap}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pos{color:var(--good);font-weight:600}.neg{color:var(--crit);font-weight:600}
+.note{background:var(--note);border-left:3px solid var(--noteb);padding:12px 16px;border-radius:0 8px 8px 0;margin:0 0 18px}
+.note p:last-child{margin:0}
+figure{margin:20px 0 22px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px}
+figcaption{font-size:.84rem;color:var(--ink2);margin-top:8px}
+.ftitle{font-weight:650;margin-bottom:2px}
+.legend{display:flex;gap:18px;font-size:.84rem;color:var(--ink2);margin:6px 0 4px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+svg{display:block;width:100%;min-width:640px;height:auto;overflow:visible}
+.sx{overflow-x:auto}
+svg text{fill:var(--ink2);font:12px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+svg .lab{fill:var(--ink)}
+svg .grid{stroke:var(--rule);stroke-width:1}
+svg .link{stroke:var(--muted);stroke-width:2}
+svg .hit{fill:transparent}
+svg .row:hover .bg{fill:var(--band)}
+svg .bg{fill:transparent}
+#tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--page);font-size:.8rem;
+  padding:6px 9px;border-radius:6px;opacity:0;transition:opacity .08s;z-index:5;max-width:280px;line-height:1.4}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:720px){.two{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px}
+.card h3{margin-top:0}
+.tag{display:inline-block;font-size:.72rem;padding:1px 7px;border-radius:99px;border:1px solid var(--rule);color:var(--ink2);margin-left:4px;white-space:nowrap}
+footer{margin-top:56px;padding-top:16px;border-top:1px solid var(--rule);color:var(--muted);font-size:.82rem}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Our solution vs the 1st-place solution</h1>
+<p class="lede">Biohub — Cell Tracking During Development (Kaggle, 29 Jun – 29 Sep 2026). We finished at 0.919 on the private leaderboard, rank 431 of 3,950. The winner, Sergio Alvarez, scored 0.978. This report explains what each solution was, where the 0.058 gap comes from, and what our own logs said about the winning ideas before we closed them.</p>
+<p class="meta">Written 2026-10-11 · sources: this repo (<code>docs/experiments.md</code> rows 1–193, <code>docs/STRATEGY.md</code> §1–§55), the <a href="https://www.kaggle.com/competitions/biohub-cell-tracking-during-development/writeups/1st-place-solution">1st-place writeup</a>, the final leaderboards and our submission history pulled from the Kaggle API.</p>
+
+<div class="tiles">
+  <div class="tile"><div class="k">Ours · private</div><div class="v">0.9194</div><div class="d">rank 431 / 3,950 · no medal (bronze cut 0.9200)</div></div>
+  <div class="tile"><div class="k">Ours · public</div><div class="v">0.9571</div><div class="d">rank 245 · fell 0.038 on private</div></div>
+  <div class="tile"><div class="k">Winner · private</div><div class="v">0.9776</div><div class="d">rank 1 · public 0.9764 (rank 3) · rose 0.001</div></div>
+  <div class="tile"><div class="k">Our best unselected</div><div class="v">0.9270</div><div class="d">private rank ≈122, inside the silver cut (0.9234)</div></div>
+</div>
+
+<h2>1. The short version</h2>
+<ul>
+  <li><strong>The winner owned every model; we owned none of the ones we shipped.</strong> Their pipeline is three networks they trained themselves with 5-fold cross-validation (detector, a 3-frame appearance model, a learned linker). Ours is a public notebook family (<code>x138</code>) running public checkpoints, with one post-processing table of ours grafted on.</li>
+  <li><strong>Their biggest step was the division term, using a signal we had measured and then abandoned.</strong> A small model that looks at three frames around each cell took them from about 0.925 to about 0.963 public "with improvements in divisions alone". We measured the same appearance signal at AUC 0.845–0.863 in August and closed the route, because inserting divisions into a finished graph lost at every operating point.</li>
+  <li><strong>They added labels.</strong> About 1,800 hand-painted cell masks and 515 divisions (against 151 in the provided ground truth), mined with their own model and checked by eye. We treated the label set as fixed.</li>
+  <li><strong>The private test is a different embryo from the public one, and their solution was the only top one that did not drop.</strong> The median team lost 0.032 from public to private. We lost 0.038. They gained 0.001.</li>
+  <li><strong>Our final selection followed the public leaderboard, and the public leaderboard was wrong about our coordinate heads.</strong> A submission we rejected at 0.948 public scored 0.927 private.</li>
+</ul>
+
+<h2>2. The task and the metric</h2>
+<p>Each test video is 100 frames of 3D light-sheet microscopy of a zebrafish embryo (64 × 256 × 256 voxels, 1.625 µm in z and 0.406 µm in x/y). A submission is a point graph: one node per cell per frame, with parent → child edges. Ground truth covers only about 3% of the cells (it is curated tracking output on a sparse second fluorescence channel), and the training set holds 199 videos, about 133,000 annotated nodes and 151 annotated divisions.</p>
+<p><code>score = adj_edge_jaccard + 0.1 × division_jaccard</code>, where <code>adj_edge_jaccard = edge_J × (1 − 0.1 × node_ratio)</code>. Edges between unannotated cells are free. The division term is worth up to 0.1, and for most of the competition public pipelines collected very little of it.</p>
+
+<h2>3. Final standings and the public → private shake-up</h2>
+<p>The 3rd-place team established by probing that the public test set is one embryo (60 videos, median 160–260 detections per frame) and the private test set is a different embryo (106 videos, median 60–100 detections per frame). Neither is one of the two training embryos. So the public leaderboard measured one embryo, and the final ranking was decided on another with roughly half the cell density.</p>
+
+<figure>
+  <div class="ftitle">Public vs private score, selected teams</div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>Public LB</span><span><i style="background:var(--s2)"></i>Private LB</span></div>
+  <div class="sx"><svg id="c1" role="img" aria-label="Dumbbell chart of public and private scores for selected teams; the table below holds the same data"></svg></div>
+  <figcaption>Axis starts at 0.90. The winner is the only row where private is not below public. The public-notebook shelf at 0.957 lands between 0.905 and 0.936 on private, median 0.9185.</figcaption>
+</figure>
+
+<div class="tw"><table>
+<thead><tr><th>Team</th><th class="n">Public</th><th class="n">Public rank</th><th class="n">Private</th><th class="n">Private rank</th><th class="n">Change</th><th class="n">Subs</th></tr></thead>
+<tbody>
+<tr><td><strong>Sergio Alvarez</strong> (winner, solo)</td><td class="n">0.97635</td><td class="n">3</td><td class="n">0.97759</td><td class="n">1</td><td class="n pos">+0.0012</td><td class="n">119</td></tr>
+<tr><td>Soheil Ayati</td><td class="n">0.96842</td><td class="n">28</td><td class="n">0.97041</td><td class="n">2</td><td class="n pos">+0.0020</td><td class="n">72</td></tr>
+<tr><td>yu4u (3rd)</td><td class="n">0.97898</td><td class="n">1</td><td class="n">0.96714</td><td class="n">3</td><td class="n neg">−0.0118</td><td class="n">124</td></tr>
+<tr><td>Barry</td><td class="n">0.96987</td><td class="n">20</td><td class="n">0.96234</td><td class="n">4</td><td class="n neg">−0.0075</td><td class="n">147</td></tr>
+<tr><td>Tang (5th)</td><td class="n">0.97167</td><td class="n">8</td><td class="n">0.95462</td><td class="n">5</td><td class="n neg">−0.0171</td><td class="n">203</td></tr>
+<tr><td>Gabriel</td><td class="n">0.97676</td><td class="n">2</td><td class="n">0.93750</td><td class="n">36</td><td class="n neg">−0.0393</td><td class="n">37</td></tr>
+<tr><td><strong>MaruanBOttoni (us)</strong></td><td class="n">0.95712</td><td class="n">245</td><td class="n">0.91936</td><td class="n">431</td><td class="n neg">−0.0378</td><td class="n">56</td></tr>
+<tr><td>All 3,950 teams, median</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n neg">−0.0315</td><td class="n">—</td></tr>
+</tbody></table></div>
+<p>Medal cuts on the private board, by Kaggle's usual formula for 3,950 teams: gold top 17 (0.9424), silver top 197 (0.9234), bronze top 395 (0.9200). We missed bronze by 0.0006.</p>
+
+<h2>4. The winning solution</h2>
+<p>Tracking-by-detection in three learned stages plus a greedy decode. The author entered four hours after launch with no tracking background, spent the first six weeks on detection "with little to no progress", hand-annotated cells out of frustration, and got the central idea from that annotation work: a person can look at three frames and say which cell is which and which one is about to divide, so a model should be able to learn it.</p>
+
+<h3>Stage 1 — Detector: a Cellpose-style 3D U-Net (3.1 M parameters)</h3>
+<ul>
+  <li>Plain 3D U-Net, three downsampling stages (24/48/96 channels, 192 bottleneck), anisotropic pooling, deep supervision. Two heads: foreground probability and a 3-channel flow field pointing at the cell centre. Instances come from following the flow, as in Cellpose, so the output is a <em>mask</em> per cell, which later supplies geometry features.</li>
+  <li><strong>Pretraining:</strong> a light masked autoencoder (50% masked in 2×4×4-voxel blocks) on 180 competition movies plus 1,500 external zebrafish frames, 30 epochs. The author could not quantify its effect on the score; it sped up convergence.</li>
+  <li><strong>Finetune:</strong> about 1,800 hand-painted cell masks over 583 frames, plus 4.3 µm stamps on the 133k annotated nodes, 40 epochs, heavy augmentation, EMA.</li>
+  <li><strong>Pseudo-label round:</strong> 5-fold + 4× flip TTA predictions on all 195 movies and 150 external crops, filtered to confident detections that survive tracking for more than 3 frames, then retrain. The author notes this leaks into CV.</li>
+  <li>Inference: 5 folds × 4 TTA = 20 forward passes per frame.</li>
+</ul>
+
+<h3>Stage 2 — "Soon Net": a 3-frame appearance model (236 K CNN + 508 K transformer)</h3>
+<ul>
+  <li>For each detection, a 16×64×64 crop at t−1, t, t+1, plus a Gaussian channel marking which cell is being asked about. A small shared 3D CNN tokenises each frame, a small transformer attends across the three frames, and a learned query at the cell's position reads out a class: <em>interphase</em>, <em>soon to divide</em>, <em>just divided</em>.</li>
+  <li>An FPN head also predicts <strong>occupancy maps</strong> for each of the three frames: where this cell was, where it will be, and (for a mother) where both daughters are. The t+1 map answers the exact question a linker has to answer.</li>
+  <li>Training details that mattered: large field-of-view jitter so the model cannot assume the query cell is centred; time-step augmentation (t−1 is sometimes t−2 or t−3); a second round with 2,492 hard negatives mined out-of-fold from the first.</li>
+  <li><strong>Labels:</strong> early versions were used to mine divisions, a couple of hundred were checked by eye, and the final model trained on <strong>515 divisions against 151 in the original ground truth</strong>.</li>
+  <li>This stage alone moved the author from about 0.925 to about 0.963 on the public board. Decoded greedily on its own it scores 0.929 in their CV.</li>
+</ul>
+
+<h3>Stage 3 — Learned linker (LightGlue-inspired transformer)</h3>
+<ul>
+  <li>Each detection is a token of 42 features (log mask volume, mean foreground probability, sinusoidal position, 13 mask-geometry values, distance to the field-of-view edge). Four cross-attention blocks between frames t and t+1, each cell attending to cells within 30 µm plus its 16 nearest.</li>
+  <li>Pair features for each candidate link: displacement, volume ratio, drift residual after removing local tissue motion, shape and intensity change, and the Soon Net maps read in both directions (the parent's "where will I be" at the child, the child's "where was I" at the parent).</li>
+  <li>Two heads. The <strong>pair head</strong> scores every candidate link. The <strong>fork head</strong> decides per parent among 137 options: no child, one of 16 children, or one of 120 pairs of children. The decision is factored into "does it divide?" × "which children?", because in a single softmax the 120 pair options drowned the rare division decision and produced false divisions.</li>
+  <li>Losses: dual-softmax NLL on pairs, NLL over the 137 options, and a reverse NLL in which each child picks its parent. 10 epochs, divisions oversampled 8×.</li>
+  <li><strong>Decode:</strong> 5 fold linkers averaged, then a greedy pass over options sorted by log p(option) − log p(no child), each parent taking at most one option and each child one parent. No threshold on edge scores, no distance gate, no ILP.</li>
+</ul>
+
+<h3>Post-processing</h3>
+<p>Deliberately small: the public line-fit smoothing (adjusted so divisions are not smoothed into their mothers), a rule that a newborn daughter cannot divide in the next frame, 1-frame gap closing, and pruning tracks shorter than 3 frames.</p>
+
+<h3>Their numbers</h3>
+<div class="tw"><table>
+<thead><tr><th>5-fold CV</th><th class="n">Score</th><th class="n">adj. edge Jaccard</th><th class="n">division Jaccard</th><th class="n">Divisions TP / FP / FN</th></tr></thead>
+<tbody>
+<tr><td>Soon Net alone, original GT</td><td class="n">0.9288</td><td class="n">0.8914</td><td class="n">0.3738</td><td class="n">77 / 58 / 71</td></tr>
+<tr><td>Full pipeline, original GT</td><td class="n">0.9575</td><td class="n">0.9089</td><td class="n">0.4857</td><td class="n">102 / 62 / 46</td></tr>
+<tr><td>Full pipeline, their augmented GT</td><td class="n">0.9856</td><td class="n">0.9090</td><td class="n">0.7654</td><td class="n">434 / 62 / 71</td></tr>
+<tr><td><strong>Leaderboard</strong></td><td class="n" colspan="4">0.976 public · 0.977 private</td></tr>
+</tbody></table></div>
+<p>Code is not yet released. Training compute was asked about in the comments and not answered at the time of writing.</p>
+
+<h2>5. Our solution</h2>
+<h3>What we submitted</h3>
+<p>Both final selections are <code>pub947x_x138_densad</code> variants (submissions <code>56613013</code> and <code>56641215</code>, experiment rows 177–192). The pipeline is the public notebook <code>anvithpothula/biohub-x138</code> ("0.953 LB ORIGINAL") run unchanged, with one modification of ours:</p>
+<ol>
+  <li><strong>Detection:</strong> the public "pilkwang" temporal 3D U-Net, two seeds, 8-view D4 test-time augmentation, heatmap peaks at threshold ≈0.965. Public weights, trained by their author on every training volume.</li>
+  <li><strong>Coordinate refinement:</strong> the public "V1284" head, a 224→32→3 MLP on frozen U-Net features that shifts each detection by up to 2 µm. Public weights.</li>
+  <li><strong>Edge scoring:</strong> the public transformer edge predictor over detection features. Public weights.</li>
+  <li><strong>Solver:</strong> an ILP over candidate edges. Our audit (row 152) found that its edges are then almost entirely overwritten by step 5, and that it cannot emit a division at all.</li>
+  <li><strong>Motion relink:</strong> a per-frame-pair one-to-one Hungarian on a geometric cost with a small bonus from the transformer, with x138's neighbourhood-flow motion prior, readmission of discarded detections near open track ends, and a sub-threshold gap filler. <em>These are the edges that get submitted.</em></li>
+  <li><strong>Divisions:</strong> geometric "safe division" rules (parent/sister distance gates, mutual-nearest, forward divergence, rate caps) with a public DeepCenter CNN as a veto.</li>
+  <li><strong>Ours — <code>densad</code>:</strong> a density-adaptive table for the relink gates and bonus, keyed on detections per frame (low &lt; 120, middle &lt; 400, high). Adapted from another public notebook, validated by us on two substrates: +0.001 on the 0.947 line, +0.003 on x138 (0.9539 → 0.9571 public).</li>
+</ol>
+
+<h3>How we got there</h3>
+<div class="tw"><table>
+<thead><tr><th>Date</th><th>Step</th><th class="n">Public</th><th class="n">Private</th><th>Source of the gain</th></tr></thead>
+<tbody>
+<tr><td>24 Jul</td><td>Own baseline: blob detector + Hungarian</td><td class="n">local 0.644</td><td class="n">—</td><td>ours</td></tr>
+<tr><td>Jul – Aug</td><td>Own library, own U-Net attempts, public-pipeline reproductions, local replay instrument</td><td class="n">≈0.915</td><td class="n">—</td><td>port of public <code>pub162</code> line</td></tr>
+<tr><td>mid Aug</td><td>"The stack" (ILP weight + wider gap close)</td><td class="n">0.912</td><td class="n">—</td><td>ours; +0.0036 locally, −0.003 on LB</td></tr>
+<tr><td>21 Aug</td><td>Port of the public 0.920 line</td><td class="n">0.9209</td><td class="n">0.9004</td><td>port</td></tr>
+<tr><td>23 Aug</td><td>Division graft from the 0.917 family</td><td class="n">0.9236</td><td class="n">0.9074</td><td>ours, recombining two public lines</td></tr>
+<tr><td>14 Sep</td><td>Port of the public 0.947 line</td><td class="n">0.9474</td><td class="n">0.9163</td><td>port (+0.024)</td></tr>
+<tr><td>17 Sep</td><td><code>densad</code> on 0.947</td><td class="n">0.9484</td><td class="n">0.9174</td><td>ours (+0.001)</td></tr>
+<tr><td>22 Sep</td><td>Transformer-first linking (tfpass), 3 doses</td><td class="n">0.9473–0.9479</td><td class="n">0.9163–0.9175</td><td>ours; +0.007 to +0.010 locally, −0.001 on LB</td></tr>
+<tr><td>27 Sep</td><td>Port of x138 with its public head</td><td class="n">0.9539</td><td class="n">0.9178</td><td>port (+0.005)</td></tr>
+<tr><td>27 Sep</td><td><strong>x138 + densad (selected)</strong></td><td class="n">0.9571</td><td class="n">0.9194</td><td>ours (+0.003 public, +0.0016 private)</td></tr>
+</tbody></table></div>
+<p>Of the 0.043 public gain between the 0.915 line and 0.957, about 0.035 came from three ports and about 0.007 from our own changes.</p>
+
+<h3>What we built that did not ship</h3>
+<ul>
+  <li><strong>Measurement:</strong> a byte-identical local replay of the Kaggle pipeline, a reimplemented official scorer, calibrated ablation probes that read the hidden division Jaccard (≈0.13 on the 0.920 line, ≈0.24 on the 0.917 family, ≈0.35 on the 0.947 line), and a calibration of our local sets against the leaderboard (Spearman +0.58).</li>
+  <li><strong>Our own detector:</strong> a full-recipe retrain reached the public detector's selection metric honestly but over-detected about 3× at 20 epochs; closing it was priced at about 400 epochs and not funded (row 91).</li>
+  <li><strong>A division classifier:</strong> appearance features, then a CNN, AUC 0.845 → 0.863 held out by volume (rows 72, 86).</li>
+  <li><strong>Our own coordinate heads:</strong> trained on 40 and 120 movies, 2× the author's per-node accuracy on held-out movies (rows 175, 186).</li>
+  <li><strong>A written record:</strong> 193 experiment rows, 55 strategy sections, about 380 commits, with wrong conclusions marked and kept.</li>
+</ul>
+
+<h2>6. Side by side</h2>
+<div class="tw"><table>
+<thead><tr><th>Aspect</th><th>1st place</th><th>Ours</th></tr></thead>
+<tbody>
+<tr><td>Detector</td><td>Own 3D U-Net, mask + flow output; MAE pretrain, finetune, pseudo-label round; 5 folds</td><td>Public temporal U-Net heatmap, 2 seeds, public weights fitted to all training volumes</td></tr>
+<tr><td>Detection output</td><td>Instance masks (volume, axes, fill, intensity available downstream)</td><td>Point peaks; a public MLP head nudges coordinates</td></tr>
+<tr><td>Extra labels</td><td>≈1,800 hand-painted cells; 515 divisions vs 151 in GT; a few GT corrections</td><td>None</td></tr>
+<tr><td>External data</td><td>1,500 zebrafish frames for pretraining and pseudo-labels</td><td>None</td></tr>
+<tr><td>Appearance across time</td><td>Dedicated 3-frame model: division state + where-from / where-to occupancy maps</td><td>Temporal U-Net features feeding the public transformer; no dedicated model</td></tr>
+<tr><td>What produces the submitted edges</td><td>Learned linker, greedy decode, no gates</td><td>Geometric Hungarian with µm gates; the learned scorer contributes a bonus</td></tr>
+<tr><td>What produces divisions</td><td>The linker's fork head, jointly with the edges, driven by appearance</td><td>Geometric rules after linking, with a CNN veto</td></tr>
+<tr><td>Hand-tuned thresholds</td><td>A handful (prob &gt; 0.5, 3 µm merge, 10-voxel minimum, track length 3)</td><td>Dozens of µm gates, caps and weights, several conditioned on density</td></tr>
+<tr><td>Validation</td><td>5-fold CV by movie, out-of-fold predictions at every stage</td><td>No uncontaminated local set existed for the public weights; local gates were "reject only" and still inverted</td></tr>
+<tr><td>Where iteration effort went</td><td>Models, labels, training recipes</td><td>Post-processing, leaderboard probes, measurement</td></tr>
+<tr><td>Submissions used</td><td>119</td><td>56</td></tr>
+<tr><td>Public → private</td><td>0.976 → 0.978</td><td>0.957 → 0.919</td></tr>
+</tbody></table></div>
+
+<h2>7. Where the gap comes from</h2>
+<h3>On the public embryo: 0.019, mostly the division term</h3>
+<p>Our probes put the 0.947 line at roughly <code>adj ≈ 0.912</code> and <code>division_J ≈ 0.35</code> on the public test set. The 3rd-place team reports division Jaccard 0.52 public with a 0.977 score, which implies <code>adj ≈ 0.925</code>. The winner's CV shows the same shape: 0.909 adjusted edge Jaccard and 0.49 division Jaccard on the original ground truth. So on the embryo the public board measured, the leaders' edge term was only about 0.01 above the public pipeline's, and their division term was roughly 0.15–0.20 Jaccard higher, worth 0.015–0.02. We did not run the division-off probe on the x138 line, so its exact split is not measured.</p>
+
+<h3>On the private embryo: 0.058, mostly generalisation</h3>
+<p>The winner did not get better on private; the public pipeline family got worse. Every team at 0.957 public lost between 0.021 and 0.052. We cannot decompose the private score, so the causes below are consistent with our logs but not proven:</p>
+<ul>
+  <li><strong>The public detector and transformer had fitted every training volume.</strong> We measured this in August (detector recall 1.000 on a trained-on volume against 0.94–0.97 unseen, row 100) and saw its consequence in September, when handing links to the transformer gained +0.0095 locally and lost 0.001 on the leaderboard (row 165).</li>
+  <li><strong>The post-processing was tuned against one embryo.</strong> The whole public family converged on gates and caps by leaderboard feedback from the public embryo. Our <code>densad</code> table is keyed on detections per frame with "low" below 120; the private embryo's median video sits at 60–100, so most private videos fall in a branch the public embryo exercised far less. <code>densad</code> was worth +0.0032 public and +0.0016 private.</li>
+  <li><strong>The winner's pipeline has few places for that to happen.</strong> Its decisions come from models validated out-of-fold, on features computed from the image, with almost no distance thresholds.</li>
+</ul>
+
+<h3>Our own final selection: the public board mis-ranked the coordinate heads</h3>
+<p>In the last three days we trained our own versions of the coordinate head. On held-out movies they beat the public head per node by up to 2×. On the public board every one of them lost, so we kept the public head and selected two near-identical <code>densad</code> submissions. The private scores reverse that verdict in every case:</p>
+
+<figure>
+  <div class="ftitle">Our last-week submissions: public vs private</div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>Public LB</span><span><i style="background:var(--s2)"></i>Private LB</span></div>
+  <div class="sx"><svg id="c2" role="img" aria-label="Dumbbell chart of public and private scores for our final-week submissions; the table below holds the same data"></svg></div>
+  <figcaption>Rows are ordered by public score, the order we used to choose. The private dots run the other way for every head we trained.</figcaption>
+</figure>
+
+<div class="tw"><table>
+<thead><tr><th>Submission</th><th class="n">Public</th><th class="n">Private</th><th class="n">Private rank it would hold</th><th>Coordinate head</th></tr></thead>
+<tbody>
+<tr><td>densad <span class="tag">selected</span></td><td class="n">0.95707</td><td class="n">0.91935</td><td class="n">≈432</td><td>public author's</td></tr>
+<tr><td>densad_seed <span class="tag">selected</span></td><td class="n">0.95706</td><td class="n">0.91935</td><td class="n">≈432</td><td>public author's</td></tr>
+<tr><td>x138 verbatim</td><td class="n">0.95387</td><td class="n">0.91780</td><td class="n">≈689</td><td>public author's</td></tr>
+<tr><td>x138, division veto 0.20</td><td class="n">0.95361</td><td class="n">0.92055</td><td class="n">≈338</td><td>public author's</td></tr>
+<tr><td>densad + our 120-movie head (author-like mean)</td><td class="n">0.95280</td><td class="n">0.92155</td><td class="n">≈277</td><td>ours</td></tr>
+<tr><td>densad + our 40-movie head</td><td class="n">0.95102</td><td class="n">0.92520</td><td class="n">≈153</td><td>ours</td></tr>
+<tr><td>densad + our 120-movie head (zero mean)</td><td class="n">0.94911</td><td class="n">0.92188</td><td class="n">≈259</td><td>ours</td></tr>
+<tr><td><strong>x138 + our 40-movie head</strong></td><td class="n">0.94813</td><td class="n"><strong>0.92696</strong></td><td class="n"><strong>≈122</strong></td><td>ours</td></tr>
+<tr><td>densad, no head</td><td class="n">0.94812</td><td class="n">0.91520</td><td class="n">≈1,327</td><td>none</td></tr>
+</tbody></table></div>
+<div class="note"><p>This changes rank 431 to about rank 122 in hindsight, and nothing about the comparison with the winner: our best private score is still 0.05 below theirs. The useful part is the rule. Our working agreement said the leaderboard was the only instrument that had told the truth. It told the truth about one embryo. When an honestly held-out local metric and the public board disagreed, the two final picks should have been one from each, not two picks 0.00001 apart.</p></div>
+
+<h2>8. The winning ideas in our own logs</h2>
+<p>Most of what the winner built corresponds to something we examined and closed. The verdicts were measured, and each was conditional on something that turned out to matter.</p>
+<div class="tw"><table>
+<thead><tr><th>Winner's component</th><th>Our verdict</th><th>What the verdict was conditional on</th></tr></thead>
+<tbody>
+<tr><td>Divisions from a 3-frame appearance model, worth ≈ +0.04 public</td><td>"Division route, all forms: closed on measurement" (row 86). Our classifier reached AUC 0.863 and still lost at every operating point.</td><td>We inserted forks into a finished one-to-one graph, where a useful fork also trips the cross-component false-positive rules. The winner makes the division decision inside the linker, choosing none / one child / two children per parent, so there is no finished graph to break.</td></tr>
+<tr><td>515 divisions for training</td><td>Never attempted. Row 72 trained on the 151 provided.</td><td>We treated ground truth as fixed. A model at AUC 0.86 is already a mining tool; the winner used theirs as one and checked a few hundred candidates by eye.</td></tr>
+<tr><td>Own detector with masks, pretraining and pseudo-labels</td><td>"Detection-side, all forms: capped at about +0.003" (row 87); "full-recipe retrain: closed" (row 91).</td><td>The cap was measured on training volumes the public detector had memorised. §52 flagged exactly this in August and reopened the retrain as an unfunded purchase decision (≈$160–200 of Colab).</td></tr>
+<tr><td>Learned linker decoded greedily with no geometric gate</td><td>"A learned cost does not beat geometry out of sample" (§37); tfpass 0.947 at all three doses (row 165).</td><td>Our learned scorer was the public transformer. The conclusion was about that checkpoint, not about learned linking.</td></tr>
+<tr><td>Local tissue-motion residual as a link feature</td><td>We shipped the same idea (x138's neighbourhood-flow prior) as a hand-set gate.</td><td>Same signal, used as a threshold rather than as an input to a trained model.</td></tr>
+<tr><td>Out-of-fold validation at every stage</td><td>"Local may reject, never confirm"; a floor of 0.007 below which local deltas were uninterpretable.</td><td>A direct consequence of running weights we had not trained. Much of our effort went into quantifying an instrument problem the winner did not have.</td></tr>
+</tbody></table></div>
+<p>The August strategy sections had the diagnosis: §52 said the big routes were closed on a contaminated instrument, and §53 said the division term was the game. The response was a graft of another public notebook's division rules (+0.003) and, three weeks later, a port of the next public line. From 14 September onwards the plan was organised around ports, one-knob probes and a team merge.</p>
+
+<h2>9. What we would do differently</h2>
+<ol>
+  <li><strong>Own the weights by the end of week two.</strong> A 3 M-parameter detector and sub-1 M-parameter downstream models, trained 5-fold, would have given an honest validation set. That one change removes the instrument problem that shaped two months of work.</li>
+  <li><strong>Look at the data.</strong> The winning idea came from hours spent looking at cells. Our record is almost entirely scores and counts.</li>
+  <li><strong>When a signal is real and the integration fails, change the integration.</strong> AUC 0.86 on divisions was a strong result. We priced one way of using it and closed the topic.</li>
+  <li><strong>Treat labels as a variable.</strong> With 151 positives for a term worth 0.1 of the score, a few evenings of checked mining was the cheapest lever available.</li>
+  <li><strong>Treat the public leaderboard as one more biased instrument.</strong> Two test embryos means the public board can overfit like any validation set. Diversify the final two across instruments.</li>
+  <li><strong>Keep what worked.</strong> The pre-registered reads, the kept-and-marked corrections and the one-change-per-submission rule caught real errors and are why this comparison could be written from the repo. They were applied to the wrong object: a pipeline whose ceiling was set by someone else's checkpoints.</li>
+</ol>
+
+<h2>10. Context from another top solution</h2>
+<p>The 5th-place solution (Tang, 0.9546 private) uses the same architecture class as the public line we ran: the public-baseline temporal 3D U-Net, a transformer linker, ILP tracking. The differences are that it was trained by its author as a 5-fold ensemble, pretrained on four public ZebraHub datasets (+0.016 private), given dedicated new-cell and division heads on the linker (+0.024 private), and fed detection confidence into the ILP cost (+0.020 private). The architecture we ran was not the limit; running it with fixed public weights was.</p>
+
+<footer>
+Leaderboard figures: Kaggle API, 2026-10-11. Per-submission private scores: <code>kaggle competitions submissions</code>. "Private rank it would hold" counts teams with a strictly higher private score. Winner's figures are quoted from their writeup; 3rd- and 5th-place figures from theirs. Findings new to this report are registered as experiments row 193 and STRATEGY §55.
+</footer>
+</main>
+<div id="tip"></div>
+<script>
+(function(){
+  var NS='http://www.w3.org/2000/svg', tip=document.getElementById('tip');
+  function el(n,a,t){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);if(t!=null)e.textContent=t;return e;}
+  function dumbbell(id,rows,lo,hi,ticks,labelW){
+    var svg=document.getElementById(id), W=880, rh=30, top=22, right=24, H=top+rows.length*rh+8;
+    svg.setAttribute('viewBox','0 0 '+W+' '+H);
+    function x(v){return labelW+(v-lo)/(hi-lo)*(W-labelW-right);}
+    ticks.forEach(function(t){
+      svg.appendChild(el('line',{x1:x(t),x2:x(t),y1:top-4,y2:H-6,'class':'grid'}));
+      svg.appendChild(el('text',{x:x(t),y:12,'text-anchor':'middle'},t.toFixed(2)));
+    });
+    rows.forEach(function(r,i){
+      var y=top+i*rh+rh/2, g=el('g',{'class':'row'});
+      g.appendChild(el('rect',{x:0,y:y-rh/2,width:W,height:rh,'class':'bg',rx:4}));
+      g.appendChild(el('text',{x:labelW-12,y:y+4,'text-anchor':'end','class':'lab','font-weight':r.b?650:400},r.n));
+      g.appendChild(el('line',{x1:x(r.pub),x2:x(r.priv),y1:y,y2:y,'class':'link'}));
+      g.appendChild(el('circle',{cx:x(r.pub),cy:y,r:6,fill:'var(--s1)',stroke:'var(--surface)','stroke-width':2}));
+      g.appendChild(el('circle',{cx:x(r.priv),cy:y,r:6,fill:'var(--s2)',stroke:'var(--surface)','stroke-width':2}));
+      var d=r.priv-r.pub;
+      g.addEventListener('mousemove',function(e){
+        tip.innerHTML='<b>'+r.n+'</b><br>Public '+r.pub.toFixed(4)+'<br>Private '+r.priv.toFixed(4)+'<br>Change '+(d>=0?'+':'−')+Math.abs(d).toFixed(4);
+        tip.style.opacity=1;
+        var tx=Math.min(e.clientX+14,window.innerWidth-tip.offsetWidth-8);
+        tip.style.left=tx+'px';tip.style.top=(e.clientY+14)+'px';
+      });
+      g.addEventListener('mouseleave',function(){tip.style.opacity=0;});
+      svg.appendChild(g);
+    });
+  }
+  dumbbell('c1',[
+    {n:'Sergio Alvarez (1st)',pub:0.97635,priv:0.97759,b:1},
+    {n:'Soheil Ayati (2nd)',pub:0.96842,priv:0.97041},
+    {n:'yu4u (3rd)',pub:0.97898,priv:0.96714},
+    {n:'Barry (4th)',pub:0.96987,priv:0.96234},
+    {n:'Tang (5th)',pub:0.97167,priv:0.95462},
+    {n:'Gabriel (public #2)',pub:0.97676,priv:0.93750},
+    {n:'Median of 76 teams at public 0.957',pub:0.9570,priv:0.9185},
+    {n:'MaruanBOttoni (us)',pub:0.95712,priv:0.91936,b:1}
+  ],0.90,0.98,[0.90,0.92,0.94,0.96,0.98],270);
+  dumbbell('c2',[
+    {n:'densad (selected)',pub:0.95707,priv:0.91935,b:1},
+    {n:'x138 verbatim',pub:0.95387,priv:0.91780},
+    {n:'x138, division veto 0.20',pub:0.95361,priv:0.92055},
+    {n:'densad + our 120-movie head (author mean)',pub:0.95280,priv:0.92155},
+    {n:'densad + our 40-movie head',pub:0.95102,priv:0.92520},
+    {n:'densad + our 120-movie head (zero mean)',pub:0.94911,priv:0.92188},
+    {n:'x138 + our 40-movie head',pub:0.94813,priv:0.92696,b:1},
+    {n:'densad, no head',pub:0.94812,priv:0.91520}
+  ],0.91,0.96,[0.91,0.92,0.93,0.94,0.95,0.96],300);
+})();
+</script>
+</body>
+</html>

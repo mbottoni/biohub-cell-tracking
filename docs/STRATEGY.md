@@ -4317,3 +4317,40 @@ tail in which the surviving linker mechanism transfers at full local strength.
 the aggressive candidate. It is a **byte-duplicate** of `56313419` (row 142 — the vote never
 fired), so its option value is **exactly zero**. Slot 2 must go to the highest *measured*
 divergence candidate that read ≥0.948.
+
+## 55. ★★★ POST-MORTEM — private 0.919 (rank 431), and what the 1st-place solution did that we closed (2026-10-11)
+
+Evidence: row 193. Full write-up: `docs/report_vs_1st_place.html`. This section supersedes the
+*scope* of three standing claims; it does not delete them.
+
+### 55.1 The result
+Selected `56613013` / `56641215`: public 0.957 (rank 245) → **private 0.91936 (rank 431 / 3,950)**.
+Bronze cut 0.91996 (rank 395). Winner: Sergio Alvarez, 0.976 public → **0.97759 private**.
+Median public→private drop across the board 0.0315; ours 0.0377.
+
+### 55.2 ⚠ "The LB is the only instrument that told the truth" — true of ONE embryo
+Public test is a single embryo (`fdad`, 60 videos); private is another (`ea36`, 106 videos, roughly
+half the cell density) — from the 3rd-place team's probing. The public LB is therefore an
+instrument with its own bias, and it mis-ranked our coordinate heads: every head we trained lost
+on public (rows 179/180/191) and **wins on private**, in the order our held-out-by-movie per-node
+residual predicted. `56616700` (x138 + our 40-movie head) = 0.92696 private ≈ rank 122 (silver cut
+0.92335). Rows 179 and 191 are ⚠ PUBLIC-ONLY verdicts; row 191's "the per-node metric cannot rank
+heads on hidden" is WRONG for the private embryo.
+**Rule for next time:** when two instruments disagree and one of them is honestly held out, the
+final-2 carries one pick from each. Two near-duplicates chosen by public score (row 183) bought
+zero diversification.
+
+### 55.3 What the winner built, against our closed-routes table
+| winner's component | our verdict on the same idea | why ours came out dead |
+|---|---|---|
+| 3-frame appearance model for divisions (Soon Net) — took them 0.925 → 0.963 | "Division route, ALL forms ☠" (row 86), after measuring the same signal at AUC 0.845–0.863 (rows 72, 86) | we INSERTED forks into a finished graph and paid cross-component FPs; they made the division decision inside the linker (fork head: none / 1 child / 2 children), jointly with the edges |
+| 515 training divisions (mined with the model, checked by eye) vs the 151 in GT | never attempted; row 72 trained on 151 | we treated the label set as fixed |
+| own detector: MAE pretrain → finetune on GT stamps + 1,800 hand-painted cells → pseudo-label round | "full-recipe retrain ☠" (row 91), "detection-side ☠, capped at +0.003" (row 87) | the cap was measured on train volumes the public detector had memorised (§52.2 already said so) |
+| learned linker, greedy decode, NO geometric gate | "learned cost does not beat geometry out of sample" (§37), tfpass 0.947 (row 165) | our learned scorer was the public transformer, which had fitted every train volume; theirs was trained 5-fold on features from a model that looks at the image |
+| 5-fold CV by movie, OOF everywhere | no uncontaminated local set existed (row 90) | consequence of never owning the weights |
+
+### 55.4 The one-line read
+The campaign optimised the post-processing of other people's checkpoints, with rigorous
+measurement, and that line fell 0.038 on a new embryo. The winning line owned every model, added
+labels, and moved +0.001. §52/§53 identified both the contaminated instrument and the division
+term as the game in August; the response was a graft (row 114) rather than a model.
